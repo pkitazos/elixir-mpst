@@ -1,0 +1,78 @@
+# Local Types 
+
+B1 === Seller (+) title(String) . Seller & quote(String) . Buyer2 (+) share(Int) . end
+
+B2 === Buyer1 & share(Int) . Seller (+) {
+    address(String) . Seller & date(Date) . end,
+    quit(Unit) . end
+}
+
+S === Buyer1 & title(String) . Buyer1 (+) quote(Int) . Buyer2 & {
+    address(String) . Buyer2 (+) date(Date) . end,
+    quit(Unit) . end
+}
+
+
+
+# Main function
+
+
+main ===
+    let ap <== newAP (Seller: S, Buyer1: B1, Buyer2: B2) in
+    spawn seller(ap) ();
+    spawnBuyers(ap, "Types and Programming Languages");
+
+spawnBuyers(ap, title) ===
+    spawn buyer1(ap, title);
+    spawn buyer2(ap)
+
+
+# Seller
+
+seller(ap) ===
+    rec install(_) . 
+        register ap Seller (install (); suspend titleHandler)
+
+
+titleHandler ===
+    handler Buyer1 {
+        title(x) |->
+            Buyer1 ! quote(lookupPrice(x));
+            suspend decisionHandler
+    }
+
+decisionHandler ===
+    handler Buyer2 {
+        address(addr) |-> Buyer2 ! date(shippingDate(addr))
+        quit(_) |-> return ()
+    }
+
+# Buyer 1
+
+buyer1(ap, title) === 
+    register ap Buyer1 (Seller ! title(title); suspend quoteHandler)
+
+quoteHandler ===
+    handler Seller {
+        quote(amount) |-> Buyer2 ! share(amount/2)
+    }
+
+# Buyer 2
+
+buyer2(ap) ===
+    register ap Buyer2 (suspend shareHandler)
+
+shareHandler ===
+    handler Buyer {
+        share(amount) |-> 
+            if (amount > 100) then
+                Seller ! quit(())
+            else
+                Seller ! address("18 Lilybank Gardens");
+                suspend dateHandler
+    }
+
+dateHandler ===
+    handler Seller {
+        date(date) |-> log(date)
+    }
