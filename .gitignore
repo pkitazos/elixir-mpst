@@ -1,0 +1,4 @@
+.vscode
+*.t.*
+**/_beam/**
+*.beam
