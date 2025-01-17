@@ -1,0 +1,27 @@
+module twobuyer.TwoBuyer;
+
+data <java> "java.lang.Integer" from "rt.jar" as int;
+data <java> "java.lang.String" from "rt.jar" as String;
+data <java> "test.twobuyer.Address" from "test/twobuyer/Address.java" as Address;
+data <java> "test.twobuyer.Date" from "test/twobuyer/Date.java" as Date;
+
+global protocol TwoBuyer(role A, role B, role S) {
+
+    title(String) from A to S;
+    quote(int) from S to A;
+    quote(int) from S to B;
+    quoteByTwo(int) from A to B;
+    
+    choice at B {
+    
+        ok(Address) from B to S;
+        date(Date) from S to B;
+    
+    } or {
+    
+        quit() from B to S;
+    
+    }
+
+}
+

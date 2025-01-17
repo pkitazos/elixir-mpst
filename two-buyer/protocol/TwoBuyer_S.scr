@@ -1,0 +1,26 @@
+
+// Projection modules for twobuyer.TwoBuyer.TwoBuyer@S:
+
+module twobuyer.TwoBuyer_TwoBuyer_S;
+
+data <java> "java.lang.String" from "rt.jar" as String;
+data <java> "java.lang.Integer" from "rt.jar" as int;
+data <java> "test.twobuyer.Address" from "test/twobuyer/Address.java" as Address;
+data <java> "test.twobuyer.Date" from "test/twobuyer/Date.java" as Date;
+
+local protocol twobuyer.TwoBuyer_TwoBuyer_S.TwoBuyer_S(role A, role B, self S) projects twobuyer.TwoBuyer.TwoBuyer {
+    
+    title(String) from A;
+    quote(int) to A;
+    quote(int) to B;
+    
+    choice at B {
+        ok(Address) from B;
+        date(Date) to B;
+    
+    } or {
+        quit() from B;
+    
+    }
+
+}

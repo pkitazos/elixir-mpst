@@ -1,0 +1,15 @@
+
+// Projection modules for twobuyer.TwoBuyer.TwoBuyer@A:
+
+module twobuyer.TwoBuyer_TwoBuyer_A;
+
+data <java> "java.lang.String" from "rt.jar" as String;
+data <java> "java.lang.Integer" from "rt.jar" as int;
+
+local protocol twobuyer.TwoBuyer_TwoBuyer_A.TwoBuyer_A(self A, role B, role S) projects twobuyer.TwoBuyer.TwoBuyer {
+    
+    title(String) to S;
+    quote(int) from S;
+    quoteByTwo(int) to B;
+
+}
