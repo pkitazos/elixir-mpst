@@ -1,4 +1,4 @@
-defmodule Buyer1 do
+defmodule TwoBuyerMaty1.Buyer1 do
   use GenServer
 
   @name __MODULE__
@@ -7,13 +7,13 @@ defmodule Buyer1 do
     GenServer.start_link(@name, %{}, name: @name)
   end
 
-  def init_role(%SessionContext{} = session) do
+  def init_role(%TwoBuyerMaty1.SessionContext{} = session) do
     GenServer.cast(@name, {:init_role, session})
   end
 
-  def send_title(title) do
+  def send_title(seller, title) do
     IO.puts("[Buyer1] Sending title=#{title} to Seller")
-    send(session.seller, {:title, title})
+    send(seller, {:title, title})
   end
 
   @impl true

@@ -13,8 +13,8 @@ defmodule TwoBuyerMaty1.MixProject do
 
   def application do
     [
-      extra_applications: [:logger],
-      mod: {TwoBuyerMaty1.Application, []}
+      mod: {TwoBuyerMaty1.Application, []},
+      extra_applications: [:logger]
     ]
   end
 

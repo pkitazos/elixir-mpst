@@ -1,4 +1,4 @@
-defmodule Seller do
+defmodule TwoBuyerMaty1.Seller do
   use GenServer
 
   @name __MODULE__
@@ -10,7 +10,7 @@ defmodule Seller do
     # we name it __MODULE__ for convenience;
   end
 
-  def init_role(%SessionContext{} = session) do
+  def init_role(%TwoBuyerMaty1.SessionContext{} = session) do
     # store the session context in the GenServer’s state
     GenServer.cast(@name, {:init_role, session})
   end

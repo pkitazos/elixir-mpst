@@ -1,4 +1,4 @@
-defmodule Buyer2 do
+defmodule TwoBuyerMaty1.Buyer2 do
   use GenServer
 
   @name __MODULE__
@@ -7,7 +7,7 @@ defmodule Buyer2 do
     GenServer.start_link(@name, %{}, name: @name)
   end
 
-  def init_role(%SessionContext{} = session) do
+  def init_role(%TwoBuyerMaty1.SessionContext{} = session) do
     GenServer.cast(@name, {:init_role, session})
   end
 
