@@ -1,6 +1,6 @@
 .vscode
 *.t.*
-/_build
+**/_build/**
 /cover
 /deps
 /doc
