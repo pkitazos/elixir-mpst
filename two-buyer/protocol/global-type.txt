@@ -1,7 +1,6 @@
-Buyer1 -> Seller : title .
-Seller -> Buyer1 : quote .
-Seller -> Buyer2 : quote .
-Buyer1 -> Buyer2 : half_quote . {
-    Buyer2 -> Seller : ok . Buyer2 -> Seller : address(str) . Seller -> Buyer2 : date . end,
-    Buyer2 -> Seller : quit . end
+Buyer1 -> Seller : title(String) .
+Seller -> Buyer1 : quote(Int) .
+Buyer1 -> Buyer2 : share(Int) . {
+    Buyer2 -> Seller : address(String) . Seller -> Buyer2 : date(Date) . end,
+    Buyer2 -> Seller : quit(Unit) . end
 }

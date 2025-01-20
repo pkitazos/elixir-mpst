@@ -1,4 +1,6 @@
-Buyer1 -> Seller : title(str) . Seller -> Buyer1 : quote(str) . Buyer1 -> Buyer2 : share(int) . Buyer2 -> Seller : {
-    address(str) . Seller -> Buyer2 : date(date) . end,
-    quit(unit) . end
+Buyer1 -> Seller : title(String) .
+Seller -> Buyer1 : quote(Int) .
+Buyer1 -> Buyer2 : share(Int) . {
+    Buyer2 -> Seller : address(String) . Seller -> Buyer2 : date(Date) . end,
+    Buyer2 -> Seller : quit(Unit) . end
 }
