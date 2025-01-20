@@ -33,7 +33,7 @@ defmodule TwoBuyerMaty2.Seller do
   @impl true
   def handle_call(:install, _from, state) do
     # in our Maty program the `install` logic says we need to `suspend` with the `titleHandler`
-    IO.puts("[Seller] In 'install' phase, suspending with 'title_handler'")
+    IO.puts("[Seller] Suspending with 'title_handler'")
     {:reply, :ok, %{state | current_handler: :title_handler}}
   end
 

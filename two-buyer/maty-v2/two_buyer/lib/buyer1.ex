@@ -7,12 +7,8 @@ defmodule TwoBuyerMaty2.Buyer1 do
     GenServer.start_link(@name, %{}, name: @name)
   end
 
-  def init_role(%TwoBuyerMaty2.SessionContext{} = session) do
-    GenServer.cast(@name, {:init_role, session})
-  end
-
-  def send_title(title) do
-    GenServer.cast(@name, {:send_title, title})
+  def init_role(%TwoBuyerMaty2.SessionContext{} = session, title) do
+    GenServer.cast(@name, {:init_role, session, title})
   end
 
   # -----------------------------------------------------------------
@@ -26,19 +22,10 @@ defmodule TwoBuyerMaty2.Buyer1 do
   end
 
   @impl true
-  def handle_cast({:init_role, session}, state) do
-    {:noreply, %{state | session: session}}
-  end
-
-  @impl true
-  def handle_cast({:send_title, title}, %{session: session} = state) do
+  def handle_cast({:init_role, session, title}, state) do
     IO.puts("[Buyer1] Sending title=#{title} to Seller, suspending with 'quote_handler'")
     send(session.seller, {:title, title})
-    # Can either do it this way where send_title is a separate operation
-    # but if we wanted to be true to the way it's written out in the MAty program
-    # the send_title operation actually happens in the `buyer1` function
-    # so the `Seller ! title(title)` would actually happen in the above handler
-    {:noreply, %{state | current_handler: :quote_handler}}
+    {:noreply, %{state | session: session, current_handler: :quote_handler}}
   end
 
   @impl true
