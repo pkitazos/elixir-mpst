@@ -35,7 +35,7 @@ defmodule TwoBuyerMaty2.Buyer1 do
     IO.puts("[Buyer1] Sending title=#{title} to Seller, suspending with 'quote_handler'")
     send(session.seller, {:title, title})
     # Can either do it this way where send_title is a separate operation
-    # but if we wanted to be true to the way it's written out in the MAty program
+    # but if we wanted to be true to the way it's written out in the Maty program
     # the send_title operation actually happens in the `buyer1` function
     # so the `Seller ! title(title)` would actually happen in the above handler
     {:noreply, %{state | current_handler: :quote_handler}}
