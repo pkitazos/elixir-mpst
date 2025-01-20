@@ -22,12 +22,12 @@ defmodule TwoBuyerMaty2.Seller do
     # we'll store two things in the state:
     #   1. session: references to the Buyer1, Buyer2 PIDs, etc.
     #   2. current_handler: which "handler" is currently active
-    {:ok, %{session: nil, current_handler: :install}}
+    {:ok, %{session: nil, current_handler: nil}}
   end
 
   @impl true
   def handle_cast({:init_role, session}, state) do
-    {:noreply, %{state | session: session}}
+    {:noreply, %{state | session: session, current_handler: :install}}
   end
 
   @impl true

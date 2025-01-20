@@ -22,6 +22,11 @@ defmodule TwoBuyerMaty2.Buyer1 do
     # we'll store two things in the state:
     #   1. session: references to the Buyer2, Seller PIDs, etc.
     #   2. current_handler: which "handler" is currently active
+
+    # Can either do it this way where send_title is a separate operation
+    # but if we wanted to be true to the Maty specification
+    # the send_title operation actually happens in what I'm treating as the init function
+    # so the send(seller, title) would happen here or in the init_role handler
     {:ok, %{session: nil, current_handler: nil}}
   end
 
