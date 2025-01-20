@@ -20,13 +20,8 @@ defmodule TwoBuyerMaty2.Buyer1 do
   @impl true
   def init(_init_arg) do
     # we'll store two things in the state:
-    #   1. session: references to the Buyer2, Seller PIDs, etc.
+    #   1. session: references to the Buyer2, Seller PIDs
     #   2. current_handler: which "handler" is currently active
-
-    # Can either do it this way where send_title is a separate operation
-    # but if we wanted to be true to the Maty specification
-    # the send_title operation actually happens in what I'm treating as the init function
-    # so the send(seller, title) would happen here or in the init_role handler
     {:ok, %{session: nil, current_handler: nil}}
   end
 
@@ -39,7 +34,10 @@ defmodule TwoBuyerMaty2.Buyer1 do
   def handle_cast({:send_title, title}, %{session: session} = state) do
     IO.puts("[Buyer1] Sending title=#{title} to Seller, suspending with 'quote_handler'")
     send(session.seller, {:title, title})
-
+    # Can either do it this way where send_title is a separate operation
+    # but if we wanted to be true to the way it's written out in the MAty program
+    # the send_title operation actually happens in the `buyer1` function
+    # so the `Seller ! title(title)` would actually happen in the above handler
     {:noreply, %{state | current_handler: :quote_handler}}
   end
 

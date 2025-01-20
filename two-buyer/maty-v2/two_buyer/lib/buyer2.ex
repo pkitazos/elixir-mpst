@@ -16,7 +16,7 @@ defmodule TwoBuyerMaty2.Buyer2 do
   @impl true
   def init(_init_arg) do
     # we'll store two things in the state:
-    #   1. session: references to the Buyer1, Seller PIDs, etc.
+    #   1. session: references to the Buyer1, Seller PIDs
     #   2. current_handler: which "handler" is currently active
     {:ok, %{session: nil, current_handler: nil}}
   end
