@@ -11,6 +11,10 @@ defmodule TwoBuyerMaty2.Seller do
     GenServer.cast(@name, {:init_role, session})
   end
 
+  def install() do
+    GenServer.call(@name, :install)
+  end
+
   # -----------------------------------------------------------------
 
   @impl true
@@ -27,12 +31,16 @@ defmodule TwoBuyerMaty2.Seller do
   end
 
   @impl true
+  def handle_call(:install, _from, state) do
+    # in our Maty program the `install` logic says we need to `suspend` with the `titleHandler`
+    IO.puts("[Seller] In 'install' state, switching to 'title_handler'")
+    {:reply, :ok, %{state | current_handler: :title_handler}}
+  end
+
+  @impl true
   def handle_info(msg, state) do
     # dispatch to whichever "handler" is active
     case state.current_handler do
-      :install ->
-        handle_install(msg, state)
-
       :title_handler ->
         handle_title(msg, state)
 
@@ -46,12 +54,6 @@ defmodule TwoBuyerMaty2.Seller do
   # they return either {:noreply, new_state} or {:stop, reason, new_state}.
   # if they need to "suspend" -> they just set `current_handler` to the next handler.
   # -----------------------------------------------------------------
-
-  defp handle_install(_msg, state) do
-    # in our Maty program the `install` logic says we need to `suspend` with the `titleHandler`
-    IO.puts("[Seller] In 'install' state, switching to 'title_handler'")
-    {:noreply, %{state | current_handler: :title_handler}}
-  end
 
   defp handle_title({:title, x}, %{session: session} = state) do
     IO.puts("[Seller] (title_handler) received title=#{x}. Sending quote...")

@@ -18,7 +18,7 @@ defmodule TwoBuyerMaty2.Buyer2 do
     # we'll store two things in the state:
     #   1. session: references to the Buyer1, Seller PIDs, etc.
     #   2. current_handler: which "handler" is currently active
-    {:ok, %{session: nil, current_handler: nil}}
+    {:ok, %{session: nil, current_handler: :share_handler}}
   end
 
   @impl true
@@ -47,8 +47,7 @@ defmodule TwoBuyerMaty2.Buyer2 do
       IO.puts("[Buyer2] share > 100, sending quit(...)")
       send(session.seller, {:quit, :unit})
       # can either stop or remain alive
-
-      {:noreply, %{state | current_handler: nil}}
+      {:stop, :normal, state}
     else
       # Option 2: "Buyer2 -> Seller : address(str)"
       IO.puts("[Buyer2] share <= 100, sending address(...)")

@@ -53,10 +53,7 @@ defmodule TwoBuyerMaty2.Buyer1 do
     buyer2 = session.buyer2
     share_amount = amount / 2
     send(buyer2, {:share, share_amount})
-    {:noreply, %{state | current_handler: nil}}
-
-    # possibly end or loop back to :install
-    # {:stop, :normal, state}
+    {:stop, :normal, state}
   end
 
   defp handle_quote(_other_msg, state) do
