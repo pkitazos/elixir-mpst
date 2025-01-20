@@ -4,8 +4,8 @@ In order to effectively mimic the way `suspend` works in Maty, we'll keep track 
 
 Then all calls will be routed through a standard GenServer `handle_info` call which will only give control to a handler if it matches what's stored in the `current_handler` state.
 
-## Maty -> Elixir
-
+## Maty in Elixir
+<!-- This is now out of date -->
 Let's look at a more concrete example to understand how the Elixir program gets mapped to a maty program
 
 ### Seller
@@ -183,3 +183,8 @@ To recompile the application we can just use inside iex:
 ```
 iex> recompile()
 ```
+
+## TODO 
+
+- [ ] add role guards to each Maty handler
+- [ ] add participant PID to each send operation
