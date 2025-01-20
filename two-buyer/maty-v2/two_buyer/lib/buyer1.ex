@@ -37,7 +37,7 @@ defmodule TwoBuyerMaty2.Buyer1 do
 
   @impl true
   def handle_cast({:send_title, title}, %{session: session} = state) do
-    IO.puts("[Buyer1] Sending title=#{title} to Seller")
+    IO.puts("[Buyer1] Sending title=#{title} to Seller, suspending with 'quote_handler'")
     send(session.seller, {:title, title})
 
     {:noreply, %{state | current_handler: :quote_handler}}

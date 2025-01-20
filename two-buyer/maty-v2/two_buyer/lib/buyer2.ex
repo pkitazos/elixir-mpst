@@ -23,6 +23,7 @@ defmodule TwoBuyerMaty2.Buyer2 do
 
   @impl true
   def handle_cast({:init_role, session}, state) do
+    IO.puts("[Buyer2] Suspending with 'share_handler'")
     {:noreply, %{state | session: session, current_handler: :share_handler}}
   end
 
@@ -50,7 +51,7 @@ defmodule TwoBuyerMaty2.Buyer2 do
       {:stop, :normal, state}
     else
       # Option 2: "Buyer2 -> Seller : address(str)"
-      IO.puts("[Buyer2] share <= 100, sending address(...)")
+      IO.puts("[Buyer2] share <= 100, sending address(...), suspending with 'date_handler'")
       send(session.seller, {:address, get_address()})
       # Next, we wait for date(date)
       {:noreply, %{state | current_handler: :date_handler}}

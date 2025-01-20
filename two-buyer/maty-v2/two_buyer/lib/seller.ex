@@ -27,13 +27,13 @@ defmodule TwoBuyerMaty2.Seller do
 
   @impl true
   def handle_cast({:init_role, session}, state) do
-    {:noreply, %{state | session: session, current_handler: :install}}
+    {:noreply, %{state | session: session}}
   end
 
   @impl true
   def handle_call(:install, _from, state) do
     # in our Maty program the `install` logic says we need to `suspend` with the `titleHandler`
-    IO.puts("[Seller] In 'install' state, switching to 'title_handler'")
+    IO.puts("[Seller] In 'install' phase, suspending with 'title_handler'")
     {:reply, :ok, %{state | current_handler: :title_handler}}
   end
 
@@ -41,11 +41,8 @@ defmodule TwoBuyerMaty2.Seller do
   def handle_info(msg, state) do
     # dispatch to whichever "handler" is active
     case state.current_handler do
-      :title_handler ->
-        handle_title(msg, state)
-
-      :decision_handler ->
-        handle_decision(msg, state)
+      :title_handler -> handle_title(msg, state)
+      :decision_handler -> handle_decision(msg, state)
     end
   end
 
@@ -61,7 +58,7 @@ defmodule TwoBuyerMaty2.Seller do
 
     # In Maty, we do: `suspend decisionHandler`
     # So we just set the current_handler to :decision_handler
-    IO.puts("[Seller] In 'title_handler' state, switching to 'decision_handler'")
+    IO.puts("[Seller] In 'title_handler' state, suspending with 'decision_handler'")
     {:noreply, %{state | current_handler: :decision_handler}}
   end
 
