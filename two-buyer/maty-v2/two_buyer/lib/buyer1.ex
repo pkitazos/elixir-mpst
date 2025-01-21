@@ -1,7 +1,6 @@
 defmodule TwoBuyerMaty2.Buyer1 do
   use GenServer
-  alias TwoBuyerMaty2.SessionContext
-  alias TwoBuyerMaty2.Logger
+  alias TwoBuyerMaty2.{SessionContext, Logger}
 
   @name __MODULE__
   @role :buyer1

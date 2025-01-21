@@ -1,43 +1,62 @@
 defmodule TwoBuyerMaty2.Main do
-  alias TwoBuyerMaty2.Seller
-  alias TwoBuyerMaty2.Buyer1
-  alias TwoBuyerMaty2.Buyer2
-  alias TwoBuyerMaty2.SessionContext
+  alias TwoBuyerMaty2.{Seller, Buyer1, Buyer2, SessionContext}
 
-  def start_two_buyer(title \\ "Types and Programming Languages") do
-    ap =
-      newAP([
-        {:seller, Seller},
-        {:buyer1, Buyer1},
-        {:buyer2, Buyer2}
-      ])
+  @participants [{:seller, Seller}, {:buyer1, Buyer1}, {:buyer2, Buyer2}]
 
-    seller(ap)
+  def start_sessions do
+    _session1 = create_session("Types and Programming Languages")
 
-    buyer1(ap, title)
-    buyer2(ap)
+    :done
   end
 
-  defp seller(ap) do
+  def create_session(title) do
+    @participants
+    |> create_context()
+    |> initialize_participants(title)
+  end
+
+  defp initialize_participants(context, title) do
+    with :ok <- init_seller(context),
+         :ok <- init_buyer1(context, title),
+         :ok <- init_buyer2(context) do
+      {:ok, context}
+    end
+  end
+
+  defp init_seller(ap) do
     Seller.init_role(ap)
-    # can choose to spawn new seller process here
+    # can maybe choose to spawn new seller process here
     :ok = Seller.install()
   end
 
-  defp buyer1(ap, title) do
+  defp init_buyer1(ap, title) do
     Buyer1.init_role(ap, title)
+    :ok
   end
 
-  defp buyer2(ap) do
+  defp init_buyer2(ap) do
     Buyer2.init_role(ap)
+    :ok
   end
 
-  defp newAP(participants, context_module \\ SessionContext) do
-    # spawn each role process; store PIDs in a context struct.
+  # -----------------------------------------------------------------
+
+  # this would be the equivalent of newAP
+  defp create_context(participants, context_module \\ SessionContext) do
+    participants
+    |> start_processes()
+    |> build_context(context_module)
+  end
+
+  defp start_processes(participants) do
     Enum.map(participants, fn {role, module} ->
       {:ok, pid} = module.start_link()
       {role, pid}
     end)
+  end
+
+  defp build_context(processes, context_module) do
+    processes
     |> Map.new()
     |> then(&struct(context_module, &1))
   end
