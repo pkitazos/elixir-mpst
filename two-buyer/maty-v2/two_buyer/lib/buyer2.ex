@@ -38,7 +38,8 @@ defmodule TwoBuyerMaty2.Buyer2 do
 
   # -----------------------------------------------------------------
 
-  defp handle_share({:share, amount}, %{session: session} = state) do
+  defp handle_share({:share, amount, from_pid}, %{session: session} = state)
+       when from_pid == session.buyer1 do
     # We received "share(int)" from Buyer1
     IO.puts("[Buyer2] Received share=#{amount}")
 
@@ -46,16 +47,21 @@ defmodule TwoBuyerMaty2.Buyer2 do
     if amount > 100 do
       # Option 1: "Buyer2 -> Seller : quit(_)"
       IO.puts("[Buyer2] share > 100, sending quit(...)")
-      send(session.seller, {:quit, :unit})
+      send(session.seller, {:quit, :unit, self()})
       # can either stop or remain alive
       {:stop, :normal, state}
     else
       # Option 2: "Buyer2 -> Seller : address(str)"
       IO.puts("[Buyer2] share <= 100, sending address(...), suspending with 'date_handler'")
-      send(session.seller, {:address, get_address()})
+      send(session.seller, {:address, get_address(), self()})
       # Next, we wait for date(date)
       {:noreply, %{state | current_handler: :date_handler}}
     end
+  end
+
+  defp handle_share({:share, _amount, from_pid}, state) do
+    IO.puts("[Buyer2] (share_handler) ignoring 'share' from pid=#{inspect(from_pid)}")
+    {:noreply, state}
   end
 
   defp handle_share(_other_msg, state) do
@@ -63,11 +69,17 @@ defmodule TwoBuyerMaty2.Buyer2 do
     {:noreply, state}
   end
 
-  defp handle_date({:date, date}, state) do
+  defp handle_date({:date, date, from_pid}, %{session: session} = state)
+       when from_pid == session.seller do
     # We received "date(date)" from Seller
     IO.puts("[Buyer2] Received date=#{date}, finishing.")
     # again, can either stop or remain alive
     {:stop, :normal, state}
+  end
+
+  defp handle_date({:date, _date, from_pid}, state) do
+    IO.puts("[Buyer2] (date_handler) ignoring 'date' from pid=#{inspect(from_pid)}")
+    {:noreply, state}
   end
 
   defp handle_date(_other_msg, state) do

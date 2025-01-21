@@ -52,14 +52,21 @@ defmodule TwoBuyerMaty2.Seller do
   # if they need to "suspend" -> they just set `current_handler` to the next handler.
   # -----------------------------------------------------------------
 
-  defp handle_title({:title, x}, %{session: session} = state) do
+  defp handle_title({:title, x, from_pid}, %{session: session} = state)
+       when from_pid == session.buyer1 do
     IO.puts("[Seller] (title_handler) received title=#{x}. Sending quote...")
-    send(session.buyer1, {:quote, lookup_price(x)})
+    send(session.buyer1, {:quote, lookup_price(x), self()})
 
     # In Maty, we do: `suspend decisionHandler`
     # So we just set the current_handler to :decision_handler
     IO.puts("[Seller] In 'title_handler' state, suspending with 'decision_handler'")
     {:noreply, %{state | current_handler: :decision_handler}}
+  end
+
+  defp handle_title({:title, _title, from_pid}, state) do
+    # This means it was a :title message from someone who’s not the real Buyer1
+    IO.puts("[Seller] (title_handler) ignoring 'title' from pid=#{inspect(from_pid)}")
+    {:noreply, state}
   end
 
   defp handle_title(_other_msg, state) do
@@ -69,16 +76,28 @@ defmodule TwoBuyerMaty2.Seller do
     {:noreply, state}
   end
 
-  defp handle_decision({:address, addr}, %{session: session} = state) do
+  defp handle_decision({:address, addr, from_pid}, %{session: session} = state)
+       when from_pid == session.buyer2 do
     IO.puts("[Seller] (decision_handler) got address=#{addr}, sending date...")
-    send(session.buyer2, {:date, shipping_date(addr)})
+    send(session.buyer2, {:date, shipping_date(addr), self()})
 
     # possibly end or loop back to :install
     {:stop, :normal, state}
   end
 
-  defp handle_decision({:quit, _}, state) do
+  defp handle_decision({:address, _addr, from_pid}, state) do
+    IO.puts("[Seller] (decision_handler) ignoring 'address' from pid=#{inspect(from_pid)}")
+    {:noreply, state}
+  end
+
+  defp handle_decision({:quit, _, from_pid}, %{session: session} = state)
+       when from_pid == session.buyer2 do
     IO.puts("[Seller] (decision_handler) got quit, stopping.")
+    {:stop, :normal, state}
+  end
+
+  defp handle_decision({:quit, _, from_pid}, state) do
+    IO.puts("[Seller] (decision_handler) ignoring 'quit' from pid=#{inspect(from_pid)}")
     {:stop, :normal, state}
   end
 

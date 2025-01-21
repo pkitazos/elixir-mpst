@@ -24,7 +24,7 @@ defmodule TwoBuyerMaty2.Buyer1 do
   @impl true
   def handle_cast({:init_role, session, title}, state) do
     IO.puts("[Buyer1] Sending title=#{title} to Seller, suspending with 'quote_handler'")
-    send(session.seller, {:title, title})
+    send(session.seller, {:title, title, self()})
     {:noreply, %{state | session: session, current_handler: :quote_handler}}
   end
 
@@ -37,13 +37,19 @@ defmodule TwoBuyerMaty2.Buyer1 do
 
   # -----------------------------------------------------------------
 
-  defp handle_quote({:quote, amount}, %{session: session} = state) do
+  defp handle_quote({:quote, amount, from_pid}, %{session: session} = state)
+       when from_pid == session.seller do
     IO.puts("[Buyer1] Received quote=#{amount}. Forwarding share to Buyer2...")
 
     buyer2 = session.buyer2
     share_amount = amount / 2
-    send(buyer2, {:share, share_amount})
+    send(buyer2, {:share, share_amount, self()})
     {:stop, :normal, state}
+  end
+
+  defp handle_quote({:quote, _amount, from_pid}, state) do
+    IO.puts("[Buyer1] (quote_handler) ignoring 'quote' from pid=#{inspect(from_pid)}")
+    {:noreply, state}
   end
 
   defp handle_quote(_other_msg, state) do
