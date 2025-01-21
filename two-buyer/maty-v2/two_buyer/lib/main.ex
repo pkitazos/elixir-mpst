@@ -1,10 +1,15 @@
 defmodule TwoBuyerMaty2.Main do
+  alias TwoBuyerMaty2.Seller
+  alias TwoBuyerMaty2.Buyer1
+  alias TwoBuyerMaty2.Buyer2
+  alias TwoBuyerMaty2.SessionContext
+
   def start_two_buyer(title \\ "Types and Programming Languages") do
     ap =
       newAP([
-        {:seller, TwoBuyerMaty2.Seller},
-        {:buyer1, TwoBuyerMaty2.Buyer1},
-        {:buyer2, TwoBuyerMaty2.Buyer2}
+        {:seller, Seller},
+        {:buyer1, Buyer1},
+        {:buyer2, Buyer2}
       ])
 
     seller(ap)
@@ -14,20 +19,20 @@ defmodule TwoBuyerMaty2.Main do
   end
 
   defp seller(ap) do
-    TwoBuyerMaty2.Seller.init_role(ap)
+    Seller.init_role(ap)
     # can choose to spawn new seller process here
-    :ok = TwoBuyerMaty2.Seller.install()
+    :ok = Seller.install()
   end
 
   defp buyer1(ap, title) do
-    TwoBuyerMaty2.Buyer1.init_role(ap, title)
+    Buyer1.init_role(ap, title)
   end
 
   defp buyer2(ap) do
-    TwoBuyerMaty2.Buyer2.init_role(ap)
+    Buyer2.init_role(ap)
   end
 
-  defp newAP(participants, context_module \\ TwoBuyerMaty2.SessionContext) do
+  defp newAP(participants, context_module \\ SessionContext) do
     # spawn each role process; store PIDs in a context struct.
     Enum.map(participants, fn {role, module} ->
       {:ok, pid} = module.start_link()

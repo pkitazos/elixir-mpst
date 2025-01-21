@@ -1,13 +1,16 @@
 defmodule TwoBuyerMaty2.Buyer1 do
   use GenServer
+  alias TwoBuyerMaty2.SessionContext
+  alias TwoBuyerMaty2.Logger
 
   @name __MODULE__
+  @role :buyer1
 
   def start_link() do
     GenServer.start_link(@name, %{}, name: @name)
   end
 
-  def init_role(%TwoBuyerMaty2.SessionContext{} = session, title) do
+  def init_role(%SessionContext{} = session, title) do
     GenServer.cast(@name, {:init_role, session, title})
   end
 
@@ -23,7 +26,8 @@ defmodule TwoBuyerMaty2.Buyer1 do
 
   @impl true
   def handle_cast({:init_role, session, title}, state) do
-    IO.puts("[Buyer1] Sending title=#{title} to Seller, suspending with 'quote_handler'")
+    log("Sending title=#{title} to Seller")
+    log("Suspending with 'quote_handler'")
     send(session.seller, {:title, title, self()})
     {:noreply, %{state | session: session, current_handler: :quote_handler}}
   end
@@ -39,21 +43,24 @@ defmodule TwoBuyerMaty2.Buyer1 do
 
   defp handle_quote({:quote, amount, from_pid}, %{session: session} = state)
        when from_pid == session.seller do
-    IO.puts("[Buyer1] Received quote=#{amount}. Forwarding share to Buyer2...")
-
-    buyer2 = session.buyer2
     share_amount = amount / 2
-    send(buyer2, {:share, share_amount, self()})
+    log(:quote_handler, "Received quote=#{amount}, sending share=#{share_amount} to Buyer2")
+    send(session.buyer2, {:share, share_amount, self()})
     {:stop, :normal, state}
   end
 
   defp handle_quote({:quote, _amount, from_pid}, state) do
-    IO.puts("[Buyer1] (quote_handler) ignoring 'quote' from pid=#{inspect(from_pid)}")
+    log(:quote_handler, "Ignoring 'quote' from pid=#{inspect(from_pid)}")
     {:noreply, state}
   end
 
   defp handle_quote(_other_msg, state) do
-    IO.puts("[Buyer1] (quote_handler) got unexpected message")
+    log(:quote_handler, "Unexpected message")
     {:noreply, state}
   end
+
+  # -----------------------------------------------------------------
+
+  defp log(msg), do: Logger.log(@role, msg)
+  defp log(handler, msg), do: Logger.log(@role, handler, msg)
 end

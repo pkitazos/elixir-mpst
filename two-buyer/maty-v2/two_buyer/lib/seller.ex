@@ -1,13 +1,16 @@
 defmodule TwoBuyerMaty2.Seller do
   use GenServer
+  alias TwoBuyerMaty2.SessionContext
+  alias TwoBuyerMaty2.Logger
 
   @name __MODULE__
+  @role :seller
 
   def start_link() do
     GenServer.start_link(@name, %{}, name: @name)
   end
 
-  def init_role(%TwoBuyerMaty2.SessionContext{} = session) do
+  def init_role(%SessionContext{} = session) do
     GenServer.cast(@name, {:init_role, session})
   end
 
@@ -33,7 +36,7 @@ defmodule TwoBuyerMaty2.Seller do
   @impl true
   def handle_call(:install, _from, state) do
     # in our Maty program the `install` logic says we need to `suspend` with the `titleHandler`
-    IO.puts("[Seller] Suspending with 'title_handler'")
+    log("Suspending with 'title_handler'")
     {:reply, :ok, %{state | current_handler: :title_handler}}
   end
 
@@ -52,57 +55,59 @@ defmodule TwoBuyerMaty2.Seller do
   # if they need to "suspend" -> they just set `current_handler` to the next handler.
   # -----------------------------------------------------------------
 
-  defp handle_title({:title, x, from_pid}, %{session: session} = state)
+  defp handle_title({:title, title, from_pid}, %{session: session} = state)
        when from_pid == session.buyer1 do
-    IO.puts("[Seller] (title_handler) received title=#{x}. Sending quote...")
-    send(session.buyer1, {:quote, lookup_price(x), self()})
+    amount = lookup_price(title)
+    log(:title_handler, "Received title=#{title}, sending quote=#{amount} to Buyer1")
+    log(:title_handler, "Suspending with 'decision_handler'")
 
     # In Maty, we do: `suspend decisionHandler`
     # So we just set the current_handler to :decision_handler
-    IO.puts("[Seller] In 'title_handler' state, suspending with 'decision_handler'")
+    send(session.buyer1, {:quote, amount, self()})
     {:noreply, %{state | current_handler: :decision_handler}}
   end
 
   defp handle_title({:title, _title, from_pid}, state) do
     # This means it was a :title message from someone who’s not the real Buyer1
-    IO.puts("[Seller] (title_handler) ignoring 'title' from pid=#{inspect(from_pid)}")
+    log(:title_handler, "Ignoring 'title' from pid=#{inspect(from_pid)}")
     {:noreply, state}
   end
 
   defp handle_title(_other_msg, state) do
     # handles unexpected messages - in this case we're just logging them but we could also do nothing
     # this may not be necessary at all
-    IO.puts("[Seller] (title_handler) got unexpected message")
+    log(:title_handler, "Unexpected message")
     {:noreply, state}
   end
 
   defp handle_decision({:address, addr, from_pid}, %{session: session} = state)
        when from_pid == session.buyer2 do
-    IO.puts("[Seller] (decision_handler) got address=#{addr}, sending date...")
-    send(session.buyer2, {:date, shipping_date(addr), self()})
+    date = shipping_date(addr)
+    log(:decision_handler, "Received address=#{addr}, sending date=#{date} to Buyer2")
+    send(session.buyer2, {:date, date, self()})
 
     # possibly end or loop back to :install
     {:stop, :normal, state}
   end
 
   defp handle_decision({:address, _addr, from_pid}, state) do
-    IO.puts("[Seller] (decision_handler) ignoring 'address' from pid=#{inspect(from_pid)}")
+    log(:decision_handler, "Ignoring 'address' from pid=#{inspect(from_pid)}")
     {:noreply, state}
   end
 
   defp handle_decision({:quit, _, from_pid}, %{session: session} = state)
        when from_pid == session.buyer2 do
-    IO.puts("[Seller] (decision_handler) got quit, stopping.")
+    log(:decision_handler, "Received quit, stopping.")
     {:stop, :normal, state}
   end
 
   defp handle_decision({:quit, _, from_pid}, state) do
-    IO.puts("[Seller] (decision_handler) ignoring 'quit' from pid=#{inspect(from_pid)}")
+    log(:decision_handler, "Ignoring 'quit' from pid=#{inspect(from_pid)}")
     {:stop, :normal, state}
   end
 
   defp handle_decision(_other_msg, state) do
-    IO.puts("[Seller] (decision_handler) got unexpected message")
+    log(:decision_handler, "Unexpected message")
     {:noreply, state}
   end
 
@@ -111,4 +116,8 @@ defmodule TwoBuyerMaty2.Seller do
   # -----------------------------------------------------------------
   defp lookup_price(_title_str), do: 155
   defp shipping_date(_addr), do: "2025-02-07"
+
+  # -----------------------------------------------------------------
+  defp log(msg), do: Logger.log(@role, msg)
+  defp log(handler, msg), do: Logger.log(@role, handler, msg)
 end

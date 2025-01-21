@@ -183,8 +183,3 @@ To recompile the application we can just use inside iex:
 ```
 iex> recompile()
 ```
-
-## TODO 
-
-- [ ] add role guards to each Maty handler
-- [ ] add participant PID to each send operation
