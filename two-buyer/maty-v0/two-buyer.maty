@@ -21,6 +21,7 @@ main ===
     let ap <== newAP (Seller: S, Buyer1: B1, Buyer2: B2) in
     spawn seller(ap) ();
     spawnBuyers(ap, "Types and Programming Languages");
+    spawnBuyers(ap, "Compiling with Continuations");
 
 spawnBuyers(ap, title) ===
     spawn buyer1(ap, title);
