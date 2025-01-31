@@ -1,13 +1,12 @@
-defmodule TwoBuyerMaty5.Seller do
+defmodule TwoBuyerMaty5.Buyer2 do
   alias TwoBuyerMaty5.Logger
   use TwoBuyerMaty5.MatyActor
 
-  @role :seller
+  @role :buyer2
 
   @type session_id :: String.t()
   @type session_context :: %{any() => pid()}
   @type session_info :: %{
-          id: session_id(),
           next_handler: function(),
           participants: session_context(),
           local_state: any()
@@ -35,60 +34,61 @@ defmodule TwoBuyerMaty5.Seller do
   def init_session(session_id, %{sessions: sessions} = actor_state) do
     session_info = %{
       id: session_id,
-      next_handler: &title_handler/4,
-      participants: %{seller: self()},
+      next_handler: &share_handler/4,
+      participants: %{buyer2: self()},
       local_state: %{}
     }
 
     updated_sessions = Map.put(sessions, session_id, session_info)
     log("Initialising session with id=#{session_id}")
-    log("Suspending with 'title_handler'")
+    log("Suspending with 'share_handler'")
 
     {session_info, %{actor_state | sessions: updated_sessions}}
   end
 
-  def title_handler({:title, title}, from_pid, %{participants: participants} = session, state)
+  def share_handler({:share, amount}, from_pid, %{participants: participants} = session, state)
       when from_pid === participants.buyer1 do
-    amount = lookup_price(title)
-    log(:title_handler, "Received title=#{title}, sending quote=#{amount} to Buyer1")
-    log(:title_handler, "Suspending with 'decision_handler'")
+    log(:share_handler, "Received share=#{amount}")
 
-    maty_send(
-      participants.buyer1,
-      session.id,
-      {:quote, amount}
-    )
+    if amount > 100 do
+      log(:share_handler, "share > 100, sending quit to Seller")
 
-    {:suspend, &decision_handler/4, state}
+      maty_send(
+        participants.seller,
+        session.id,
+        {:quit, :unit}
+      )
+
+      {:done, session.id, state}
+    else
+      address = get_address()
+      log(:share_handler, "share <= 100, sending address=#{address} to Seller")
+      log(:share_handler, "Suspending with 'date_handler'")
+
+      maty_send(
+        participants.seller,
+        session.id,
+        {:address, address}
+      )
+
+      {:suspend, :date_handler, state}
+    end
   end
 
-  def title_handler(_, _, _, state), do: {:continue, state}
+  def share_handler(_, _, _, state), do: {:continue, state}
 
-  def decision_handler({:address, addr}, from_pid, %{participants: participants} = session, state)
-      when from_pid === participants.buyer2 do
-    date = shipping_date(addr)
-    log(:decision_handler, "Received address=#{addr}, sending date=#{date} to Buyer2")
-
-    maty_send(
-      participants.buyer2,
-      session.id,
-      {:date, date}
-    )
+  def date_handler({:date, date}, from_pid, %{participants: participants} = session, state)
+      when from_pid === participants.seller do
+    log(:date_handler, "Received date=#{date}, finishing.")
 
     {:done, session.id, state}
   end
 
-  def decision_handler({:quit, _}, from_pid, %{participants: participants} = session, state)
-      when from_pid === participants.buyer2 do
-    {:done, session.id, state}
-  end
-
-  def decision_handler(_, _, _, state), do: {:continue, state}
+  def date_handler(_, _, _, state), do: {:continue, state}
 
   # -----------------------------------------------------------------
 
-  defp lookup_price(_title_str), do: 150
-  defp shipping_date(_addr_str), do: "2021-12-31"
+  defp get_address(), do: "18 Lilybank Gardens"
 
   # -----------------------------------------------------------------
 

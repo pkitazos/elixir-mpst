@@ -1,8 +1,14 @@
-defmodule MatyActor do
-  alias AccessPoint
+defmodule TwoBuyerMaty5.MatyActor do
+  alias TwoBuyerMaty5.AccessPoint
 
   @type session_id :: String.t()
-  @type session_info :: %{next_handler: function(), local_state: any()}
+  @type session_context :: %{any() => pid()}
+  @type session_info :: %{
+          id: session_id(),
+          next_handler: function(),
+          participants: session_context(),
+          local_state: any()
+        }
   @type actor_state :: %{
           sessions: %{session_id() => session_info :: session_info()},
           ap_pid: pid()
@@ -15,10 +21,18 @@ defmodule MatyActor do
 
   defmacro __using__(_opts) do
     quote do
-      @behaviour MatyActor
+      @behaviour TwoBuyerMaty5.MatyActor
 
       def start_link(args) do
-        MatyActor.start_link(__MODULE__, args)
+        TwoBuyerMaty5.MatyActor.start_link(__MODULE__, args)
+      end
+
+      def maty_send(to, session_id, msg), do: send(to, {:maty_message, session_id, msg, self()})
+
+      def fetch_session(pid, session_id) do
+        send(pid, {:fetch_session, session_id, pid})
+        IO.puts("[DEBUG] fetching session #{session_id}")
+        :ok
       end
     end
   end
@@ -42,8 +56,16 @@ defmodule MatyActor do
   end
 
   defp loop(module, actor_state) do
+    ap = actor_state.ap_pid
+    IO.puts("[MatyActor] Waiting for messages")
+
     receive do
       {:maty_message, session_id, msg, from_pid} ->
+        IO.puts("[MatyActor] Received message #{inspect(msg)} from #{inspect(from_pid)}")
+
+        hello = get_session(session_id, actor_state)
+        IO.puts("[DEBUG] hello: #{inspect(hello)}")
+
         with {:ok, session_info} <- get_session(session_id, actor_state) do
           {action, next_handler_fun, new_actor_state} =
             session_info.next_handler
@@ -59,49 +81,46 @@ defmodule MatyActor do
             loop(module, actor_state)
         end
 
+      {:register, session_id, role, caller} ->
+        AccessPoint.register(ap, session_id, role, caller)
+        loop(module, actor_state)
+
+      {:fetch_session, session_id, caller} ->
+        AccessPoint.fetch_session(ap, session_id, caller)
+        loop(module, actor_state)
+
       # assumes that no duplication of session_id will occur
       # this message arrives from the access point only
-      {:session_established, session_id, session, ^actor_state.ap_pid} ->
-        updated_actor_state = put_in(actor_state, [:sessions, session_id], session)
+      {:session_participants, session_id, participants, ^ap} ->
+        IO.puts("[MatyActor] Received session participants: #{inspect(participants)}")
+
+        updated_actor_state =
+          actor_state
+          |> put_in([:sessions], %{session_id => %{participants: participants}})
+          # may be redundant
+          |> put_in([:sessions, session_id, :id], session_id)
+
+        # updated_actor_state =
+        #   actor_state
+        #   |> put_in([:sessions, session_id, :participants], participants)
+        #   # may be redundant
+        #   |> put_in([:sessions, session_id, :id], session_id)
+
         loop(module, updated_actor_state)
     end
   end
 
-  defp get_session(session_id, actor_state), do: Map.fetch(actor_state.sessions, session_id)
-
-  # perhaps I should handle uninitiated sessions differently
-  defp maybe_init_session(session_id, actor_state, module) do
-    case Map.fetch(actor_state.sessions, session_id) do
-      {:ok, session_info} ->
-        {session_info, actor_state}
-
-      :error ->
-        # this doesn't necessarily mean that this session does not exist in the access point
-        # it just means that we don't have knowledge of it in our actor state
-        # so we should query the access point to get the session info if it exists
-
-        # something something goes here
-
-        # or let's just assume that the session does not exist in the access point
-        # and we need to create a new session
-        {session_info, new_actor_state} = module.init_session(session_id, actor_state)
-        updated_actor_state = put_in(new_actor_state, [:sessions, session_id], session_info)
-        {session_info, updated_actor_state}
-    end
+  defp handle_action(:suspend, next_fun, session_id, actor_state) do
+    put_in(actor_state, [:sessions, session_id, :next_handler], next_fun)
   end
 
-  defp handle_action(:suspend, next_fun, new_local_state, session_id, actor_state) do
-    put_in(actor_state, [:sessions, session_id], %{
-      next_handler: next_fun,
-      local_state: new_local_state
-    })
-  end
-
-  defp handle_action(:done, _next_fun, _local_state, session_id, actor_state) do
+  defp handle_action(:done, _next_fun, session_id, actor_state) do
     update_in(actor_state, [:sessions], &Map.delete(&1, session_id))
   end
 
-  defp handle_action(:ignore, _next_fun, _new_local_state, _session_id, actor_state) do
+  defp handle_action(:continue, _next_fun, _session_id, actor_state) do
     actor_state
   end
+
+  defp get_session(session_id, actor_state), do: Map.fetch(actor_state.sessions, session_id)
 end

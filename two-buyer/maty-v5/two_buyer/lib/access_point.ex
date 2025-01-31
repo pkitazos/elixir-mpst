@@ -1,5 +1,5 @@
-defmodule AccessPoint do
-  alias SessionContext
+defmodule TwoBuyerMaty5.AccessPoint do
+  alias TwoBuyerMaty5.{SessionContext}
 
   def start_link() do
     initial_state = %{
@@ -13,51 +13,78 @@ defmodule AccessPoint do
 
   def create_session(ap_pid) do
     send(ap_pid, {:create_session, self()})
+
+    receive do
+      {:ok, session_id} -> {:ok, session_id}
+    end
   end
 
   def register(ap_pid, session_id, role, pid \\ self()) do
     send(ap_pid, {:register, session_id, role, pid})
-    {:ok, session_id}
+    :ok
   end
 
   def fetch_session(ap_pid, session_id, caller \\ self()) do
     send(ap_pid, {:fetch_session, session_id, caller})
   end
 
-  defp loop(state) do
+  defp loop(%{sessions: sessions, next_session_id: next_session_id} = state) do
     receive do
-      # in our case the requester would only ever be the seller
-      {:create_session, requester} ->
-        session_id = "session#{state.next_session_id}"
-        new_session = %SessionContext{}
-        new_sessions = Map.put(state.sessions, session_id, new_session)
+      # in our case the requester would only ever be the seller (maybe)
+      {:create_session, caller} ->
+        session_id = "session_#{next_session_id}"
+        new_sessions = Map.put(sessions, session_id, %SessionContext{})
 
-        new_state = %{state | sessions: new_sessions, next_session_id: state.next_session_id + 1}
-
-        send(requester, {:ok, session_id})
-        loop(new_state)
+        send(caller, {:ok, session_id})
+        loop(%{state | sessions: new_sessions, next_session_id: next_session_id + 1})
 
       {:register, session_id, role, pid} ->
-        sessions_map = state.sessions
-        session = Map.fetch!(sessions_map, session_id)
-
         updated_session =
-          case role do
-            :seller -> %SessionContext{session | seller: pid}
-            :buyer1 -> %SessionContext{session | buyer1: pid}
-            :buyer2 -> %SessionContext{session | buyer2: pid}
-          end
+          sessions
+          |> maybe_init_session(session_id)
+          |> update_session(role, pid)
 
-        updated_sessions = Map.put(sessions_map, session_id, updated_session)
+        updated_sessions = Map.put(sessions, session_id, updated_session)
         loop(%{state | sessions: updated_sessions})
 
       {:fetch_session, session_id, caller} ->
-        case Map.get(state.sessions, session_id) do
-          session -> send(caller, {:session_info, session_id, session})
-          nil -> send(caller, {:error, :session_not_found})
+        # need to keep track of who requested the session
+        # once everyone has registered, we can send the session info back automatically?
+        # or we only send this info back when requested
+        # what we could then keep track of is who requested the session
+        # and then when everyone has requested the session, we can send the session info back to the main process?
+
+        session_info = Map.get(sessions, session_id)
+
+        caller_role =
+          session_info
+          |> Map.from_struct()
+          |> Enum.find(fn {_key, val} -> val == caller end)
+          |> elem(0)
+
+        IO.puts("[DEBUG] session #{session_id} requested by caller_role: #{caller_role}")
+
+        case Map.get(sessions, session_id) do
+          nil ->
+            send(caller, {:error, :session_not_found})
+
+          session ->
+            participants = Map.take(session, [:seller, :buyer1, :buyer2])
+            send(caller, {:session_participants, session_id, participants, self()})
         end
 
         loop(state)
     end
   end
+
+  defp maybe_init_session(sessions_map, session_id) do
+    case Map.get(sessions_map, session_id) do
+      nil -> %SessionContext{}
+      session -> session
+    end
+  end
+
+  defp update_session(session, :seller, pid), do: %SessionContext{session | seller: pid}
+  defp update_session(session, :buyer1, pid), do: %SessionContext{session | buyer1: pid}
+  defp update_session(session, :buyer2, pid), do: %SessionContext{session | buyer2: pid}
 end
