@@ -20,30 +20,27 @@ defmodule TwoBuyerMaty5.Buyer2 do
 
   @impl true
   def init_actor(ap_pid) do
-    initial_state = %{sessions: %{}, ap_pid: ap_pid}
+    initial_state = %{sessions: %{}, ap_pid: ap_pid, role: @role}
 
     {:ok, initial_state}
   end
 
-  def register(pid, session_id) do
-    send(pid, {:register, session_id, @role, pid})
-    :ok
-  end
-
   @impl true
   def init_session(session_id, %{sessions: sessions} = actor_state) do
-    session_info = %{
-      id: session_id,
-      next_handler: &share_handler/4,
-      participants: %{buyer2: self()},
-      local_state: %{}
+    partial_session_info = Map.get(sessions, session_id)
+
+    updated_session_info = %{
+      partial_session_info
+      | next_handler: &share_handler/4,
+        local_state: %{}
     }
 
-    updated_sessions = Map.put(sessions, session_id, session_info)
+    updated_sessions = Map.put(sessions, session_id, updated_session_info)
+
     log("Initialising session with id=#{session_id}")
     log("Suspending with 'share_handler'")
 
-    {session_info, %{actor_state | sessions: updated_sessions}}
+    {updated_session_info, %{actor_state | sessions: updated_sessions}}
   end
 
   def share_handler({:share, amount}, from_pid, %{participants: participants} = session, state)
@@ -54,37 +51,39 @@ defmodule TwoBuyerMaty5.Buyer2 do
       log(:share_handler, "share > 100, sending quit to Seller")
 
       maty_send(
+        participants.buyer2,
         participants.seller,
         session.id,
         {:quit, :unit}
       )
 
-      {:done, session.id, state}
+      {:done, :unit, state}
     else
       address = get_address()
       log(:share_handler, "share <= 100, sending address=#{address} to Seller")
       log(:share_handler, "Suspending with 'date_handler'")
 
       maty_send(
+        participants.buyer2,
         participants.seller,
         session.id,
         {:address, address}
       )
 
-      {:suspend, :date_handler, state}
+      {:suspend, &date_handler/4, state}
     end
   end
 
-  def share_handler(_, _, _, state), do: {:continue, state}
+  def share_handler(_, _, _, state), do: {:continue, nil, state}
 
-  def date_handler({:date, date}, from_pid, %{participants: participants} = session, state)
+  def date_handler({:date, date}, from_pid, %{participants: participants}, state)
       when from_pid === participants.seller do
     log(:date_handler, "Received date=#{date}, finishing.")
 
-    {:done, session.id, state}
+    {:done, :unit, state}
   end
 
-  def date_handler(_, _, _, state), do: {:continue, state}
+  def date_handler(_, _, _, state), do: {:continue, nil, state}
 
   # -----------------------------------------------------------------
 

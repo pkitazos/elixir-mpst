@@ -19,13 +19,13 @@ defmodule TwoBuyerMaty5.AccessPoint do
     end
   end
 
-  def register(ap_pid, session_id, role, pid \\ self()) do
-    send(ap_pid, {:register, session_id, role, pid})
+  def register(ap_pid, session_id, role, caller, main) do
+    send(ap_pid, {:register, session_id, role, caller, main})
     :ok
   end
 
-  def fetch_session(ap_pid, session_id, caller \\ self()) do
-    send(ap_pid, {:fetch_session, session_id, caller})
+  def fetch_session(ap_pid, session_id, caller, main) do
+    send(ap_pid, {:fetch_session, session_id, caller, main})
   end
 
   defp loop(%{sessions: sessions, next_session_id: next_session_id} = state) do
@@ -38,39 +38,43 @@ defmodule TwoBuyerMaty5.AccessPoint do
         send(caller, {:ok, session_id})
         loop(%{state | sessions: new_sessions, next_session_id: next_session_id + 1})
 
-      {:register, session_id, role, pid} ->
+      {:register, session_id, role, caller, main} ->
         updated_session =
           sessions
           |> maybe_init_session(session_id)
-          |> update_session(role, pid)
+          |> update_session(role, caller)
 
         updated_sessions = Map.put(sessions, session_id, updated_session)
+
+        send(main, {:ok, session_id})
         loop(%{state | sessions: updated_sessions})
 
-      {:fetch_session, session_id, caller} ->
+      {:fetch_session, session_id, caller, main} ->
         # need to keep track of who requested the session
         # once everyone has registered, we can send the session info back automatically?
         # or we only send this info back when requested
         # what we could then keep track of is who requested the session
         # and then when everyone has requested the session, we can send the session info back to the main process?
 
-        session_info = Map.get(sessions, session_id)
+        # session_info = Map.get(sessions, session_id)
+        # IO.puts("[DEBUG] session_info: #{inspect(session_info)}")
+        # caller_role =
+        #   session_info
+        #   |> Map.from_struct()
+        #   |> Enum.find(fn {_key, val} -> val == caller end)
+        #   |> elem(0)
 
-        caller_role =
-          session_info
-          |> Map.from_struct()
-          |> Enum.find(fn {_key, val} -> val == caller end)
-          |> elem(0)
-
-        IO.puts("[DEBUG] session #{session_id} requested by caller_role: #{caller_role}")
+        # IO.puts("[DEBUG] session #{session_id} requested by caller_role: #{caller_role}")
 
         case Map.get(sessions, session_id) do
           nil ->
             send(caller, {:error, :session_not_found})
+            send(main, {:error, :session_not_found})
 
           session ->
             participants = Map.take(session, [:seller, :buyer1, :buyer2])
             send(caller, {:session_participants, session_id, participants, self()})
+            send(main, {:ok, session_id})
         end
 
         loop(state)
