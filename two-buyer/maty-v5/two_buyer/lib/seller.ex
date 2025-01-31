@@ -19,9 +19,22 @@ defmodule TwoBuyerMaty5.Seller do
 
   # ------------------------------------------------------------------
 
+  def install() do
+    Seller.register(ap, @role, fn state ->
+      install()
+      {:suspend, &title_handler/4, state}
+    end)
+  end
+
+  # ------------------------------------------------------------------
+
   @impl true
   def init_actor(ap_pid) do
     initial_state = %{sessions: %{}, ap_pid: ap_pid, role: @role}
+
+    # registration happens here
+
+    Seller.register(ap, role, callback)
 
     {:ok, initial_state}
   end

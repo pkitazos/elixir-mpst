@@ -32,20 +32,9 @@ defmodule TwoBuyerMaty5.MatyActor do
         do: send(to, {:maty_message, session_id, msg, from})
 
       def register(participant_pid, session_id) do
+        # generate init_token
+        # store mapping from token to cb in state
         send(participant_pid, {:register, session_id, participant_pid, self()})
-
-        receive do
-          {:ok, ^session_id} -> :ok
-        end
-      end
-
-      def fetch_session(participant_pid, session_id) do
-        send(participant_pid, {:fetch_session, session_id, participant_pid, self()})
-
-        receive do
-          {:ok, ^session_id} -> :ok
-          {:error, reason} -> {:error, reason}
-        end
       end
     end
   end
@@ -70,21 +59,20 @@ defmodule TwoBuyerMaty5.MatyActor do
 
   defp loop(module, %{ap_pid: ap, role: role} = actor_state) do
     receive do
+      {:init_session, init_token, new_session_id} ->
+        # the PIDs of other participants
+        # store in session state
+
+        # lookup callback stored for init token
+        # invoke callback (return type like handler (though it's not a handler))
+
+        nil
+
       {:maty_message, session_id, msg, from_pid} ->
         with {:ok, session_info} <- get_session(session_id, actor_state) do
-          # IO.puts("[DEBUG] ---- msg: #{inspect(msg)} \n\n")
-          # IO.puts("[DEBUG] ---- from_pid: #{inspect(from_pid)} \n\n")
-          # IO.puts("[DEBUG] ---- session_info: #{inspect(session_info)} \n\n")
-          # IO.puts("[DEBUG] ---- actor_state: #{inspect(actor_state)} \n\n")
-          # IO.puts("[DEBUG] ---- buyer1: #{inspect(session_info.participants.buyer1)} \n\n")
-
           {action, next_handler_fun, new_actor_state} =
             session_info.next_handler
             |> apply([msg, from_pid, session_info, actor_state])
-
-          # IO.puts("[MatyActor] applied #{inspect(session_info.next_handler)}")
-          # IO.puts("[MatyActor] action: #{inspect(action)}")
-          # IO.puts("[MatyActor] next_handler_fun: #{inspect(next_handler_fun)}")
 
           updated_actor_state =
             handle_action(action, next_handler_fun, session_id, new_actor_state)
@@ -92,7 +80,7 @@ defmodule TwoBuyerMaty5.MatyActor do
           loop(module, updated_actor_state)
         else
           _ ->
-            # IO.puts("[MatyActor] Session #{session_id} not found")
+            # handle error case more gracefully
             loop(module, actor_state)
         end
 

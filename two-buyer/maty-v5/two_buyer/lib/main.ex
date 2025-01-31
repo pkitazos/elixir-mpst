@@ -4,14 +4,16 @@ defmodule Main do
   def main do
     {:ok, ap} = AccessPoint.start_link()
 
+    # this should also register the seller in the session
     {:ok, seller_pid} = Seller.start_link(ap)
+    {:ok, id} = AccessPoint.create_session(ap)
+    :ok = Seller.register(seller_pid, id)
+
     {:ok, buyer1_pid} = Buyer1.start_link(ap)
     {:ok, buyer2_pid} = Buyer2.start_link(ap)
 
-    {:ok, id} = AccessPoint.create_session(ap)
     # IO.puts("[DEBUG] here is the session id: #{id}")
     # not sure how to have the seller register in infinite sessions yet
-    :ok = Seller.register(seller_pid, id)
     :ok = Buyer1.register(buyer1_pid, id)
     :ok = Buyer2.register(buyer2_pid, id)
     # at this point, ap knows about all the actors and should inform them of who acts as who
@@ -32,7 +34,6 @@ defmodule Main do
 
     # recursively call the seller to start new sessions (somehow)
     # Seller.instal()
-    # ! currently this fires off a message to the seller before I know that all participants have all the required information
     Buyer1.send_title(buyer1_pid, id, "Types and Programming Languages")
     :ok
   end
