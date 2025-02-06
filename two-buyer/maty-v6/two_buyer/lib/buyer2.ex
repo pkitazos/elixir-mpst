@@ -4,43 +4,19 @@ defmodule MV6.Buyer2 do
 
   @role :buyer2
 
-  @type session_id :: String.t()
-  @type session_context :: %{any() => pid()}
-  @type session_info :: %{
-          next_handler: function(),
-          participants: session_context(),
-          local_state: any()
-        }
-  @type actor_state :: %{
-          sessions: %{session_id() => session_info :: session_info()},
-          ap_pid: pid()
-        }
-
-  # ------------------------------------------------------------------
-
   @impl true
   def init_actor(ap_pid) do
-    initial_state = %{sessions: %{}, ap_pid: ap_pid, role: @role}
+    state = %{sessions: %{}, callbacks: %{}, ap_pid: ap_pid, role: @role}
 
-    {:ok, initial_state}
-  end
+    updated_state =
+      register(
+        ap_pid,
+        @role,
+        fn _, state -> {:suspend, &__MODULE__.share_handler/4, state} end,
+        state
+      )
 
-  @impl true
-  def init_session(session_id, %{sessions: sessions} = actor_state) do
-    partial_session_info = Map.get(sessions, session_id)
-
-    updated_session_info = %{
-      partial_session_info
-      | next_handler: &share_handler/4,
-        local_state: %{}
-    }
-
-    updated_sessions = Map.put(sessions, session_id, updated_session_info)
-
-    log("Initialising session with id=#{session_id}")
-    log("Suspending with 'share_handler'")
-
-    {updated_session_info, %{actor_state | sessions: updated_sessions}}
+    {:ok, updated_state}
   end
 
   def share_handler({:share, amount}, from_pid, %{participants: participants} = session, state)

@@ -56,7 +56,7 @@ defmodule MV6.MatyActor do
 
       {:init_session, session_id, participants, role, init_token, ^ap} ->
         callback = Map.fetch!(callbacks, init_token)
-        {:suspend, initial_handler, _actor_state} = callback.()
+        {:suspend, initial_handler, _actor_state} = callback.(session_id, state)
 
         session_info = %{
           id: session_id,

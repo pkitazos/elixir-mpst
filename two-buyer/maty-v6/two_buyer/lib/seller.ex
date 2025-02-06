@@ -4,43 +4,26 @@ defmodule MV6.Seller do
 
   @role :seller
 
-  @type session_id :: String.t()
-  @type session_context :: %{any() => pid()}
-  @type session_info :: %{
-          id: session_id(),
-          next_handler: function(),
-          participants: session_context(),
-          local_state: any()
-        }
-  @type actor_state :: %{
-          sessions: %{session_id() => session_info :: session_info()},
-          ap_pid: pid()
-        }
+  @impl true
+  def init_actor(ap_pid) do
+    state = %{sessions: %{}, callbacks: %{}, ap_pid: ap_pid, role: @role}
+
+    updated_state = register(ap_pid, @role, &__MODULE__.install/2, state)
+    {:ok, updated_state}
+  end
 
   # ------------------------------------------------------------------
 
-  @impl true
-  def init_actor(ap_pid) do
-    initial_state = %{sessions: %{}, ap_pid: ap_pid, role: @role}
-
-    {:ok, initial_state}
-  end
-
-  @impl true
-  def init_session(session_id, %{sessions: sessions} = actor_state) do
-    partial_session_info = Map.get(sessions, session_id)
-
-    updated_session_info = %{
-      partial_session_info
-      | next_handler: &title_handler/4,
-        local_state: %{}
-    }
-
-    updated_sessions = Map.put(sessions, session_id, updated_session_info)
-    log("Initialising session with id=#{session_id}")
-    log("Suspending with 'title_handler'")
-
-    {updated_session_info, %{actor_state | sessions: updated_sessions}}
+  def install(session_id, %{ap_pid: ap_pid} = state) do
+    register(
+      ap_pid,
+      @role,
+      fn session_id, state ->
+        install(session_id, state)
+        {:suspend, &__MODULE__.title_handler/4, state}
+      end,
+      state
+    )
   end
 
   def title_handler({:title, title}, from_pid, %{participants: participants} = session, state)
