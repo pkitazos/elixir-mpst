@@ -11,7 +11,7 @@ defmodule MV6.AccessPoint do
   @type access_point_state :: %{
           sessions: %{session_id() => registered_participants()},
           incomplete_session_ids: incomplete_session_ids(),
-          participants: %{pid() => %{session_id() => %{role() => init_token()}}}
+          participant_init_tokens: %{pid() => %{session_id() => %{role() => init_token()}}}
         }
 
   # ------------------------------------------------------------------
@@ -20,7 +20,7 @@ defmodule MV6.AccessPoint do
     initial_state = %{
       sessions: %{},
       incomplete_session_ids: MapSet.new(),
-      participants: %{}
+      participant_init_tokens: %{}
     }
 
     pid = spawn_link(fn -> loop(initial_state) end)
@@ -31,9 +31,11 @@ defmodule MV6.AccessPoint do
          %{
            sessions: sessions,
            incomplete_session_ids: incomplete_session_ids,
-           participants: participants
+           participant_init_tokens: participant_init_tokens
          } = state
        ) do
+    ap = self()
+
     receive do
       {:register, role, pid, init_token} ->
         maybe_session =
@@ -58,9 +60,9 @@ defmodule MV6.AccessPoint do
             # certainly not in this branch of the case statement
             # in fact we know that this is a new session and therefore there are no other roles this participant is registered under
             # so we can use Map.put
-            updated_participants =
+            updated_participant_init_tokens =
               Map.update(
-                participants,
+                participant_init_tokens,
                 pid,
                 %{new_session_id => %{role => init_token}},
                 &Map.put(&1, new_session_id, %{role => init_token})
@@ -69,7 +71,7 @@ defmodule MV6.AccessPoint do
             loop(%{
               sessions: Map.put(sessions, new_session_id, new_session),
               incomplete_session_ids: MapSet.put(incomplete_session_ids, new_session),
-              participants: updated_participants
+              participant_init_tokens: updated_participant_init_tokens
             })
 
           {id, session} ->
@@ -79,16 +81,16 @@ defmodule MV6.AccessPoint do
             updated_incomplete_session_ids =
               if is_incomplete?(updated_session) do
                 MapSet.delete(incomplete_session_ids, id)
-                # TODO: tell all participants they are good to go!
+                send(ap, {:session_ready, id, ap})
               else
                 incomplete_session_ids
               end
 
             # while the session definitely existed before, there's no guarantee that the participant has registered with the ap before
 
-            updated_participants =
+            updated_participant_init_tokens =
               Map.update(
-                participants,
+                participant_init_tokens,
                 pid,
                 %{id => %{role => init_token}},
                 fn participant_sessions ->
@@ -104,9 +106,19 @@ defmodule MV6.AccessPoint do
             loop(%{
               sessions: Map.put(sessions, id, updated_session),
               incomplete_session_ids: updated_incomplete_session_ids,
-              participants: updated_participants
+              participant_init_tokens: updated_participant_init_tokens
             })
         end
+
+      {:session_ready, session_id, ^ap} ->
+        participants = Map.fetch!(sessions, id)
+
+        participants
+        |> Map.to_list()
+        |> Enum.map(fn {role, pid} ->
+          init_token = get_in(participant_init_tokens, [pid, session_id, role])
+          send(pid, {:init_session, session_id, participants, role, init_token, ap})
+        end)
     end
   end
 
