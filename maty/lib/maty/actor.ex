@@ -17,7 +17,7 @@ defmodule Maty.Actor do
         init_token = make_ref()
         send(ap_pid, {:register, role, self(), init_token})
 
-        updated_state = %{state | callbacks: Map.put(state.callbacks, init_token, callback)}
+        updated_state = put_in(state, [:callbacks, init_token], {role, callback})
         {:ok, updated_state}
       end
     end
@@ -37,7 +37,7 @@ defmodule Maty.Actor do
     loop(module, actor_state)
   end
 
-  defp loop(module, %{ap_pid: ap_pid} = actor_state) do
+  defp loop(module, actor_state) do
     receive do
       {:maty_message, session_id, msg, from_pid} ->
         session_info = get_in(actor_state, [:sessions, session_id])
@@ -50,20 +50,17 @@ defmodule Maty.Actor do
 
         loop(module, updated_actor_state)
 
-      {:init_session, session_id, participants, _role, init_token, ^ap_pid} ->
+      {:init_session, session_id, session_participants, init_token} ->
         partial_session_info = %{
           id: session_id,
-          participants: participants,
+          participants: session_participants,
           next_handler: nil,
           local_state: %{}
         }
 
-        initial_actor_state = %{
-          actor_state
-          | sessions: Map.put(actor_state.sessions, session_id, partial_session_info)
-        }
+        initial_actor_state = put_in(actor_state, [:sessions, session_id], partial_session_info)
 
-        callback = get_in(initial_actor_state, [:callbacks, init_token])
+        {_role, callback} = get_in(initial_actor_state, [:callbacks, init_token])
 
         {:suspend, initial_handler, intermediate_actor_state} =
           callback.(session_id, initial_actor_state)
@@ -91,3 +88,18 @@ defmodule Maty.Actor do
     actor_state
   end
 end
+
+# TwoBuyer.Participants.Seller.install("#Reference<0.2589905085.2172387332.148561>", %{
+#   callbacks: %{
+#     "#Reference<0.2589905085.2172387332.148551>" =>
+#       {:seller, &TwoBuyer.Participants.Seller.install/2}
+#   },
+#   sessions: %{
+#     "#Reference<0.2589905085.2172387332.148561>" => %{
+#       id: "#Reference<0.2589905085.2172387332.148561>",
+#       next_handler: nil,
+#       participants: %{seller: "#PID<0.169.0>", buyer1: "#PID<0.170.0>", buyer2: "#PID<0.171.0>"},
+#       local_state: %{}
+#     }
+#   }
+# })

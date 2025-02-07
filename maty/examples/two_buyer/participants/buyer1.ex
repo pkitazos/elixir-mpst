@@ -6,7 +6,7 @@ defmodule TwoBuyer.Participants.Buyer1 do
 
   @impl true
   def init_actor({ap_pid, title}) do
-    initial_state = %{sessions: %{}, callbacks: %{}, ap_pid: ap_pid, role: @role}
+    initial_state = %{sessions: %{}, callbacks: %{}}
 
     register(
       ap_pid,

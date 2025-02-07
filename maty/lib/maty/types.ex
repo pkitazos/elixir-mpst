@@ -12,48 +12,20 @@ defmodule Maty.Types do
 
   @type maty_actor_state :: %{
           sessions: %{session_id() => session_info()},
-          callbacks: %{init_token() => function()},
-          ap_pid: pid(),
-          role: role()
+          callbacks: %{init_token() => {role(), function()}}
+          # a Maty actor does not have a "global" role it only has a role in a session
+          # it also does not need to know where the ap is at all times
+          # once its done registering it can throw that pid away
+          # what the actor does have is a role associated with a token
         }
-
-  @type registered_participants :: %{role() => pid() | nil}
-  @type incomplete_session_ids :: MapSet.t(session_id())
 
   @type access_point_state :: %{
-          sessions: %{session_id() => registered_participants()},
-          incomplete_session_ids: incomplete_session_ids(),
-          participants: %{pid() => %{session_id() => %{role() => init_token()}}},
-          session_context_module: module()
-          # if an actor can only take part in a session with a single role why do I need to keep a map of roles to init_tokens ?
+          participants: %{role() => [{pid(), init_token()}]}
+          # rather than keeping all that complicated state and knowing about a bunch of sessions
+          # we just keep three queues that store {pid, token} pairs
+          # once all three queues are not empty, we can let the participants know and discard that state
+          # session ids are generated at this point
+          # that means we don't need a struct of any kind to build "new sessions"
+          # and we also don't need to store a set of incomplete sessions
         }
-
-  # defp example do
-  #   %{
-  #     sessions: %{
-  #       "#Reference<0.1.2.3>" => %{
-  #         seller: "#PID<0.111.0>",
-  #         buyer1: "#PID<0.277.0>",
-  #         buyer2: "#PID<0.340.0>"
-  #       },
-  #       "#Reference<2.4.6.8>" => %{
-  #         seller: "#PID<0.111.0>",
-  #         buyer1: "#PID<0.277.0>",
-  #         buyer2: nil
-  #       },
-  #       "#Reference<8.7.6.5>" => %{
-  #         seller: "#PID<0.626.0>",
-  #         buyer1: nil,
-  #         buyer2: nil
-  #       }
-  #     },
-  #     incomplete_session_ids: MapSet.new(["#Reference<2.4.6.8>", "#Reference<8.7.6.5>"]),
-  #     participants: %{
-  #       "#PID<0.111.0>" => %{
-  #         "#Reference<0.1.2.3>" => [{:seller, "#Reference<5.1.2.3>"}],
-  #         "#Reference<2.4.6.8>" => [{:seller, "#Reference<6.0.0.1>"}]
-  #       }
-  #     }
-  #   }
-  # end
 end
