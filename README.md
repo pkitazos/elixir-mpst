@@ -1,6 +1,6 @@
 # Maty
 
-A framework for writing Elixir programs which provides static guarantees about their communication safety
+A tool for statically checking Elixir communication patterns
 
 ## Installation
 
