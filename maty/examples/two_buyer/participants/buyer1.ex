@@ -39,6 +39,8 @@ defmodule TwoBuyer.Participants.Buyer1 do
     {:done, :unit, state}
   end
 
+  def quote_handler(_, _, _, state), do: {:continue, nil, state}
+
   # -----------------------------------------------------------------
 
   defp log(handler, msg), do: Logger.log(@role, handler, msg)

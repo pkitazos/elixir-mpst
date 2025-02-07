@@ -7,7 +7,7 @@ defmodule TwoBuyer.Main do
     Seller.start_link(ap)
 
     spawn_buyers(ap, "Types and Programming Languages")
-    # spawn_buyers(ap, "Compiling with Continuations")
+    spawn_buyers(ap, "Compiling with Continuations")
   end
 
   defp spawn_buyers(ap, title) do

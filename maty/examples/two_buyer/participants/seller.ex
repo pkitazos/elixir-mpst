@@ -8,20 +8,32 @@ defmodule TwoBuyer.Participants.Seller do
   def init_actor(ap_pid) do
     initial_state = %{sessions: %{}, callbacks: %{}, ap_pid: ap_pid, role: @role}
 
-    register(ap_pid, @role, &__MODULE__.install/2, initial_state)
+    {:ok, updated_state} =
+      register(
+        ap_pid,
+        @role,
+        &__MODULE__.install/2,
+        initial_state
+      )
+
+    {:ok, updated_state}
   end
 
   # ------------------------------------------------------------------
 
   def install(_session_id, %{ap_pid: ap_pid} = state) do
-    register(
-      ap_pid,
-      @role,
-      &__MODULE__.install/2,
-      state
-    )
+    {:ok, updated_state} =
+      register(
+        ap_pid,
+        @role,
+        fn session_id, inner_state ->
+          install(session_id, state)
+          {:suspend, &__MODULE__.title_handler/4, inner_state}
+        end,
+        state
+      )
 
-    {:suspend, &__MODULE__.title_handler/4, state}
+    {:suspend, &__MODULE__.title_handler/4, updated_state}
   end
 
   def title_handler({:title, title}, from_pid, %{participants: participants} = session, state)
