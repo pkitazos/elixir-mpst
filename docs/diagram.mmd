@@ -6,8 +6,7 @@ sequenceDiagram
     Seller ->> Buyer1: quote
     Buyer1 ->> Buyer2: share
     alt 
-        Buyer2 -->> Seller: ok
-        Buyer2 ->> Seller: address
+        Buyer2 -->> Seller: address
         Seller ->> Buyer2: date
     else
         Buyer2 -->> Seller: quit
