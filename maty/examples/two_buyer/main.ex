@@ -1,14 +1,13 @@
-defmodule Main do
-  alias Maty.Participants.{Seller, Buyer1, Buyer2}
-  alias Maty.{AccessPoint}
+defmodule TwoBuyer.Main do
+  alias TwoBuyer.Participants.{Seller, Buyer1, Buyer2}
 
-  def main do
-    {:ok, ap} = AccessPoint.start_link()
+  def start do
+    {:ok, ap} = Maty.AccessPoint.start_link(TwoBuyer.SessionContext)
 
     Seller.start_link(ap)
 
     spawn_buyers(ap, "Types and Programming Languages")
-    spawn_buyers(ap, "Compiling with Continuations")
+    # spawn_buyers(ap, "Compiling with Continuations")
   end
 
   defp spawn_buyers(ap, title) do

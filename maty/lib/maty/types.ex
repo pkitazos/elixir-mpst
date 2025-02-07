@@ -18,44 +18,42 @@ defmodule Maty.Types do
         }
 
   @type registered_participants :: %{role() => pid() | nil}
-  @type incomplete_session_ids :: %MapSet.t(){session_id()}
+  @type incomplete_session_ids :: MapSet.t(session_id())
 
   @type access_point_state :: %{
           sessions: %{session_id() => registered_participants()},
           incomplete_session_ids: incomplete_session_ids(),
-          participants: %{pid() => %{session_id() => %{role() => init_token()}}}
+          participants: %{pid() => %{session_id() => %{role() => init_token()}}},
+          session_context_module: module()
+          # if an actor can only take part in a session with a single role why do I need to keep a map of roles to init_tokens ?
         }
 
-  # examples
-  defp registered_participants_example(), do: %{seller: self(), buyer1: nil, buyer2: nil}
-
-  defp access_point_state_example() do
-    %{
-      sessions: %{
-        "some_session_id_ref" => %{
-          seller: "some_PID",
-          buyer1: "some_other_PID",
-          buyer2: "a_third_PID"
-        },
-        "some_other_session_id_ref" => %{
-          seller: "some_PID",
-          buyer1: "some_other_PID",
-          buyer2: nil
-        },
-        "yet_another_session_id_ref" => %{
-          seller: "another_PID",
-          buyer1: nil,
-          buyer2: nil
-        }
-      },
-      incomplete_session_ids:
-        MapSet.new(["some_other_session_id_ref", "yet_another_session_id_ref"]),
-      participants: %{
-        "some_PID" => %{
-          "some_session_id_ref" => [{:seller, "some_init_token_ref"}],
-          "some_other_session_id_ref" => [{:seller, "some_other_init_token_ref"}]
-        }
-      }
-    }
-  end
+  # defp example do
+  #   %{
+  #     sessions: %{
+  #       "#Reference<0.1.2.3>" => %{
+  #         seller: "#PID<0.111.0>",
+  #         buyer1: "#PID<0.277.0>",
+  #         buyer2: "#PID<0.340.0>"
+  #       },
+  #       "#Reference<2.4.6.8>" => %{
+  #         seller: "#PID<0.111.0>",
+  #         buyer1: "#PID<0.277.0>",
+  #         buyer2: nil
+  #       },
+  #       "#Reference<8.7.6.5>" => %{
+  #         seller: "#PID<0.626.0>",
+  #         buyer1: nil,
+  #         buyer2: nil
+  #       }
+  #     },
+  #     incomplete_session_ids: MapSet.new(["#Reference<2.4.6.8>", "#Reference<8.7.6.5>"]),
+  #     participants: %{
+  #       "#PID<0.111.0>" => %{
+  #         "#Reference<0.1.2.3>" => [{:seller, "#Reference<5.1.2.3>"}],
+  #         "#Reference<2.4.6.8>" => [{:seller, "#Reference<6.0.0.1>"}]
+  #       }
+  #     }
+  #   }
+  # end
 end

@@ -1,22 +1,19 @@
-defmodule Maty.Participants.Buyer2 do
+defmodule TwoBuyer.Participants.Buyer2 do
   alias Maty.Logger
-  use Maty.MatyActor
+  use Maty.Actor
 
   @role :buyer2
 
   @impl true
   def init_actor(ap_pid) do
-    state = %{sessions: %{}, callbacks: %{}, ap_pid: ap_pid, role: @role}
+    initial_state = %{sessions: %{}, callbacks: %{}, ap_pid: ap_pid, role: @role}
 
-    updated_state =
-      register(
-        ap_pid,
-        @role,
-        fn _, state -> {:suspend, &__MODULE__.share_handler/4, state} end,
-        state
-      )
-
-    {:ok, updated_state}
+    register(
+      ap_pid,
+      @role,
+      fn _, state -> {:suspend, &__MODULE__.share_handler/4, state} end,
+      initial_state
+    )
   end
 
   def share_handler({:share, amount}, from_pid, %{participants: participants} = session, state)
@@ -67,6 +64,5 @@ defmodule Maty.Participants.Buyer2 do
 
   # -----------------------------------------------------------------
 
-  defp log(msg), do: Logger.log(@role, msg)
   defp log(handler, msg), do: Logger.log(@role, handler, msg)
 end

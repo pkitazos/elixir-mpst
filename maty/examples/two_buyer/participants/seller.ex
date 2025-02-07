@@ -1,29 +1,27 @@
-defmodule Maty.Participants.Seller do
+defmodule TwoBuyer.Participants.Seller do
   alias Maty.Logger
-  use Maty.MatyActor
+  use Maty.Actor
 
   @role :seller
 
   @impl true
   def init_actor(ap_pid) do
-    state = %{sessions: %{}, callbacks: %{}, ap_pid: ap_pid, role: @role}
+    initial_state = %{sessions: %{}, callbacks: %{}, ap_pid: ap_pid, role: @role}
 
-    updated_state = register(ap_pid, @role, &__MODULE__.install/2, state)
-    {:ok, updated_state}
+    register(ap_pid, @role, &__MODULE__.install/2, initial_state)
   end
 
   # ------------------------------------------------------------------
 
-  def install(session_id, %{ap_pid: ap_pid} = state) do
+  def install(_session_id, %{ap_pid: ap_pid} = state) do
     register(
       ap_pid,
       @role,
-      fn session_id, state ->
-        install(session_id, state)
-        {:suspend, &__MODULE__.title_handler/4, state}
-      end,
+      &__MODULE__.install/2,
       state
     )
+
+    {:suspend, &__MODULE__.title_handler/4, state}
   end
 
   def title_handler({:title, title}, from_pid, %{participants: participants} = session, state)
@@ -73,6 +71,5 @@ defmodule Maty.Participants.Seller do
 
   # -----------------------------------------------------------------
 
-  defp log(msg), do: Logger.log(@role, msg)
   defp log(handler, msg), do: Logger.log(@role, handler, msg)
 end
