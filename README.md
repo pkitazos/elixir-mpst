@@ -1,6 +1,6 @@
 # Maty
 
-**TODO: Add description**
+A framework for writing Elixir programs which provides static guarantees about their communication safety
 
 ## Installation
 
@@ -23,4 +23,4 @@ be found at <https://hexdocs.pm/maty>.
 
 ## Currently working on
 
-- writing out the Two-buyer protocol in a way that looks like Maty
+- mock typechecker in Haskell
