@@ -11,50 +11,60 @@ tcVal _ VUnit = Right $ Base TUnit
 tcVal _ (VBool _) = Right $ Base TBool
 tcVal _ (VInt _) = Right $ Base TInt
 -- TV-VAR
-tcVal env (VVar x) = do
+tcVal env (VVar x) =
   case Map.lookup x env of
     Just t -> Right t
-    Nothing -> Left $ "Unbound variable in tcVal: " ++ show x
-
+    Nothing -> Left $ "Unbound variable " ++ show x ++ " in tcVal."
 -- TV-LAM
 tcVal env (VLam paramName paramT preST postST body) = do
   (retTy, retST) <- tcExpr (Map.insert paramName paramT env) preST body
-  unless (retST == postST) $ Left "Post condition does not match"
-  Right $ Func paramT preST postST retTy
+  unless (retST == postST) $
+    Left $
+      unlines
+        [ "Function postcondition mismatch:",
+          "  Expected: " ++ show postST,
+          "  Found:    " ++ show retST
+        ]
+  pure (Func paramT preST postST retTy)
 
 -- TV-HANDLER
 tcVal env (VHandler participant branches) = do
-  -- for each branch, typecheck its body under the environment + parameter binding
-  -- must always return TUnit and session postcondition == End
+  -- For each branch, typecheck its body under the environment + parameter binding.
+  -- Must always return TUnit and session postcondition == End.
   typedBranches <- mapM (checkBranch env participant) branches
-  -- if they all succeed, we get a list of (Label, Type, ST).
-  -- then we build the handler type from those typed branches.
-  Right (HandlerT (InST participant typedBranches))
+  -- If they all succeed, build the handler type from those typed branches.
+  pure (HandlerT (InST participant typedBranches))
 
 checkBranch :: Env -> Participant -> (Label, Name, Type, ST, Expr) -> Either String (Label, Type, ST)
 checkBranch env participant (l, paramName, paramTy, preST, body) = do
   (retTy, retST) <- tcExpr (Map.insert paramName paramTy env) preST body
+
   unless (retTy == Base TUnit) $
     Left $
-      "Branch " ++ l ++ " must return TUnit, but got type " ++ show retTy
+      unlines
+        [ "Handler branch " ++ l ++ " must return TUnit.",
+          "  Found: " ++ show retTy
+        ]
 
   unless (retST == End) $
     Left $
-      "Branch " ++ l ++ " expects session postcondition End, but got type " ++ show retST
+      unlines
+        [ "Handler branch " ++ l ++ " must end with session type End.",
+          "  Found: " ++ show retST
+        ]
 
-  Right (l, paramTy, preST)
+  pure (l, paramTy, preST)
 
 tcExpr :: Env -> ST -> Expr -> Either String (Type, ST)
 -- T-LET
 tcExpr env st (ELet x m n) = do
   (xTy, postX) <- tcExpr env st m
-  res <- tcExpr (Map.insert x xTy env) postX n
-  Right res
+  tcExpr (Map.insert x xTy env) postX n
 
 -- T-RETURN
-tcExpr env st (EReturn x) = do
-  retTy <- tcVal env x
-  Right (retTy, st)
+tcExpr env st (EReturn val) = do
+  retTy <- tcVal env val
+  pure (retTy, st)
 
 -- T-APP
 tcExpr env st (EApp (VLam paramName paramTy preST postST body) w) = do
@@ -63,26 +73,31 @@ tcExpr env st (EApp (VLam paramName paramTy preST postST body) w) = do
 
   unless (st == preST) $
     Left $
-      "Function expects session precondition "
-        ++ show preST
-        ++ ", but got "
-        ++ show st
+      unlines
+        [ "Session precondition mismatch for function application.",
+          "  Expected: " ++ show preST,
+          "  Found:    " ++ show st
+        ]
 
   unless (paramTy == wTy) $
     Left $
-      "Function requires param of type "
-        ++ show paramTy
-        ++ ", but got "
-        ++ show wTy
+      unlines
+        [ "Parameter type mismatch in function application.",
+          "  Expected: " ++ show paramTy,
+          "  Found:    " ++ show wTy
+        ]
 
   unless (retST == postST) $
     Left $
-      "Function expects session postcondition "
-        ++ show postST
-        ++ ", but got "
-        ++ show retST
+      unlines
+        [ "Session postcondition mismatch after function application.",
+          "  Expected: " ++ show postST,
+          "  Found:    " ++ show retST
+        ]
 
-  Right (retTy, retST)
+  pure (retTy, retST)
+
+-- ? do I need to handle Tapplication of non-lamnda values
 
 -- T-SPAWN
 tcExpr env st (ESpawn m) = do
@@ -90,33 +105,51 @@ tcExpr env st (ESpawn m) = do
   (mTy, mST) <- tcExpr env End m
 
   unless (mTy == Base TUnit) $
-    Left "Spawned computation must return TUnit"
+    Left $
+      unlines
+        [ "Spawned computation must return TUnit.",
+          "  Found: " ++ show mTy
+        ]
 
   unless (mST == End) $
-    Left "Spawned computation postcondition must be End"
+    Left $
+      unlines
+        [ "Spawned computation must end with session type End.",
+          "  Found: " ++ show mST
+        ]
 
-  Right (Base TUnit, st)
+  pure (Base TUnit, st)
 
 -- T-IF
-tcExpr env st (EIf v m n) = do
-  vTy <- tcVal env v
-
-  unless (vTy == Base TBool) $
+tcExpr env st (EIf cond m n) = do
+  condTy <- tcVal env cond
+  unless (condTy == Base TBool) $
     Left $
-      "Expected TBool, got " ++ show vTy
+      unlines
+        [ "Condition in 'if' must be Bool.",
+          "  Found: " ++ show condTy
+        ]
 
   (mTy, mST) <- tcExpr env st m
   (nTy, nST) <- tcExpr env st n
 
   unless (mTy == nTy) $
     Left $
-      "Return type of " ++ show m ++ " and " ++ show n ++ " must be the same"
+      unlines
+        [ "Branches of 'if' must have the same return type.",
+          "  Branch1: " ++ show mTy,
+          "  Branch2: " ++ show nTy
+        ]
 
   unless (mST == nST) $
     Left $
-      "Session postcondition of " ++ show m ++ " and " ++ show n ++ " must be the same"
+      unlines
+        [ "Branches of 'if' must have the same session postcondition.",
+          "  Branch1: " ++ show mST,
+          "  Branch2: " ++ show nST
+        ]
 
-  Right (mTy, mST)
+  pure (mTy, mST)
 
 -- T-SEND
 tcExpr env (SOut (OutST p branches)) (ESend p' l val) = do
@@ -126,29 +159,44 @@ tcExpr env (SOut (OutST p branches)) (ESend p' l val) = do
   -- and the return type is unit
   unless (p == p') $
     Left $
-      "Session precondition expects next message to be sent to " ++ p ++ " got " ++ p'
+      unlines
+        [ "Session precondition expects to send to participant: " ++ p,
+          "  Found: " ++ p'
+        ]
 
   valTy <- tcVal env val
-
   case find (\(l', _, _) -> l' == l) branches of
-    Nothing -> Left $ "No branch in session precondition has label " ++ l
-    Just (_l, payloadTy, postST) ->
-      if payloadTy /= valTy
-        then Left "Payload type and value received don't match"
-        else Right (Base TUnit, postST)
+    Nothing ->
+      Left $ "No label '" ++ l ++ "' found in session type for participant " ++ p
+    Just (_, payloadTy, postST) -> do
+      unless (payloadTy == valTy) $
+        Left $
+          unlines
+            [ "Payload type mismatch in send.",
+              "  Expected: " ++ show payloadTy,
+              "  Found:    " ++ show valTy
+            ]
+      pure (Base TUnit, postST)
 
 -- T-SUSPEND
 tcExpr env (SIn s) (ESuspend v) = do
-  vTy <- tcVal env v
   -- ? do I also need to check the participants here
+  vTy <- tcVal env v
   case vTy of
-    (HandlerT (InST _ _)) -> Right (Base TUnit, End) -- ! not sure about this retirn type, how do i make it generic ?
-    other -> Left $ "Handler must be of HandlerT(InST ...), but got " ++ show other
+    HandlerT (InST p branches) ->
+      -- ? what should the actual return type be here, this seems to be saying that the session ends here
+      pure (Base TUnit, End)
+    _ ->
+      Left $
+        unlines
+          [ "Suspend requires a HandlerT(InST ...).",
+            "  Found: " ++ show vTy
+          ]
 
 -- T-NEWAP
 tcExpr _ st (ENewAP ps) = do
   -- check safety property
-  Right (APType ps, st)
+  pure (APType ps, st)
 
 -- T-REGISTER
 tcExpr env st (ERegister v p m) = do
@@ -156,24 +204,32 @@ tcExpr env st (ERegister v p m) = do
   -- the access point must have participant p with an associated session type T
   -- m must be typable given session precondition T
   vTy <- tcVal env v
-
   case vTy of
     APType ps ->
       case find (\(p', _) -> p' == p) ps of
         Nothing ->
-          Left $ "Participant " ++ p ++ " not found in access point"
+          Left $ "Participant " ++ p ++ " not found in access point."
         Just (_, t) -> do
           (mTy, mST) <- tcExpr env t m
-
           unless (mTy == Base TUnit) $
-            Left "Registered callback must return TUnit"
-
+            Left $
+              unlines
+                [ "Registered callback must return TUnit.",
+                  "  Found: " ++ show mTy
+                ]
           unless (mST == End) $
-            Left "Registered callback must end with session = End"
-
-          Right (Base TUnit, st)
+            Left $
+              unlines
+                [ "Registered callback must end with session type End.",
+                  "  Found: " ++ show mST
+                ]
+          pure (Base TUnit, st)
     _ ->
-      Left ("Expected APType, got " ++ show vTy)
+      Left $
+        unlines
+          [ "Expected an APType in register.",
+            "  Found: " ++ show vTy
+          ]
 
 -- catchall
-tcExpr _ _ _ = Left "Invalid configuration"
+tcExpr _ _ other = Left $ "Invalid expression (or partial rule coverage): " ++ show other

@@ -6,7 +6,7 @@ import Types
 
 main :: IO ()
 main = do
-  putStrLn "Running some typechecker tests..."
+  putStrLn ""
 
   -- 1. EApp (λx:TBool.Pre=End->Post=End) True
   --    We'll check it under an empty environment and session End.
@@ -41,8 +41,6 @@ main = do
     Left err -> putStrLn $ "Type error: " ++ err
     Right t -> putStrLn $ "Handler type: " ++ show t
   putStrLn ""
-
-  putStrLn "Done!"
 
 ----------------------------------------------------------------
 
