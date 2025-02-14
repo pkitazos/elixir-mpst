@@ -23,4 +23,4 @@ be found at <https://hexdocs.pm/maty>.
 
 ## Currently working on
 
-- writing out the Two-buyer protocol in a way that looks like Maty
+- Maty Typing rules
