@@ -3,14 +3,10 @@ sequenceDiagram
     participant Seller
     participant Buyer2
     Buyer1 ->> Seller: title
-    par
-        Seller ->> Buyer1: quote
-        Seller ->> Buyer2: quote
-    end
-    Buyer1 ->> Buyer2: quote div 2
+    Seller ->> Buyer1: quote
+    Buyer1 ->> Buyer2: share
     alt 
-        Buyer2 -->> Seller: ok
-        Buyer2 ->> Seller: address
+        Buyer2 -->> Seller: address
         Seller ->> Buyer2: date
     else
         Buyer2 -->> Seller: quit

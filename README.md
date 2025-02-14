@@ -1,6 +1,6 @@
 # Maty
 
-**TODO: Add description**
+A tool for statically checking Elixir communication patterns
 
 ## Installation
 
@@ -23,4 +23,4 @@ be found at <https://hexdocs.pm/maty>.
 
 ## Currently working on
 
-- Maty Typing rules
+- mock typechecker in Haskell
