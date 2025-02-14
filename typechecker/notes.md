@@ -2,9 +2,9 @@
 ## Typechecker Functions
 
 ```haskell
-tcVal :: Env -> Val -> Maybe Type
+tcVal :: Env -> Val -> Either Error Type
 
-tcExpr :: Env -> ST -> Expr -> Maybe Type x ST
+tcExpr :: Env -> ST -> Expr -> Either Error (Type, ST)
 ```
 
 ### Value Typing
