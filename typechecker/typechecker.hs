@@ -1,4 +1,4 @@
-module Typechecker where
+module TypeChecker where
 
 import Control.Monad (unless)
 import Data.List (find)
@@ -86,21 +86,16 @@ tcExpr env st (EApp (VLam paramName paramTy preST postST body) w) = do
 
 -- T-SPAWN
 tcExpr env st (ESpawn m) = do
-  unless (st == End) $
-    Left $
-      "Session precondition must be end, got " ++ show st
+  -- m must be typable with pre=End and post=End, returning TUnit
+  (mTy, mST) <- tcExpr env End m
 
-  (retTy, retST) <- tcExpr env st m
+  unless (mTy == Base TUnit) $
+    Left "Spawned computation must return TUnit"
 
-  unless (retST == End) $
-    Left $
-      "Session postcondition must be End, but got " ++ show retST
+  unless (mST == End) $
+    Left "Spawned computation postcondition must be End"
 
-  unless (retTy == Base TUnit) $
-    Left $
-      "Computation " ++ show m ++ " return type must be TUnit, but got " ++ show retTy
-
-  Right (Base TUnit, End)
+  Right (Base TUnit, st)
 
 -- T-IF
 tcExpr env st (EIf v m n) = do
@@ -124,7 +119,7 @@ tcExpr env st (EIf v m n) = do
   Right (mTy, mST)
 
 -- T-SEND
-tcExpr env (SIn (InST p branches)) (ESend p' l val) = do
+tcExpr env (SOut (OutST p branches)) (ESend p' l val) = do
   -- if in one of the st branches there is a label that matches l
   -- and the type of val matches the type of the payload for that branch
   -- then the postcondition is the one of that branch's
@@ -145,8 +140,10 @@ tcExpr env (SIn (InST p branches)) (ESend p' l val) = do
 -- T-SUSPEND
 tcExpr env (SIn s) (ESuspend v) = do
   vTy <- tcVal env v
-  case vTy of (HandlerT (InST _ _)) -> Right (Base TUnit, End) -- ! not sure about this
-  Left "Session precondition and handler type not compatible"
+  -- ? do I also need to check the participants here
+  case vTy of
+    (HandlerT (InST _ _)) -> Right (Base TUnit, End) -- ! not sure about this retirn type, how do i make it generic ?
+    other -> Left $ "Handler must be of HandlerT(InST ...), but got " ++ show other
 
 -- T-NEWAP
 tcExpr _ st (ENewAP ps) = do
@@ -160,11 +157,23 @@ tcExpr env st (ERegister v p m) = do
   -- m must be typable given session precondition T
   vTy <- tcVal env v
 
-  (mTy, _) <- case vTy of
-    APType ps -> case find (\(p', _) -> p' == p) ps of
-      Just (_, t) -> tcExpr env t m
+  case vTy of
+    APType ps ->
+      case find (\(p', _) -> p' == p) ps of
+        Nothing ->
+          Left $ "Participant " ++ p ++ " not found in access point"
+        Just (_, t) -> do
+          (mTy, mST) <- tcExpr env t m
 
-  Right (mTy, st)
+          unless (mTy == Base TUnit) $
+            Left "Registered callback must return TUnit"
+
+          unless (mST == End) $
+            Left "Registered callback must end with session = End"
+
+          Right (Base TUnit, st)
+    _ ->
+      Left ("Expected APType, got " ++ show vTy)
 
 -- catchall
 tcExpr _ _ _ = Left "Invalid configuration"

@@ -78,7 +78,7 @@ data Val
   | VInt Int
   | VLam -- \(\lambda x.M\)  with pre= S, post = T for the function’s session constraints
       { lamParam :: Name,
-        lamParamType :: Type, -- type of the parameter "x"
+        lamParamType :: Type, -- type of the parameter "x" -- should I not define this ?
         lamPre :: ST, -- function’s precondition
         lamPost :: ST, -- function’s postcondition
         lamBody :: Expr -- body M
