@@ -3,30 +3,26 @@ module Types where
 import Data.List (intercalate)
 import Data.Map (Map, insert, lookup)
 
--------------------------------------------------------------------------------
--- Participants, labels, etc.
--------------------------------------------------------------------------------
-
+-- Aliases
 type Participant = String
 
 type Label = String
 
 type Name = String
 
---------------------------------------------------------------------------------
 -- Base types
---------------------------------------------------------------------------------
-
 data BaseType
-  = TUnit --  "1" in the Maty rules
-  | TInt --  "Int"
-  | TBool --  "Bool"
-  deriving (Show, Eq)
+  = TUnit
+  | TInt
+  | TBool
+  deriving (Eq)
 
---------------------------------------------------------------------------------
+instance Show BaseType where
+  show TUnit = "1"
+  show TInt = "Int"
+  show TBool = "Bool"
+
 -- Session types
---------------------------------------------------------------------------------
-
 --
 -- S (session types) can be:
 --   end
@@ -38,62 +34,80 @@ data ST
   = End
   | SOut OutputST
   | SIn InputST
-  deriving (Show, Eq)
+  deriving (Eq)
+
+instance Show ST where
+  show End = "end"
+  show (SOut s) = show s
+  show (SIn s) = show s
 
 data OutputST = OutST Participant [(Label, Type, ST)]
-  deriving (Show, Eq)
+  deriving (Eq)
 
 data InputST = InST Participant [(Label, Type, ST)]
-  deriving (Show, Eq)
+  deriving (Eq)
 
---------------------------------------------------------------------------------
+showBranch :: (Label, Type, ST) -> String
+showBranch (label, val, s) = label ++ "(" ++ show val ++ ")" ++ "." ++ show s
+
+instance Show OutputST where
+  show (OutST p msgs) = p ++ "+{ " ++ intercalate ", " (map showBranch msgs) ++ " }"
+
+instance Show InputST where
+  show (InST p msgs) = p ++ "&{ " ++ intercalate ", " (map showBranch msgs) ++ " }"
+
 -- Full types (A, B) in Maty
---------------------------------------------------------------------------------
-
 --
 -- A type can be:
 --   C                 (base)
---   A ⟶ B             (but with session pre/post: A^(S→T) → B)
---   AP((p_i:S_i)_i)      (access point type)
+--   A ^(S,T) → B      (a function type with session pre/post conditions S,T)
+--   AP((p_i:S_i)_i)   (access point type)
 --   Handler(S?)       (handler type, where S? is an input session type)
---
--- The function type is annotated with pre/post session types:
---    A ^(S,T) → B
 --
 data Type
   = Base BaseType --  A ^(S,T) → B
   | Func Type ST ST Type
   | APType [(Participant, ST)]
   | HandlerT InputST --  Must be an 'In' session type (p & {...}),
-  deriving (Show, Eq)
+  deriving (Eq)
 
---------------------------------------------------------------------------------
+instance Show Type where
+  show (Base b) = show b
+  show (Func a s t b) = show a ++ " -(" ++ show s ++ ", " ++ show t ++ ")-> " ++ show b
+  show (APType ps) = "AP(" ++ intercalate "; " (map (\(p, st) -> p ++ ": " ++ show st) ps) ++ ")"
+  show (HandlerT s) = "Handler(" ++ show s ++ ")"
+
 -- Values (V)
---------------------------------------------------------------------------------
-
 data Val
   = VVar Name
   | VUnit
   | VBool Bool
   | VInt Int
-  | VLam -- \(\lambda x.M\)  with pre= S, post = T for the function’s session constraints
+  | VLam --  λx.M  with pre= S, post = T
       { lamParam :: Name,
         lamParamType :: Type, -- type of the parameter "x" -- should I not define this ?
-        lamPre :: ST, -- function’s precondition
-        lamPost :: ST, -- function’s postcondition
+        lamPre :: ST, -- session precondition
+        lamPost :: ST, -- session postcondition
         lamBody :: Expr -- body M
       }
-  | -- handler p { l_i(x_i) -> M_i }
-    VHandler
+  | VHandler -- handler p { l_i(x_i) -> M_i }
       { handlerParticipant :: Participant,
         handlerBranches :: [(Label, Name, Type, ST, Expr)] -- Each branch: label l_i, bound var x_i, type of x_i, session precondition for M_i, body M_i
       }
-  deriving (Show, Eq)
+  deriving (Eq)
 
---------------------------------------------------------------------------------
+showHandlerBranch :: (Label, Name, Type, ST, Expr) -> String -- ! not super happy with this either
+showHandlerBranch (label, x, t, s, e) = label ++ "(" ++ x ++ " : " ++ show t ++ ") . " ++ show s ++ " => " ++ show e
+
+instance Show Val where
+  show (VVar x) = show x
+  show (VInt x) = show x
+  show (VBool x) = show x
+  show VUnit = "()"
+  show (VLam paramName paramTy pre post body) = "λ " ++ paramName ++ " : " ++ show paramTy ++ " -(" ++ show pre ++ ", " ++ show post ++ ")->" ++ ". " ++ show body
+  show (VHandler p bs) = "handler " ++ p ++ " { " ++ intercalate "; " (map showHandlerBranch bs) ++ " }"
+
 -- Expressions / Computations (M)
---------------------------------------------------------------------------------
-
 data Expr
   = EReturn Val
   | ELet Name Expr Expr -- let x <== M in N
@@ -104,6 +118,17 @@ data Expr
   | ESuspend Val -- suspend V
   | ENewAP [(Participant, ST)] -- newAP((p_i : S_i)_i)
   | ERegister Val Participant Expr
-  deriving (Show, Eq)
+  deriving (Eq)
+
+instance Show Expr where
+  show (EReturn v) = "return " ++ show v
+  show (ELet x m n) = "let " ++ x ++ " <== " ++ show m ++ " in " ++ show n
+  show (EApp v1 v2) = "(" ++ show v1 ++ ") " ++ show v2
+  show (EIf v t e) = "if " ++ show v ++ " then " ++ show t ++ " else " ++ show e
+  show (ESpawn m) = "spawn " ++ show m
+  show (ESend p l v) = p ++ " ! " ++ l ++ "(" ++ show v ++ ")"
+  show (ESuspend v) = "suspend " ++ show v
+  show (ENewAP ps) = "newAP(" ++ intercalate "; " (map (\(p, st) -> p ++ ": " ++ show st) ps) ++ ")"
+  show (ERegister v p m) = "register " ++ show v ++ " " ++ p ++ " " ++ show m
 
 type Env = Map String Type
