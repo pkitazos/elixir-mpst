@@ -6,41 +6,7 @@ import Types
 
 main :: IO ()
 main = do
-  putStrLn ""
-
-  -- 1. EApp (λx:TBool.Pre=End->Post=End) True
-  --    We'll check it under an empty environment and session End.
-  let test1 = tcExpr Map.empty End exApp
-  putStrLn "=== Apply inline lambda to True ==="
-  case test1 of
-    Left err -> do
-      putStrLn $ "Type error: " ++ err
-    Right (ty, st) -> do
-      putStrLn $ "Computed type: " ++ show ty
-      putStrLn $ "Remaining session type: " ++ show st
-  putStrLn ""
-
-  -- 2. spawn (return ())
-  --    The current session can be anything, e.g. End, so let's pass End.
-  let test2 = tcExpr Map.empty End exSpawn
-  putStrLn "=== Spawn 'return ()' under End ==="
-  case test2 of
-    Left err -> do
-      putStrLn $ "Type error: " ++ err
-    Right (ty, st) -> do
-      putStrLn $ "Computed type: " ++ show ty
-      putStrLn $ "Remaining session type: " ++ show st
-  putStrLn ""
-
-  -- 3. Return the handler as a value
-  --    We'll type-check the value (not an expression),
-  --    so we use tcVal with an empty environment.
-  let test3 = tcVal Map.empty simpleHandler
-  putStrLn "=== Handler test ==="
-  case test3 of
-    Left err -> putStrLn $ "Type error: " ++ err
-    Right t -> putStrLn $ "Handler type: " ++ show t
-  putStrLn ""
+  putStrLn "add tests here"
 
 ----------------------------------------------------------------
 

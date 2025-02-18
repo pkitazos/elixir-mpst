@@ -60,20 +60,21 @@ instance Show InputST where
 --
 -- A type can be:
 --   C                 (base)
---   A ^(S,T) → B      (a function type with session pre/post conditions S,T)
+--   A -(S, T)→ B      (a function type with session pre/post conditions S,T)
 --   AP((p_i:S_i)_i)   (access point type)
 --   Handler(S?)       (handler type, where S? is an input session type)
 --
 data Type
-  = Base BaseType --  A ^(S,T) → B
-  | Func Type ST ST Type
+  = Base BaseType
+  | Func Type ST ST (Maybe Type) --  A -(S,T)→ B
   | APType [(Participant, ST)]
   | HandlerT InputST --  Must be an 'In' session type (p & {...}),
   deriving (Eq)
 
 instance Show Type where
   show (Base b) = show b
-  show (Func a s t b) = show a ++ " -(" ++ show s ++ ", " ++ show t ++ ")-> " ++ show b
+  show (Func a s t (Just b)) = show a ++ " -(" ++ show s ++ ", " ++ show t ++ ")-> " ++ show b
+  show (Func a s t Nothing) = show a ++ " -(" ++ show s ++ ", " ++ show t ++ ")-> "
   show (APType ps) = "AP(" ++ intercalate "; " (map (\(p, st) -> p ++ ": " ++ show st) ps) ++ ")"
   show (HandlerT s) = "Handler(" ++ show s ++ ")"
 
@@ -85,7 +86,7 @@ data Val
   | VInt Int
   | VLam --  λx.M  with pre= S, post = T
       { lamParam :: Name,
-        lamParamType :: Type, -- type of the parameter "x" -- should I not define this ?
+        lamParamType :: Type, -- type of the parameter "x"
         lamPre :: ST, -- session precondition
         lamPost :: ST, -- session postcondition
         lamBody :: Expr -- body M
