@@ -76,8 +76,14 @@ tcExpr :: Env -> ST -> Expr -> Either String (Maybe (Type, ST))
 -- T-LET
 tcExpr env st (ELet x m n) = do
   expr <- tcExpr env st m
-  (retTy, retST) <- requireExprTy "let expression cannot suspend" expr -- ?? maybe it can
-  tcExpr (Map.insert x retTy env) retST n
+  case expr of
+    Nothing ->
+      -- m suspends, so the entire 'let' also suspends,
+      -- because we never get a value for x, nor proceed with N.
+      pure Nothing
+    Just (retTy, retST) ->
+      -- m returned (retTy, retST). Now we can bind x.
+      tcExpr (Map.insert x retTy env) retST n
 
 -- T-RETURN
 tcExpr env st (EReturn val) = do
