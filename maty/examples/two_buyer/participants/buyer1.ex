@@ -23,18 +23,15 @@ defmodule TwoBuyer.Participants.Buyer1 do
 
   # ------------------------------------------------------------------
 
-  def quote_handler({:quote, amount}, from_pid, %{participants: participants} = session, state)
-      when from_pid === participants.seller do
+  def quote_handler({:quote, amount}, %{participants: participants} = session, state) do
     share_amount = amount / 2
     log(:quote_handler, "Received quote=#{amount}, sending share=#{share_amount} to Buyer2")
     log(:quote_handler, "Suspending with 'decision_handler'")
 
-    maty_send(
-      participants.buyer1,
-      participants.buyer2,
-      session.id,
-      {:share, share_amount}
-    )
+    # function should know who you are sending this as
+    # should be able to just give it the session and the participant role
+    # and the function should be able to figure out the pid
+    maty_send(session, participants.buyer2, {:share, share_amount})
 
     {:done, :unit, state}
   end

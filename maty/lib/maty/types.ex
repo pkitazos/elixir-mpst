@@ -5,7 +5,9 @@ defmodule Maty.Types do
 
   @type session_info :: %{
           id: session_id(),
-          next_handler: function(),
+          # update handler state for a given session to be a map of roles to functions
+          # then when I try to invoke a handler I do so only if the message I received came from the expected participant
+          handlers: %{role() => function()},
           participants: %{role() => pid()},
           local_state: any()
         }

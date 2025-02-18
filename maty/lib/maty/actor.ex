@@ -9,8 +9,10 @@ defmodule Maty.Actor do
         Maty.Actor.start_link(__MODULE__, args)
       end
 
-      def maty_send(from, to, session_id, msg) do
-        send(to, {:maty_message, session_id, msg, from})
+      def maty_send(session, to, msg) do
+        # internally this should figure out where the message should be sent
+        # and, well, send it
+        send(self(), {:maty_message, session.id, msg, from})
       end
 
       def register(ap_pid, role, callback, state) do
@@ -42,6 +44,12 @@ defmodule Maty.Actor do
       {:maty_message, session_id, msg, from_pid} ->
         session_info = get_in(actor_state, [:sessions, session_id])
 
+        # can't just invoke next handler like this,
+        # based on who sent me this message I may or may not be able to access this handler from my internal state
+        # using the from_pid I can check the role of the message recipient (or I could even do that in maty_send so the message comes signed with a role rather than a pid)
+        # if the recipient role has a handler stored in my state -> then that is my next handler
+        # once the correct handler called I can then save the next handler to the corresponding role in my session_info context
+        # but how would I know which role the next handler should be stored under?
         {action, next_handler_fun, new_actor_state} =
           session_info.next_handler.(msg, from_pid, session_info, actor_state)
 
