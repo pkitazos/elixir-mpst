@@ -15,15 +15,15 @@ guard :: (Show t, Eq t) => t -> t -> String -> Either String ()
 guard a b s = unless (a == b) $ Left (err a b s)
 
 requireExprTy :: String -> Maybe (ty, st) -> Either String (ty, st)
-requireExprTy ctx Nothing = Left $ "Expected a return type and postcondition in: " ++ ctx ++ ", but got suspend."
+requireExprTy ctx Nothing     = Left $ "Expected a return type and postcondition in: " ++ ctx ++ ", but got suspend."
 requireExprTy _ (Just (x, y)) = Right (x, y)
 
 allowSuspend :: Maybe (ty, st) -> Either String (Maybe (ty, st))
-allowSuspend Nothing = Right Nothing
+allowSuspend Nothing            = Right Nothing
 allowSuspend just@(Just (t, s)) = Right just
 
 mergeSuspends :: (Show ty, Eq ty, Show st, Eq st) => Maybe (ty, st) -> Maybe (ty, st) -> Either String (Maybe (ty, st))
-mergeSuspends Nothing Nothing = Right Nothing
+mergeSuspends Nothing Nothing       = Right Nothing
 mergeSuspends Nothing just@(Just _) = Right just
 mergeSuspends just@(Just _) Nothing = Right just
 mergeSuspends (Just (t1, s1)) (Just (t2, s2))
@@ -39,31 +39,33 @@ checkBranch :: Env -> Participant -> (Label, Name, Type, ST, Expr) -> Either Str
 checkBranch env participant (l, x, xTy, preST, body) = do
   expr <- tcExpr (Map.insert x xTy env) preST body
   case expr of
-    Nothing -> pure Nothing
+    Nothing             -> pure Nothing
     Just (retTy, retST) -> do
       unless (retTy == Base TUnit) $ Left (err retTy (Base TUnit) ("Handler branch " ++ l ++ " must return TUnit."))
-      unless (retST == End) $ Left (err retST End ("Handler branch " ++ l ++ " must end with session type End."))
+      unless (retST == End)        $ Left (err retST End ("Handler branch " ++ l ++ " must end with session type End."))
       pure (Just (l, xTy, preST))
 
 -- tcVal --
 
 tcVal :: Env -> Val -> Either String Type
 -- TV-CONST
-tcVal _ VUnit = Right (Base TUnit)
+tcVal _ VUnit     = Right (Base TUnit)
 tcVal _ (VBool _) = Right (Base TBool)
-tcVal _ (VInt _) = Right (Base TInt)
+tcVal _ (VInt _)  = Right (Base TInt)
+
 -- TV-VAR
 tcVal env (VVar x) = case Map.lookup x env of
-  Just t -> Right t
+  Just t  -> Right t
   Nothing -> Left $ "Unbound variable " ++ show x ++ " in tcVal."
+
 -- TV-LAM
 tcVal env (VLam x xTy preST postST m) = do
   m' <- tcExpr (Map.insert x xTy env) preST m
   case m' of
+    Nothing             -> pure (Func xTy preST Nothing Nothing)
     Just (retTy, retST) -> do
       unless (retST == postST) $ Left (err retST postST "Function postcondition mismatch:")
       pure (Func xTy preST postST (Just retTy))
-    Nothing -> pure (Func xTy preST postST Nothing)
 
 -- TV-HANDLER
 tcVal env (VHandler participant bs) = do
@@ -73,7 +75,7 @@ tcVal env (VHandler participant bs) = do
 -- tcExpr
 
 tcExpr :: Env -> ST -> Expr -> Either String (Maybe (Type, ST))
--- T-LET
+-- T-LET (Nothing wins)
 tcExpr env st (ELet x m n) = do
   expr <- tcExpr env st m
   case expr of
@@ -91,28 +93,35 @@ tcExpr env st (EReturn val) = do
   pure (Just (retTy, st))
 
 -- T-APP
-tcExpr env st (EApp (VLam paramName paramTy preST postST body) w) = do
+tcExpr env st (EApp v w) = do
+
+-- does W have the same type as paramTy
+-- then the return type of application is: return type of body and postST
+
   unless (st == preST) $ Left (err st preST "Session precondition mismatch for function application.")
 
   wTy <- tcVal env w
   unless (paramTy == wTy) $ Left (err paramTy wTy "Parameter type mismatch in function application.")
 
-  body' <- tcExpr (Map.insert paramName paramTy env) preST body
-  case body' of
-    Just (retTy, retST) -> do
-      unless (retST == postST) $ Left (err retST postST "Session postcondition mismatch after function application.")
-      pure (Just (retTy, retST))
-    Nothing -> pure Nothing -- ?? if we apply a value to a function that suspends, does that mean there's no session postcondition?
+  vTy <- tcVal env v
+  case vTy of
+    Just (Func _ _ post b) -> pure (Just (b, post))
+    _                      -> Left (err vTy (Func _ _ _ _) "Parameter type mismatch in function application.")
+
 
 -- T-SPAWN
+-- if computation M is typeable under type environment Γ with session precondition end
+-- and returns unit and post condition end
+-- then spawn M has type unit and doesn't affect the session type
 tcExpr env st (ESpawn m) = do
   m' <- tcExpr env End m
   case m' of
     Just (mTy, mST) -> do
       unless (mTy == Base TUnit) $ Left (err (Base TUnit) mTy "Spawned computation must return TUnit.")
-      unless (mST == End) $ Left (err End mST "Spawned computation must end with session type End.")
-      pure $ Just (Base TUnit, st)
-    Nothing -> pure $ Just (Base TUnit, st) -- if the spawn computation suspends, just return TUnit and the precondition unchanged
+      unless (mST == End)        $ Left (err End mST "Spawned computation must end with session type End.")
+      pure (Just (Base TUnit, st))
+    -- type error if this is not typable under End
+    Nothing -> Left "can't do this in a spawn expression"
 
 -- T-IF
 tcExpr env st (EIf cond m n) = do
@@ -136,7 +145,7 @@ tcExpr env (SOut (OutST p branches)) (ESend p' l val) = do
     Nothing -> Left (err l p ("No label '" ++ l ++ "' found in session type for participant " ++ p))
     Just (_, payloadTy, postST) -> do
       unless (payloadTy == valTy) $ Left (err valTy payloadTy "Payload type mismatch in send.")
-      pure $ Just (Base TUnit, postST)
+      pure (Just (Base TUnit, postST))
 
 -- T-SUSPEND
 tcExpr env (SIn inSt) (ESuspend handlerVal) = do

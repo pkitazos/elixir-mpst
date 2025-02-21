@@ -66,7 +66,7 @@ instance Show InputST where
 --
 data Type
   = Base BaseType
-  | Func Type ST ST (Maybe Type) --  A -(S,T)→ B
+  | Func Type ST (Maybe ST) (Maybe Type) --  A -(S,T)→ B
   | APType [(Participant, ST)]
   | HandlerT InputST --  Must be an 'In' session type (p & {...}),
   deriving (Eq)
@@ -106,7 +106,7 @@ instance Show Val where
   show (VBool x) = show x
   show VUnit = "()"
   show (VLam paramName paramTy pre post body) = "λ " ++ paramName ++ " : " ++ show paramTy ++ " -(" ++ show pre ++ ", " ++ show post ++ ")->" ++ ". " ++ show body
-  show (VHandler p bs) = "handler " ++ p ++ " { " ++ intercalate "; " (map showHandlerBranch bs) ++ " }"
+  show (VHandler p bs) = "handler " ++ p ++ "&{ " ++ intercalate "; " (map showHandlerBranch bs) ++ " }"
 
 -- Expressions / Computations (M)
 data Expr

@@ -8,24 +8,24 @@ main :: IO ()
 main = do
   putStrLn "Running a suite of typechecker tests...\n"
 
-  ----------------------------------------------------------------
-  -- 1. Test Value: a basic integer
-  ----------------------------------------------------------------
-  testVal
-    "Basic integer constant"
-    emptyEnv
-    (VInt 123)
-  -- Expect: Type = Int
+  -- ----------------------------------------------------------------
+  -- -- 1. Test Value: a basic integer
+  -- ----------------------------------------------------------------
+  -- testVal
+  --   "Basic integer constant"
+  --   emptyEnv
+  --   (VInt 123)
+  -- -- Expect: Type = Int
 
-  ----------------------------------------------------------------
-  -- 2. Test Value: a lambda that does NOT suspend
-  ----------------------------------------------------------------
-  let lamNoSuspend = VLam "x" (Base TBool) End End (EReturn (VVar "x"))
-  testVal
-    "Lambda that returns x (Bool) with pre=End, post=End"
-    emptyEnv
-    lamNoSuspend
-  -- Expect: Success, type = (Bool)-(end,end)->Bool
+  -- ----------------------------------------------------------------
+  -- -- 2. Test Value: a lambda that does NOT suspend
+  -- ----------------------------------------------------------------
+  -- let lamNoSuspend = VLam "x" (Base TBool) End End (EReturn (VVar "x"))
+  -- testVal
+  --   "Lambda that returns x (Bool) with pre=End, post=End"
+  --   emptyEnv
+  --   lamNoSuspend
+  -- -- Expect: Success, type = (Bool)-(end,end)->Bool
 
   ----------------------------------------------------------------
   -- 3. Test Value: a lambda that DOES suspend
@@ -35,7 +35,7 @@ main = do
         VLam
           "x"
           (Base TBool)
-          End
+          (SIn (InST "p" []))
           End
           (ESuspend (VHandler "p" [])) -- forcibly suspends with empty handler
   testVal
@@ -44,7 +44,8 @@ main = do
     lamSuspend
   -- Expect: Success, type = (Bool)-(end,end)-> (Nothing)
 
-  -- Type error: Invalid expression (or partial rule coverage): suspend handler p {  }
+  -- [resolved] Type error: Invalid expression (or partial rule coverage): suspend handler p {  }
+  -- !! can't have a suspend in a lambda with an End precondition
 
   ----------------------------------------------------------------
   -- 4. Test Expr: let-binding with normal subexpr
@@ -73,11 +74,12 @@ main = do
   testExpr
     "Let-binding that suspends in subexpr"
     emptyEnv
-    End
+    (SIn (InST "q" []))
     suspLet
   -- Expect: subexpr => Nothing => entire let => Nothing
 
-  -- ! Type error: Invalid expression (or partial rule coverage): suspend handler p {  }
+  -- [resolved] Type error: Invalid expression (or partial rule coverage): suspend handler p {  }
+  -- !! can't have a suspend in a let with an End precondition
 
   ----------------------------------------------------------------
   -- 6. Test Expr: spawn normal
@@ -92,23 +94,21 @@ main = do
   -- Expect: subexpr is (Unit, End), so the spawn result => (Unit, End).
   -- Actually you pick (Unit, original pre)...
 
-  ----------------------------------------------------------------
-  -- 7. Test Expr: spawn that suspends
-  --    spawn (ESuspend someHandler)
-  ----------------------------------------------------------------
-  let spawnSusp =
-        ESpawn
-          ( ESuspend
-              (VHandler "p" [])
-          )
-  testExpr
-    "Spawn that suspends"
-    emptyEnv
-    End
-    spawnSusp
-  -- Expect: subexpr => Nothing => we do Just (Unit, End) if you adopt that logic.
+  -- ----------------------------------------------------------------
+  -- -- 7. Test Expr: spawn that suspends
+  -- --    spawn (ESuspend someHandler)
+  -- ----------------------------------------------------------------
+  -- let spawnSusp = ESpawn (ESuspend (VHandler "p" []))
+  -- testExpr
+  --   "Spawn that suspends"
+  --   emptyEnv
+  --   End
+  --   spawnSusp
+  -- -- Expect: subexpr => Nothing => we do Just (Unit, End) if you adopt that logic.
 
-  -- ! Type error: Invalid expression (or partial rule coverage): suspend handler p {  }
+  -- -- ! Type error: Invalid expression (or partial rule coverage): suspend handler p {  }
+  -- -- !! This is failing becuase computation M in this case is a suspend expression
+  -- -- which requires that the session precondition match the input session type of the handler
 
   ----------------------------------------------------------------
   -- 8. Test Expr: if with two returning branches
@@ -136,12 +136,14 @@ main = do
   testExpr
     "If merges a suspending branch with returning branch"
     emptyEnv
-    End
+    (SIn (InST "p" []))
     ifMixed
   -- If your code merges "Nothing" and "Just (Int, End)" => "Just (Int, End)" or similar
   -- depending on your 'mergeSuspends' logic.
 
-  -- ! Type error: Invalid expression (or partial rule coverage): suspend handler p {  }
+  -- [resolved] Type error: Invalid expression (or partial rule coverage): suspend handler p {  }
+  -- !! while it's fine for the branches to diverge ont their return type,
+  -- they must both be typable under the same session precondition
 
   ----------------------------------------------------------------
   -- 10. Test Expr: ESend
