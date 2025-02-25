@@ -16,7 +16,7 @@ defmodule Maty.Actor do
         # in reality we want to allow an actor to have multiple roles in the same session
         from = get_role_in_interaction!(session)
 
-        send(session.participants[to], {:maty_message, session, from, msg})
+        send(session.participants[to], {:maty_message, session, to, from, msg})
       end
 
       def register(ap_pid, role, callback, state) do
@@ -45,30 +45,38 @@ defmodule Maty.Actor do
 
   defp loop(module, actor_state) do
     receive do
-      {:maty_message, session, from, msg} ->
-        my_role = get_role_in_interaction!(session)
+      {:maty_message, session, to, from, msg} ->
+        # to    -> my role
+        # from  -> recipient role
+        {handler, expected_role} = session.handlers[to]
 
-        {recipient_role, handler} = session.handlers[my_role]
-
-        if from != recipient_role do
+        if from != expected_role do
           # message came from the wrong participant
           # forward to back of mailbox
 
-          send(self(), {:maty_message, session, from, msg})
+          send(self(), {:maty_message, session, to, from, msg})
           loop(module, actor_state)
         else
-          # message came from the right participant and I can process it just fine
-          # the problem remains, what is my role in this interaction
+          {action, next, intermediate_state} = handler.(msg, from, session, actor_state)
 
-          updated_actor_state = handler.(msg, from, session, actor_state) |> update_state(session)
+          updated_actor_state =
+            case action do
+              :suspend -> put_in(intermediate_state, [:sessions, session.id, :handlers, to], next)
+              :done -> update_in(intermediate_state, [:sessions], &Map.delete(&1, session.id))
+              # should I still have skip messages?
+              # if this branch runs that means that we received a message from the expected participant
+              # but the shape of msg was unexpected
+              :continue -> intermediate_state
+            end
+
           loop(module, updated_actor_state)
         end
 
-      {:init_session, session_id, session_participants, init_token} ->
+      {:init_session, session_id, participants, init_token} ->
         partial_session = %{
           id: session_id,
-          participants: session_participants,
-          next_handler: nil,
+          participants: participants,
+          handlers: %{},
           local_state: %{}
         }
 
@@ -76,31 +84,13 @@ defmodule Maty.Actor do
 
         {role, callback} = initial_actor_state.callbacks[init_token]
 
-        {:suspend, initial_handler, intermediate_actor_state, role} =
-          callback.(session_id, initial_actor_state)
+        {:suspend, handler_info, intermediate_state} = callback.(session_id, initial_actor_state)
 
         updated_actor_state =
-          put_in(
-            intermediate_actor_state,
-            [:sessions, session_id, :next_handler],
-            initial_handler
-          )
+          put_in(intermediate_state, [:sessions, session_id, :handlers, role], handler_info)
 
         loop(module, updated_actor_state)
     end
-  end
-
-  defp update_state({:suspend, {next_role, next_fun}, actor_state}, session) do
-    my_role = get_role_in_interaction!(session)
-    put_in(actor_state, [:sessions, session.id, :handlers, my_role], next_fun)
-  end
-
-  defp update_state({:done, :unit, actor_state}, session) do
-    update_in(actor_state, [:sessions], &Map.delete(&1, session.id))
-  end
-
-  defp update_state({:continue, nil, actor_state}, _session) do
-    actor_state
   end
 
   defp get_role_in_interaction!(session) do
