@@ -3,17 +3,18 @@ defmodule Maty.Types do
   @type init_token :: reference()
   @type role :: atom()
 
-  @type session_info :: %{
+  @type session :: %{
           id: session_id(),
           # update handler state for a given session to be a map of roles to functions
           # then when I try to invoke a handler I do so only if the message I received came from the expected participant
-          handlers: %{role() => function()},
+          #   %{my_role => {message_recipient_role, function_for_handling_their_message}}
+          handlers: %{role() => {role(), function()}},
           participants: %{role() => pid()},
           local_state: any()
         }
 
   @type maty_actor_state :: %{
-          sessions: %{session_id() => session_info()},
+          sessions: %{session_id() => session()},
           callbacks: %{init_token() => {role(), function()}}
           # a Maty actor does not have a "global" role it only has a role in a session
           # it also does not need to know where the ap is at all times
@@ -31,3 +32,20 @@ defmodule Maty.Types do
           # and we also don't need to store a set of incomplete sessions
         }
 end
+
+# case action do
+#   :suspend ->
+#     {next_handler, next_role} = res
+
+#     put_in(
+#       actor_state,
+#       [:sessions, session.id, :handlers, my_role],
+#       {next_role, next_fun}
+#     )
+
+#   :done ->
+#     update_in(actor_state, [:sessions], &Map.delete(&1, session.id))
+
+#   :continue ->
+#     actor_state
+# end

@@ -11,46 +11,32 @@ defmodule TwoBuyer.Participants.Buyer2 do
     register(
       ap_pid,
       @role,
-      fn _, state -> {:suspend, &__MODULE__.share_handler/4, state} end,
+      fn _, state -> {:suspend, {&__MODULE__.share_handler/4, :buyer1}, state} end,
       initial_state
     )
   end
 
-  def share_handler({:share, amount}, from_pid, %{participants: participants} = session, state)
-      when from_pid === participants.buyer1 do
+  def share_handler({:share, amount}, :buyer1, session, state) do
     log(:share_handler, "Received share=#{amount}")
 
     if amount > 100 do
       log(:share_handler, "share > 100, sending quit to Seller")
 
-      maty_send(
-        participants.buyer2,
-        participants.seller,
-        session.id,
-        {:quit, :unit}
-      )
-
+      maty_send(session, :seller, {:quit, :unit})
       {:done, :unit, state}
     else
       address = get_address()
       log(:share_handler, "share <= 100, sending address=#{address} to Seller")
       log(:share_handler, "Suspending with 'date_handler'")
 
-      maty_send(
-        participants.buyer2,
-        participants.seller,
-        session.id,
-        {:address, address}
-      )
-
-      {:suspend, &date_handler/4, state}
+      maty_send(session, :seller, {:address, address})
+      {:suspend, {&__MODULE__.date_handler/4, :seller}, state}
     end
   end
 
   def share_handler(_, _, _, state), do: {:continue, nil, state}
 
-  def date_handler({:date, date}, from_pid, %{participants: participants}, state)
-      when from_pid === participants.seller do
+  def date_handler({:date, date}, from_pid, %{participants: participants}, state) do
     log(:date_handler, "Received date=#{date}, finishing.")
 
     {:done, :unit, state}

@@ -4,7 +4,7 @@ defmodule Maty.MixProject do
   def project do
     [
       app: :maty,
-      version: "0.6.2",
+      version: "0.7.0",
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),

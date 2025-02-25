@@ -10,9 +10,13 @@ defmodule Maty.Actor do
       end
 
       def maty_send(session, to, msg) do
-        # internally this should figure out where the message should be sent
-        # and, well, send it
-        send(self(), {:maty_message, session.id, msg, from})
+        # really this should be the role of this actor in this given interaction
+        # what this function does is assume you only ever have one role in a given session
+        # if we have multiple roles in the same session it errors
+        # in reality we want to allow an actor to have multiple roles in the same session
+        from = get_role_in_interaction!(session)
+
+        send(session.participants[to], {:maty_message, session, from, msg})
       end
 
       def register(ap_pid, role, callback, state) do
@@ -41,36 +45,38 @@ defmodule Maty.Actor do
 
   defp loop(module, actor_state) do
     receive do
-      {:maty_message, session_id, msg, from_pid} ->
-        session_info = get_in(actor_state, [:sessions, session_id])
+      {:maty_message, session, from, msg} ->
+        my_role = get_role_in_interaction!(session)
 
-        # can't just invoke next handler like this,
-        # based on who sent me this message I may or may not be able to access this handler from my internal state
-        # using the from_pid I can check the role of the message recipient (or I could even do that in maty_send so the message comes signed with a role rather than a pid)
-        # if the recipient role has a handler stored in my state -> then that is my next handler
-        # once the correct handler called I can then save the next handler to the corresponding role in my session_info context
-        # but how would I know which role the next handler should be stored under?
-        {action, next_handler_fun, new_actor_state} =
-          session_info.next_handler.(msg, from_pid, session_info, actor_state)
+        {recipient_role, handler} = session.handlers[my_role]
 
-        updated_actor_state =
-          handle_action(action, next_handler_fun, session_id, new_actor_state)
+        if from != recipient_role do
+          # message came from the wrong participant
+          # forward to back of mailbox
 
-        loop(module, updated_actor_state)
+          send(self(), {:maty_message, session, from, msg})
+          loop(module, actor_state)
+        else
+          # message came from the right participant and I can process it just fine
+          # the problem remains, what is my role in this interaction
+
+          updated_actor_state = handler.(msg, from, session, actor_state) |> update_state(session)
+          loop(module, updated_actor_state)
+        end
 
       {:init_session, session_id, session_participants, init_token} ->
-        partial_session_info = %{
+        partial_session = %{
           id: session_id,
           participants: session_participants,
           next_handler: nil,
           local_state: %{}
         }
 
-        initial_actor_state = put_in(actor_state, [:sessions, session_id], partial_session_info)
+        initial_actor_state = put_in(actor_state, [:sessions, session_id], partial_session)
 
-        {_role, callback} = get_in(initial_actor_state, [:callbacks, init_token])
+        {role, callback} = initial_actor_state.callbacks[init_token]
 
-        {:suspend, initial_handler, intermediate_actor_state} =
+        {:suspend, initial_handler, intermediate_actor_state, role} =
           callback.(session_id, initial_actor_state)
 
         updated_actor_state =
@@ -84,30 +90,25 @@ defmodule Maty.Actor do
     end
   end
 
-  defp handle_action(:suspend, next_fun, session_id, actor_state) do
-    put_in(actor_state, [:sessions, session_id, :next_handler], next_fun)
+  defp update_state({:suspend, {next_role, next_fun}, actor_state}, session) do
+    my_role = get_role_in_interaction!(session)
+    put_in(actor_state, [:sessions, session.id, :handlers, my_role], next_fun)
   end
 
-  defp handle_action(:done, :unit, session_id, actor_state) do
-    update_in(actor_state, [:sessions], &Map.delete(&1, session_id))
+  defp update_state({:done, :unit, actor_state}, session) do
+    update_in(actor_state, [:sessions], &Map.delete(&1, session.id))
   end
 
-  defp handle_action(:continue, nil, _session_id, actor_state) do
+  defp update_state({:continue, nil, actor_state}, _session) do
     actor_state
   end
-end
 
-# TwoBuyer.Participants.Seller.install("#Reference<0.2589905085.2172387332.148561>", %{
-#   callbacks: %{
-#     "#Reference<0.2589905085.2172387332.148551>" =>
-#       {:seller, &TwoBuyer.Participants.Seller.install/2}
-#   },
-#   sessions: %{
-#     "#Reference<0.2589905085.2172387332.148561>" => %{
-#       id: "#Reference<0.2589905085.2172387332.148561>",
-#       next_handler: nil,
-#       participants: %{seller: "#PID<0.169.0>", buyer1: "#PID<0.170.0>", buyer2: "#PID<0.171.0>"},
-#       local_state: %{}
-#     }
-#   }
-# })
+  defp get_role_in_interaction!(session) do
+    [{role, _pid}] =
+      session.participants
+      |> Map.to_list()
+      |> Enum.filter(fn {_key, val} -> val == self() end)
+
+    role
+  end
+end

@@ -30,44 +30,29 @@ defmodule TwoBuyer.Participants.Seller do
         state
       )
 
-    {:suspend, &__MODULE__.title_handler/4, updated_state}
+    {:suspend, {&__MODULE__.title_handler/4, :buyer1}, updated_state}
   end
 
-  def title_handler({:title, title}, from_pid, %{participants: participants} = session, state)
-      when from_pid === participants.buyer1 do
+  def title_handler({:title, title}, :buyer1, session, state) do
     amount = lookup_price(title)
     log(:title_handler, "Received title=#{title}, sending quote=#{amount} to Buyer1")
     log(:title_handler, "Suspending with 'decision_handler'")
 
-    maty_send(
-      participants.seller,
-      participants.buyer1,
-      session.id,
-      {:quote, amount}
-    )
-
-    {:suspend, &decision_handler/4, state}
+    maty_send(session, :buyer1, {:quote, amount})
+    {:suspend, {&__MODULE__.decision_handler/4, :buyer2}, state}
   end
 
   def title_handler(_, _, _, state), do: {:continue, nil, state}
 
-  def decision_handler({:address, addr}, from_pid, %{participants: participants} = session, state)
-      when from_pid === participants.buyer2 do
+  def decision_handler({:address, addr}, :buyer2, %{participants: participants} = session, state) do
     date = shipping_date(addr)
     log(:decision_handler, "Received address=#{addr}, sending date=#{date} to Buyer2")
 
-    maty_send(
-      participants.seller,
-      participants.buyer2,
-      session.id,
-      {:date, date}
-    )
-
+    maty_send(session, :buyer2, {:date, date})
     {:done, :unit, state}
   end
 
-  def decision_handler({:quit, _}, from_pid, %{participants: participants}, state)
-      when from_pid === participants.buyer2 do
+  def decision_handler({:quit, _}, from_pid, %{participants: participants}, state) do
     {:done, :unit, state}
   end
 

@@ -14,8 +14,8 @@ defmodule TwoBuyer.Participants.Buyer1 do
       fn session_id, state ->
         participants = get_in(state, [:sessions, session_id, :participants])
 
-        maty_send(participants.buyer1, participants.seller, session_id, {:title, title})
-        {:suspend, &__MODULE__.quote_handler/4, state}
+        maty_send(participants.seller, session_id, {:title, title})
+        {:suspend, {&__MODULE__.quote_handler/4, :seller}, state}
       end,
       initial_state
     )
@@ -23,15 +23,14 @@ defmodule TwoBuyer.Participants.Buyer1 do
 
   # ------------------------------------------------------------------
 
-  def quote_handler({:quote, amount}, %{participants: participants} = session, state) do
+  def quote_handler({:quote, amount}, :seller, session, state) do
     share_amount = amount / 2
     log(:quote_handler, "Received quote=#{amount}, sending share=#{share_amount} to Buyer2")
     log(:quote_handler, "Suspending with 'decision_handler'")
 
-    # function should know who you are sending this as
-    # should be able to just give it the session and the participant role
-    # and the function should be able to figure out the pid
-    maty_send(session, participants.buyer2, {:share, share_amount})
+    # the maty_send function should know your role, i.e who you are sending this as
+    # we should be able to supply the session and the participant role and the function figures out the specific pids
+    maty_send(session, :buyer2, {:share, share_amount})
 
     {:done, :unit, state}
   end
