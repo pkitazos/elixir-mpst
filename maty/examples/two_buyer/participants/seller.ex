@@ -44,7 +44,7 @@ defmodule TwoBuyer.Participants.Seller do
 
   def title_handler(_, _, _, state), do: {:continue, nil, state}
 
-  def decision_handler({:address, addr}, :buyer2, %{participants: participants} = session, state) do
+  def decision_handler({:address, addr}, :buyer2, session, state) do
     date = shipping_date(addr)
     log(:decision_handler, "Received address=#{addr}, sending date=#{date} to Buyer2")
 
@@ -52,7 +52,7 @@ defmodule TwoBuyer.Participants.Seller do
     {:done, :unit, state}
   end
 
-  def decision_handler({:quit, _}, from_pid, %{participants: participants}, state) do
+  def decision_handler({:quit, _}, :buyer2, _session, state) do
     {:done, :unit, state}
   end
 

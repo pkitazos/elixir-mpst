@@ -14,9 +14,12 @@ defmodule Maty.Actor do
         # what this function does is assume you only ever have one role in a given session
         # if we have multiple roles in the same session it errors
         # in reality we want to allow an actor to have multiple roles in the same session
-        from = get_role_in_interaction!(session)
+        [{from, _pid}] =
+          session.participants
+          |> Map.to_list()
+          |> Enum.filter(fn {_key, val} -> val == self() end)
 
-        send(session.participants[to], {:maty_message, session, to, from, msg})
+        send(session.participants[to], {:maty_message, session.id, to, from, msg})
       end
 
       def register(ap_pid, role, callback, state) do
@@ -45,7 +48,8 @@ defmodule Maty.Actor do
 
   defp loop(module, actor_state) do
     receive do
-      {:maty_message, session, to, from, msg} ->
+      {:maty_message, session_id, to, from, msg} ->
+        session = actor_state.sessions[session_id]
         # to    -> my role
         # from  -> recipient role
         {handler, expected_role} = session.handlers[to]
@@ -54,7 +58,7 @@ defmodule Maty.Actor do
           # message came from the wrong participant
           # forward to back of mailbox
 
-          send(self(), {:maty_message, session, to, from, msg})
+          send(self(), {:maty_message, session.id, to, from, msg})
           loop(module, actor_state)
         else
           {action, next, intermediate_state} = handler.(msg, from, session, actor_state)
@@ -91,14 +95,5 @@ defmodule Maty.Actor do
 
         loop(module, updated_actor_state)
     end
-  end
-
-  defp get_role_in_interaction!(session) do
-    [{role, _pid}] =
-      session.participants
-      |> Map.to_list()
-      |> Enum.filter(fn {_key, val} -> val == self() end)
-
-    role
   end
 end

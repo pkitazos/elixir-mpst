@@ -36,7 +36,7 @@ defmodule TwoBuyer.Participants.Buyer2 do
 
   def share_handler(_, _, _, state), do: {:continue, nil, state}
 
-  def date_handler({:date, date}, from_pid, %{participants: participants}, state) do
+  def date_handler({:date, date}, :seller, _session, state) do
     log(:date_handler, "Received date=#{date}, finishing.")
 
     {:done, :unit, state}
