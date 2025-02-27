@@ -29,8 +29,8 @@ mergeSuspends just@(Just _) Nothing = Right just
 mergeSuspends (Just (t1, s1)) (Just (t2, s2))
   | t1 == t2 && s1 == s2 = Right (Just (t1, s1))
   | otherwise = do
-      unless (t1 == t2) $ Left (err t1 t2 "Branches of 'if' must have the same return type.")
-      unless (s1 == s2) $ Left (err s2 s1 "Branches of 'if' must have the same session postcondition.")
+      guard t1 t2 "Branches of 'if' must have the same return type."
+      guard s2 s1 "Branches of 'if' must have the same session postcondition."
       Left "Branches differ in type or postcondition"
 
 -- checkBranch
@@ -41,8 +41,8 @@ checkBranch env participant (l, x, xTy, preST, body) = do
   case expr of
     Nothing -> pure Nothing
     Just (retTy, retST) -> do
-      unless (retTy == Base TUnit) $ Left (err retTy (Base TUnit) ("Handler branch " ++ l ++ " must return TUnit."))
-      unless (retST == End) $ Left (err retST End ("Handler branch " ++ l ++ " must end with session type End."))
+      guard retTy (Base TUnit) ("Handler branch " ++ l ++ " must return TUnit.")
+      guard retST End ("Handler branch " ++ l ++ " must end with session type End.")
       pure (Just (l, xTy, preST))
 
 -- tcVal --
@@ -62,7 +62,7 @@ tcVal env (VLam x xTy preST postST m) = do
   case m' of
     Nothing -> pure (Func xTy preST Nothing Nothing)
     Just (retTy, retST) -> do
-      unless (retST == postST) $ Left (err retST postST "Function postcondition mismatch:")
+      guard retST postST "Function postcondition mismatch:"
       pure (Func xTy preST (Just postST) (Just retTy))
 
 -- TV-HANDLER
@@ -115,8 +115,8 @@ tcExpr env st (ESpawn m) = do
   m' <- tcExpr env End m
   case m' of
     Just (mTy, mST) -> do
-      unless (mTy == Base TUnit) $ Left (err (Base TUnit) mTy "Spawned computation must return TUnit.")
-      unless (mST == End) $ Left (err End mST "Spawned computation must end with session type End.")
+      guard mTy (Base TUnit) "Spawned computation must return TUnit."
+      guard mST End "Spawned computation must end with session type End."
       pure (Just (Base TUnit, st))
     -- type error if this is not typable under End
     Nothing -> Left "can't do this in a spawn expression"
@@ -124,7 +124,7 @@ tcExpr env st (ESpawn m) = do
 -- T-IF
 tcExpr env st (EIf cond m n) = do
   condTy <- tcVal env cond
-  unless (condTy == Base TBool) $ Left (err (Base TBool) condTy "Condition in 'if' must be Bool.")
+  guard condTy (Base TBool) "Condition in 'if' must be Bool."
 
   m' <- tcExpr env st m
   m'' <- allowSuspend m'
@@ -136,13 +136,13 @@ tcExpr env st (EIf cond m n) = do
 
 -- T-SEND
 tcExpr env (SOut (OutST p branches)) (ESend p' l val) = do
-  unless (p == p') $ Left (err p' p "Message recepient mismatch: ")
+  guard p' p "Message recepient mismatch: "
   valTy <- tcVal env val
 
   case find (\(l', _, _) -> l' == l) branches of
     Nothing -> Left (err l p ("No label '" ++ l ++ "' found in session type for participant " ++ p))
     Just (_, payloadTy, postST) -> do
-      unless (payloadTy == valTy) $ Left (err valTy payloadTy "Payload type mismatch in send.")
+      guard payloadTy valTy "Payload type mismatch in send."
       pure (Just (Base TUnit, postST))
 
 -- T-SUSPEND
@@ -150,7 +150,7 @@ tcExpr env (SIn inSt) (ESuspend handlerVal) = do
   vTy <- tcVal env handlerVal
   case vTy of
     HandlerT hInSt -> do
-      unless (inSt == hInSt) $ Left (err hInSt inSt "Handlers ")
+      guard hInSt inSt "Handlers "
       pure Nothing
     _ -> Left $ "Expected HandlerT(InST ...), got " ++ show vTy
 
@@ -168,8 +168,8 @@ tcExpr env st (ERegister v p m) = do
           m' <- tcExpr env t m
           (mTy, mST) <- requireExprTy "suspends" m'
 
-          unless (mTy == Base TUnit) $ Left (err mTy (Base TUnit) "Registered callback must return TUnit.")
-          unless (mST == End) $ Left (err mST End "Registered callback must end with session type End.")
+          guard mTy (Base TUnit) "Registered callback must return TUnit."
+          guard mST End "Registered callback must end with session type End."
 
           pure $ Just (Base TUnit, st)
     _ -> Left (err vTy (APType []) "Expected an APType in register.")
