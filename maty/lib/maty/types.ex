@@ -5,7 +5,6 @@ defmodule Maty.Types do
 
   @type session :: %{
           id: session_id(),
-          current_role: role(),
           handlers: %{role() => {function(), role()}},
           participants: %{role() => pid()},
           local_state: any()
