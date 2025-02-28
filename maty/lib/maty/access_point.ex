@@ -1,4 +1,7 @@
 defmodule Maty.AccessPoint do
+  alias Maty.Types
+
+  @spec start_link([Types.role()]) :: {:ok, pid()}
   def start_link(roles) do
     initial_state = %{participants: Map.from_keys(roles, :queue.new())}
 
@@ -6,6 +9,9 @@ defmodule Maty.AccessPoint do
     {:ok, pid}
   end
 
+  @spec loop(%{
+          participants: %{required(Types.role()) => :queue.queue({pid(), Types.init_token()})}
+        }) :: no_return()
   defp loop(%{participants: participants} = state) do
     receive do
       {:register, role, pid, init_token} ->
@@ -36,6 +42,7 @@ defmodule Maty.AccessPoint do
     end
   end
 
+  @spec session_ready?(%{Types.role() => :queue.queue({pid(), Types.init_token()})}) :: boolean()
   def session_ready?(participants) do
     not (participants
          |> Map.to_list()
@@ -43,6 +50,8 @@ defmodule Maty.AccessPoint do
          |> Enum.any?())
   end
 
+  @spec get_ready_participants!(%{Types.role() => :queue.queue({pid(), Types.init_token()})}) ::
+          {[{pid(), Types.role(), Types.init_token()}], %{Types.role() => :queue.queue()}}
   def get_ready_participants!(participants) do
     {ready_participants, role_queue_pairs} =
       participants
