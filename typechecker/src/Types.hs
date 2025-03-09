@@ -15,6 +15,7 @@ data BaseType
   = TUnit
   | TInt
   | TBool
+  | TString
   deriving (Eq)
 
 instance Show BaseType where
@@ -34,6 +35,7 @@ data ST
   = End
   | SOut OutputST
   | SIn InputST
+  | SAnnotation String
   deriving (Eq)
 
 instance Show ST where
@@ -83,6 +85,7 @@ data Val
   = VVar Name
   | VUnit
   | VBool Bool
+  | VStr String
   | VInt Int
   | VLam --  λx.M  with pre= S, post = T
       { lamParam :: Name,
@@ -101,16 +104,17 @@ showHandlerBranch :: (Label, Name, Type, ST, Expr) -> String -- ! not super happ
 showHandlerBranch (label, x, t, s, e) = label ++ "(" ++ x ++ " : " ++ show t ++ ") . " ++ show s ++ " => " ++ show e
 
 instance Show Val where
+  show VUnit = "()"
   show (VVar x) = show x
   show (VInt x) = show x
   show (VBool x) = show x
-  show VUnit = "()"
   show (VLam paramName paramTy pre post body) = "λ " ++ paramName ++ " : " ++ show paramTy ++ " -(" ++ show pre ++ ", " ++ show post ++ ")->" ++ ". " ++ show body
   show (VHandler p bs) = "handler " ++ p ++ "&{ " ++ intercalate "; " (map showHandlerBranch bs) ++ " }"
 
 -- Expressions / Computations (M)
 data Expr
   = EReturn Val
+  | ECont Expr Expr
   | ELet Name Expr Expr -- let x <== M in N
   | EApp Val Val -- V W
   | EIf Val Expr Expr -- if V then M else N
@@ -123,6 +127,7 @@ data Expr
 
 instance Show Expr where
   show (EReturn v) = "return " ++ show v
+  show (ECont e1 e2) = show e1 ++ " ; " ++ show e2
   show (ELet x m n) = "let " ++ x ++ " <== " ++ show m ++ " in " ++ show n
   show (EApp v1 v2) = "(" ++ show v1 ++ ") " ++ show v2
   show (EIf v t e) = "if " ++ show v ++ " then " ++ show t ++ " else " ++ show e
@@ -133,3 +138,5 @@ instance Show Expr where
   show (ERegister v p m) = "register " ++ show v ++ " " ++ p ++ " " ++ show m
 
 type Env = Map String Type
+
+type ST_Env = Map String ST

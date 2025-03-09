@@ -73,6 +73,12 @@ tcVal env (VHandler participant bs) = do
 -- tcExpr
 
 tcExpr :: Env -> ST -> Expr -> Either String (Maybe (Type, ST))
+-- gotta write out a rule for typechecking continuations
+tcExpr env st (ECont m n) = do
+  m' <- tcExpr env st m
+
+  Left ""
+
 -- T-LET (Nothing wins)
 tcExpr env st (ELet x m n) = do
   expr <- tcExpr env st m
