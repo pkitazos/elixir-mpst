@@ -11,7 +11,9 @@ defmodule TwoBuyer.Main do
   end
 
   defp spawn_buyers(ap, title) do
-    Buyer1.start_link({ap, title})
-    Buyer2.start_link(ap)
+    {:ok, _} = Buyer1.start_link({ap, title})
+    {:ok, _} = Buyer2.start_link(ap)
+
+    :ok
   end
 end

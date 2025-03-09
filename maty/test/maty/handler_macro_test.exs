@@ -1,30 +1,21 @@
 defmodule Maty.HandlerMacroTest do
-  use ExUnit.Case, async: true
-  import Maty.HandlerMacros
+  use ExUnit.Case
 
-  defmodule HandlerUnderTest do
-    import Maty.HandlerMacros
+  defmodule TestHandler do
+    use Maty.HandlerMacros
 
-    handler :my_handler, {:test_msg, value}, session, state, from: :some_role do
-      {:done, {value, session, state}, state}
+    # Define a handler using our macro
+    handler :test_handler, :test_role, {:message, data}, session, state do
+      {:done, data, state}
     end
   end
 
-  test "handler calls the main clause" do
-    session = %{participants: %{some_role: :the_pid}}
-    state = :some_state
+  test "handler macro generates correct function clauses" do
+    # Test the specific pattern clause
+    assert {:done, "test data", %{}} ==
+             TestHandler.test_handler({:message, "test data"}, :test_role, %{}, %{})
 
-    # matching message
-    result = HandlerUnderTest.my_handler({:test_msg, 123}, session, state, :the_pid)
-    assert result == {:done, {123, session, state}, state}
-  end
-
-  test "handler calls the fallback clause" do
-    session = %{participants: %{some_role: :the_pid}}
-    state = :some_state
-
-    # non-matching message
-    result = HandlerUnderTest.my_handler({:other, 123}, session, state, :another_pid)
-    assert result == {:continue, nil, state}
+    # Test the catch-all clause
+    assert {:continue, nil, %{}} == TestHandler.test_handler(:unknown, :wrong_role, %{}, %{})
   end
 end
