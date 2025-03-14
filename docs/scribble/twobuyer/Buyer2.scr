@@ -1,0 +1,20 @@
+module twobuyer.TwoBuyer_TwoBuyer_Buyer2;
+
+data <java> java.lang.Integer from rt.jar as int;
+data <java> java.lang.String from rt.jar as String;
+data <java> test.twobuyer.Date from test/twobuyer/Date.java as Date;
+
+local protocol twobuyer.TwoBuyer_TwoBuyer_Buyer2.TwoBuyer_Buyer2(role Seller, role Buyer1, self Buyer2) projects twobuyer.TwoBuyer.TwoBuyer {
+
+    share(int) from Buyer1;
+
+    choice at self {
+
+        address(String) to Seller;
+        date(Date) from Seller;
+
+    } or {
+
+        quit() to Seller;
+    }
+}

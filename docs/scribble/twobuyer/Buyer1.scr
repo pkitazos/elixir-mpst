@@ -1,0 +1,12 @@
+module twobuyer.TwoBuyer_TwoBuyer_Buyer1;
+
+data <java> java.lang.String from rt.jar as String;
+data <java> java.lang.Integer from rt.jar as int;
+
+local protocol twobuyer.TwoBuyer_TwoBuyer_Buyer1.TwoBuyer_Buyer1(role Seller, self Buyer1, role Buyer2) projects twobuyer.TwoBuyer.TwoBuyer {
+
+    title(String) to Seller;
+    quote(int) from Seller;
+    share(int) to Buyer2;
+
+}
