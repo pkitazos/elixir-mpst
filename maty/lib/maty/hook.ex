@@ -2,13 +2,13 @@ defmodule Maty.Hook do
   alias Maty.Typechecker.Core, as: TC_Core
   alias Maty.Typechecker.Message, as: TC_Msg
 
-  @debug_handler :decision_handler
+  @debug_handler :title_handler
 
   defmacro __using__(_) do
     quote do
       import Maty.Hook
 
-      Module.register_attribute(__MODULE__, :st, accumulate: true)
+      Module.register_attribute(__MODULE__, :st, accumulate: true, persist: true)
       Module.register_attribute(__MODULE__, :handler, accumulate: false)
       Module.register_attribute(__MODULE__, :pairs, accumulate: true, persist: true)
 
@@ -19,30 +19,25 @@ defmodule Maty.Hook do
 
   def __on_definition__(env, _kind, name, args, _guards, body) do
     sts = Module.get_attribute(env.module, :st) |> Enum.into(%{})
-
     handler = Module.get_attribute(env.module, :handler)
     Module.delete_attribute(env.module, :handler)
 
     if handler != nil do
       case Map.fetch(sts, handler) do
         {:ok, _pre} ->
-          if handler == @debug_handler do
-            IO.puts("\n----------------- #{@debug_handler} ----------------\n")
-            # TC.Msg.handler_annotation(name, handler, pre)
+          case TC_Core.typecheck_header(env.module, handler, args, body) do
+            {:error, errFn} ->
+              errFn.()
 
-            TC_Core.typecheck_header(handler, args, body)
+            {:ok, {label, key}} ->
+              # todo find better name for key
+              Module.put_attribute(
+                env.module,
+                :pairs,
+                {{name, length(args), label}, {handler, key}}
+              )
 
-            # not quite this simple unfortunately
-            # so if the header matches something we should return the branch label that matches
-            # and then update the sessions accordingly
-            # what do I mean by this: if we check the header it matches on the branch with {:address, :string}
-            # then this specific handler should be tagged with the message, name and arity against its specific branch
-            # and then that specific branch should be removed from this handler's possible branches
-            # because we want to error if we find another handler that attempts to handle the same message
-            arity = length(args)
-            Module.put_attribute(env.module, :pairs, {{name, arity}, handler})
-
-            IO.puts("\n-------------------------------------------------\n")
+              remove_branch(env.module, handler, key)
           end
 
         :error ->
@@ -51,7 +46,25 @@ defmodule Maty.Hook do
     end
   end
 
-  defmacro __before_compile__(env) do
-    Module.get_attribute(env.module, :pairs)
+  def __before_compile__(env) do
+    pairs = Module.get_attribute(env.module, :pairs)
+
+    for {k, v} <- pairs do
+      IO.puts("#{inspect(k)} --> \n#{inspect(v)}\n\n")
+    end
+  end
+
+  defp remove_branch(module, handler, key) do
+    updated_sts =
+      Module.get_attribute(module, :st)
+      |> Enum.into(%{})
+      |> Map.update(handler, [], &Enum.filter(&1, fn x -> x != key end))
+      |> Map.to_list()
+
+    Module.delete_attribute(module, :st)
+
+    for {k, v} <- updated_sts do
+      Module.put_attribute(module, :st, {k, v})
+    end
   end
 end

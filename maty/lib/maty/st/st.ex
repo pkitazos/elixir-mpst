@@ -1,4 +1,4 @@
-defmodule Maty.Ast.ST do
+defmodule Maty.ST do
   defmodule SIn do
     @enforce_keys [:from, :message, :continue_as]
     defstruct [:from, :message, :continue_as]

@@ -1,4 +1,4 @@
-defmodule Maty.Ast.Parser do
+defmodule Maty.ST.Parser do
   @moduledoc """
 
   ## ST annotation grammar

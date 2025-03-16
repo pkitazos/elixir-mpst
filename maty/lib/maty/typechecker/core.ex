@@ -1,138 +1,52 @@
 defmodule Maty.Typechecker.Core do
-  alias Maty.Ast.ST, as: ST
+  alias Maty.ST, as: ST
   alias Maty.Typechecker.Error, as: Err
 
-  defp lookup_table(key) do
-    case key do
-      :install ->
-        [
-          %ST.SIn{
-            from: :buyer1,
-            message: {:title, :string},
-            continue_as: [%ST.SHandler{handler: :quote_handler}]
-          }
-        ]
+  def typecheck_header(module, handler, args, _body) do
+    arity = length(args)
 
-      :quote_handler ->
-        [
-          %ST.SIn{
-            from: :seller,
-            message: {:quote, :number},
-            continue_as: [
-              %ST.SOut{
-                to: :buyer2,
-                message: {:share, :number},
-                continue_as: [%ST.SEnd{}]
-              }
-            ]
-          }
-        ]
-
-      :share_handler ->
-        [
-          %ST.SIn{
-            from: :buyer1,
-            message: {:share, :number},
-            continue_as: [
-              %ST.SOut{
-                to: :seller,
-                message: {:address, :string},
-                continue_as: [%ST.SHandler{handler: :date_handler}]
-              },
-              %ST.SOut{
-                to: :seller,
-                message: {:quit, :unit},
-                continue_as: [%ST.SEnd{}]
-              }
-            ]
-          }
-        ]
-
-      :date_handler ->
-        [
-          %ST.SIn{
-            from: :seller,
-            message: {:date, :date},
-            continue_as: [%ST.SEnd{}]
-          }
-        ]
-
-      :title_handler ->
-        [
-          %ST.SIn{
-            from: :buyer1,
-            message: {:title, :string},
-            continue_as: [
-              %ST.SOut{
-                to: :buyer1,
-                message: {:quote, :number},
-                continue_as: [%ST.SHandler{handler: :decision_handler}]
-              }
-            ]
-          }
-        ]
-
-      :decision_handler ->
-        [
-          %ST.SIn{
-            from: :buyer2,
-            message: {:address, :string},
-            continue_as: [
-              %ST.SOut{
-                to: :buyer2,
-                message: {:date, :date},
-                continue_as: [%ST.SEnd{}]
-              }
-            ]
-          },
-          %ST.SIn{
-            from: :buyer2,
-            message: {:quit, :unit},
-            continue_as: [%ST.SEnd{}]
-          }
-        ]
-    end
-  end
-
-  def typecheck_header(handler, args, body) do
     cond do
-      length(args) > 4 -> IO.puts("too many args passed to handler")
-      length(args) < 4 -> IO.puts("too few args passed to handler")
+      arity > 4 -> IO.puts("too many args passed to handler")
+      arity < 4 -> IO.puts("too few args passed to handler")
       true -> :ok
     end
 
     [msg, from | _] = args
+    {label, val} = msg
 
-    [st | _] = lookup_table(handler)
-    # do these checks for all branches
+    all_sts = Module.get_attribute(module, :st) |> Enum.into(%{})
+    keys = all_sts[handler]
 
-    # for branch <- lookup_table(handler) do
-    #   IO.inspect(branch)
-    # end
+    bs =
+      for key <- keys do
+        branch = ST.Lookup.get(key)
 
-    cond do
-      # for this first check any branch should yield the same result
-      from != st.from ->
-        Err.participant_mismatch()
+        cond do
+          # for this first check any branch should yield the same result
+          from != branch.from ->
+            {:error, &Err.participant_mismatch/0}
 
-      # from here on is where there's a difference
-      !is_tuple(msg) ->
-        Err.malformed_message()
+          # from here on is where there's a difference
+          !is_tuple(msg) ->
+            {:error, &Err.malformed_message/0}
 
-      is_var(msg) ->
-        # todo make distinct from non-tuple message
-        Err.malformed_message()
+          is_var(msg) ->
+            # todo make distinct from non-tuple message
+            {:error, &Err.malformed_message/0}
 
-      elem(msg, 0) != elem(st.message, 0) ->
-        Err.label_mismatch()
+          label != elem(branch.message, 0) ->
+            {:error, &Err.label_mismatch/0}
 
-      !is_some_val(elem(msg, 1)) ->
-        # todo somehow use dialyzer types
-        IO.puts("Type mismatch")
+          !is_some_val(val) ->
+            # todo somehow use dialyzer types
+            {:error, fn -> IO.puts("Type mismatch") end}
 
-      true ->
-        IO.puts("function definition ok")
-    end
+          true ->
+            {:ok, {label, key}}
+        end
+      end
+
+    bs |> monad_sum()
   end
 
   @type ast_var :: {atom(), list(), nil}
@@ -152,4 +66,16 @@ defmodule Maty.Typechecker.Core do
 
   defp extract_body(do: {:__block__, [], block}), do: block
   defp extract_body(do: expr), do: expr
+
+  defp monad_sum(bs) do
+    case Enum.find(bs, fn {atom, _} -> atom == :ok end) do
+      {:ok, id} ->
+        {:ok, id}
+
+      _ ->
+        # * handle different errors
+        # may be a non-issue once I start consuming session types from my annotations
+        List.first(bs)
+    end
+  end
 end
