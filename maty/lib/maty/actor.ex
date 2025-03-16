@@ -5,6 +5,7 @@ defmodule Maty.Actor do
 
   defmacro __using__(_opts) do
     quote do
+      use Maty.Hook
       @behaviour Maty.Actor
 
       def start_link(args) do

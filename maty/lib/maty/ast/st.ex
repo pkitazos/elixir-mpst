@@ -1,18 +1,18 @@
 defmodule Maty.Ast.ST do
   defmodule SIn do
-    @enforce_keys [:from, :message, :branches]
-    defstruct [:from, :message, :branches]
+    @enforce_keys [:from, :message, :continue_as]
+    defstruct [:from, :message, :continue_as]
     # from :: atom()
     # message :: {label :: atom(), type :: atom()}
-    # branches :: [SOut | SEnd | SHandler]
+    # continue_as :: [SOut | SEnd | SHandler]
   end
 
   defmodule SOut do
-    @enforce_keys [:to, :message, :branches]
-    defstruct [:to, :message, :branches]
+    @enforce_keys [:to, :message, :continue_as]
+    defstruct [:to, :message, :continue_as]
     # to :: atom()
     # message :: {label :: atom(), type :: atom()}
-    # branches :: [SOut | SEnd | SHandler]
+    # continue_as :: [SOut | SEnd | SHandler]
   end
 
   defmodule SEnd do

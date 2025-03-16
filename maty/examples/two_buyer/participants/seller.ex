@@ -1,8 +1,16 @@
 defmodule TwoBuyer.Participants.Seller do
-  alias Maty.Logger
+  # // alias Maty.Logger
   use Maty.Actor
 
   @role :seller
+
+  # S_a === Buyer1 & title(String).Buyer1 + quote(Int). S_b
+  @st {:title_handler, ["buyer1&title(string).buyer1!quote(float).decision_handler"]}
+  # S_b === Buyer2 &{
+  #   address(String).Buyer2 + date(Date).end
+  #   quit(Unit).end
+  @st {:decision_handler,
+       ["buyer2&address(string).buyer2!date(date).end", "buyer2&quit(unit).end"]}
 
   @impl true
   def init_actor(ap_pid) do
@@ -33,10 +41,11 @@ defmodule TwoBuyer.Participants.Seller do
     {:suspend, {&__MODULE__.title_handler/4, :buyer1}, updated_state}
   end
 
+  @handler :title_handler
   def title_handler({:title, title}, :buyer1, session, state) do
     amount = lookup_price(title)
-    log(:title_handler, "Received title=#{title}, sending quote=#{amount} to Buyer1")
-    log(:title_handler, "Suspending with 'decision_handler'")
+    # // log(:title_handler, "Received title=#{title}, sending quote=#{amount} to Buyer1")
+    # // log(:title_handler, "Suspending with 'decision_handler'")
 
     maty_send(session, :buyer1, {:quote, amount})
     {:suspend, {&__MODULE__.decision_handler/4, :buyer2}, state}
@@ -44,15 +53,14 @@ defmodule TwoBuyer.Participants.Seller do
 
   def decision_handler({:address, addr}, :buyer2, session, state) do
     date = shipping_date(addr)
-    log(:decision_handler, "Received address=#{addr}, sending date=#{date} to Buyer2")
+    # // log(:decision_handler, "Received address=#{addr}, sending date=#{date} to Buyer2")
 
     maty_send(session, :buyer2, {:date, date})
     {:done, :unit, state}
   end
 
-  def decision_handler({:quit, _}, :buyer2, _session, state) do
-    {:done, :unit, state}
-  end
+  @handler :decision_handler
+  def decision_handler({:quit, _}, :buyer2, _session, state), do: {:done, :unit, state}
 
   # -----------------------------------------------------------------
 
@@ -61,5 +69,5 @@ defmodule TwoBuyer.Participants.Seller do
 
   # -----------------------------------------------------------------
 
-  defp log(handler, msg), do: Logger.log(@role, handler, msg)
+  # // defp log(handler, msg), do: IO.puts("[#{@role}] (#{handler}) #{msg}")
 end

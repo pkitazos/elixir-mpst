@@ -10,10 +10,8 @@ defmodule Maty.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       deps: deps(),
       dialyzer: [
-        plt_file: {:no_warn, "priv/plts/dialyzer.plt"},
-        plt_add_apps: [:mix, :ex_unit, :erts, :kernel, :stdlib],
-        plt_add_deps: :app_tree,
-        flags: [:error_handling, :underspecs, :unknown]
+        plt_add_apps: [:mix],
+        flags: [:error_handling, :underspecs]
       ]
     ]
   end
@@ -34,8 +32,7 @@ defmodule Maty.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:dialyxir, "~> 1.3", only: [:dev, :test], runtime: false}
-      # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"}
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
     ]
   end
 end
