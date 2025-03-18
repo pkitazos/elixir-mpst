@@ -2,7 +2,7 @@ defmodule Maty.Typechecker.Core do
   alias Maty.ST, as: ST
   alias Maty.Typechecker.Error, as: Err
 
-  def typecheck_header(module, handler, args, _body) do
+  def typecheck_header(env, handler, args, _body) do
     arity = length(args)
 
     cond do
@@ -12,41 +12,44 @@ defmodule Maty.Typechecker.Core do
     end
 
     [msg, from | _] = args
-    {label, val} = msg
 
-    all_sts = Module.get_attribute(module, :st) |> Enum.into(%{})
-    keys = all_sts[handler]
+    if tuple_size(msg) != 2 do
+      error = Err.malformed_message(handler, env.line, tuple_size: tuple_size(msg))
+      {:error, error}
+    else
+      {label, val} = msg
 
-    bs =
-      for key <- keys do
-        branch = ST.Lookup.get(key)
+      all_sts = Module.get_attribute(env.module, :st) |> Enum.into(%{})
+      keys = all_sts[handler]
 
-        cond do
-          # for this first check any branch should yield the same result
-          from != branch.from ->
-            {:error, &Err.participant_mismatch/0}
+      bs =
+        for key <- keys do
+          branch = ST.Lookup.get(key)
+          expected_label = elem(branch.message, 0)
 
-          # from here on is where there's a difference
-          !is_tuple(msg) ->
-            {:error, &Err.malformed_message/0}
+          cond do
+            # for this first check any branch should yield the same result
+            from != branch.from ->
+              error =
+                Err.participant_mismatch(handler, env.line, expected: branch.from, got: from)
 
-          is_var(msg) ->
-            # todo make distinct from non-tuple message
-            {:error, &Err.malformed_message/0}
+              {:error, error}
 
-          label != elem(branch.message, 0) ->
-            {:error, &Err.label_mismatch/0}
+            label != expected_label ->
+              error = Err.label_mismatch(handler, env.line, expected: expected_label, got: label)
+              {:error, error}
 
-          !is_some_val(val) ->
-            # todo somehow use dialyzer types
-            {:error, fn -> IO.puts("Type mismatch") end}
+            not is_some_val(val) ->
+              # todo somehow use dialyzer types
+              {:error, fn -> IO.puts("Type mismatch") end}
 
-          true ->
-            {:ok, {label, key}}
+            true ->
+              {:ok, {label, key}}
+          end
         end
-      end
 
-    bs |> monad_sum()
+      bs |> monad_sum()
+    end
   end
 
   @type ast_var :: {atom(), list(), nil}
