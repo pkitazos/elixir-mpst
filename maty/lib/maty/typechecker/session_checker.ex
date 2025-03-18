@@ -1,6 +1,48 @@
-defmodule Maty.Typechecker.Core do
+defmodule Maty.Typechecker.SessionChecker do
   alias Maty.ST, as: ST
   alias Maty.Typechecker.Error, as: Err
+
+  def process_handler_annotation(env, {name, args, body}) do
+    sts = Module.get_attribute(env.module, :st) |> Enum.into(%{})
+    handler = Module.get_attribute(env.module, :handler)
+    Module.delete_attribute(env.module, :handler)
+
+    if handler != nil do
+      case Map.fetch(sts, handler) do
+        {:ok, _pre} ->
+          case typecheck_header(env, handler, args, body) do
+            {:error, error} ->
+              # IO.inspect(env.line)
+              # IO.inspect(env.module)
+              # IO.inspect(env.file)
+              IO.puts(error)
+
+            {:ok, {label, key}} ->
+              # todo find better name for key
+              Module.put_attribute(
+                env.module,
+                :pairs,
+                {{name, length(args), label}, {handler, key}}
+              )
+
+              updated_sts =
+                Module.get_attribute(env.module, :st)
+                |> Enum.into(%{})
+                |> Map.update(handler, [], &Enum.filter(&1, fn x -> x != key end))
+                |> Map.to_list()
+
+              Module.delete_attribute(env.module, :st)
+
+              for {k, v} <- updated_sts do
+                Module.put_attribute(env.module, :st, {k, v})
+              end
+          end
+
+        :error ->
+          Message.handler_annotation(name, handler)
+      end
+    end
+  end
 
   def typecheck_header(env, handler, args, _body) do
     arity = length(args)

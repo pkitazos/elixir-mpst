@@ -10,7 +10,7 @@ defmodule Maty.ST.Lookup do
           continue_as: [%ST.SHandler{handler: :quote_handler}]
         }
 
-      "seller&quote(float).buyer2!share(float)" ->
+      "seller&quote(number).buyer2!share(number)" ->
         %ST.SIn{
           from: :seller,
           message: {:quote, :number},
@@ -23,7 +23,7 @@ defmodule Maty.ST.Lookup do
           ]
         }
 
-      "buyer1&share(float).{ seller!address(string).date_handler, seller!quit(unit).end }" ->
+      "buyer1&share(number).{ seller!address(string).date_handler, seller!quit(unit).end }" ->
         %ST.SIn{
           from: :buyer1,
           message: {:share, :number},
@@ -48,7 +48,7 @@ defmodule Maty.ST.Lookup do
           continue_as: [%ST.SEnd{}]
         }
 
-      "buyer1&title(string).buyer1!quote(float).decision_handler" ->
+      "buyer1&title(string).buyer1!quote(number).decision_handler" ->
         %ST.SIn{
           from: :buyer1,
           message: {:title, :string},
