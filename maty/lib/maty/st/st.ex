@@ -35,7 +35,7 @@ defmodule Maty.ST do
     @type t :: %__MODULE__{}
   end
 
-  defmodule SHandler do
+  defmodule SName do
     @enforce_keys [:handler]
     defstruct [:handler]
 

@@ -153,6 +153,61 @@ defmodule Maty.Typechecker.Tc do
     end
   end
 
+  # def session_typecheck_handler(module, var_env, {{name, 4}, :def, _meta, clauses}) do
+  #   st_pairs = Module.get_attribute(module, :pairs) |> Enum.into(%{})
+
+  #   for {_meta1, [{expected_label, payload}, expected_role, session_ctx, maty_actor_state], _,
+  #        block} <-
+  #         clauses do
+  #     case Map.fetch(st_pairs, {name, 4, expected_label}) do
+  #       {:ok, {handler, st_key}} ->
+  #         st = ST.Lookup.get(st_key)
+
+  #         # %Maty.ST.SIn{
+  #         #   from: :buyer1,
+  #         #   message: {:title, :string},
+  #         #   continue_as: [
+  #         #     %Maty.ST.SOut{
+  #         #       to: :buyer1,
+  #         #       message: {:quote, :number},
+  #         #       continue_as: [%Maty.ST.SHandler{handler: :decision_handler}]
+  #         #     }
+  #         #   ]
+  #         # }
+
+  #         cond do
+  #           st.from != expected_role -> {:error, "role mismatch"}
+  #           elem(st.msg, 0) != expected_label -> {:error, "message label mismatch"}
+  #         end
+
+  #         {:ok, "something something"}
+
+  #       other ->
+  #         Logger.error("Unexpected return from session_typecheck: #{inspect(other)}")
+  #     end
+  #   end
+  # end
+
+  def session_typecheck_block(module, var_env, st, expressions) when is_list(expressions) do
+    Enum.reduce_while(expressions, {:ok, st, var_env}, fn expr, {:ok, current_st, current_env} ->
+      case session_typecheck(module, current_env, current_st, expr) do
+        {:ok, {:just, {_, new_st}}, new_env} ->
+          {:cont, {:ok, new_st, new_env}}
+
+        {:ok, :nothing, new_env} ->
+          {:halt, {:ok, :nothing, new_env}}
+
+        {:error, error_msg, new_env} ->
+          {:halt, {:error, error_msg, new_env}}
+
+        other ->
+          Logger.error("Unexpected return from session_typecheck: #{inspect(other)}")
+
+          {:halt, other}
+      end
+    end)
+  end
+
   def session_typecheck(
         module,
         var_env,
@@ -165,12 +220,17 @@ defmodule Maty.Typechecker.Tc do
       )
       when is_atom(role) and is_atom(label) do
     with {:ok, :session_ctx, _} <- typecheck(var_env, session),
-         expected_role == role,
-         expected_label == label,
          {:ok, ^expected_payload, _} <- typecheck(var_env, payload) do
-      {:ok, {:just, {nil, hd(continue_as)}, var_env}}
+      cond do
+        expected_role != role -> {:error, "role mismatch", var_env}
+        expected_label != label -> {:error, "label mismatch", var_env}
+        # ! hd() call here should go
+        true -> {:ok, {:just, {nil, hd(continue_as)}}, var_env}
+      end
     else
-      _ -> {:error, "something went wrong", var_env}
+      other ->
+        Logger.error("Unexpected return from session_typecheck ST.SOut: #{inspect(other)}")
+        {:error, "something went wrong", var_env}
     end
   end
 
@@ -189,8 +249,6 @@ defmodule Maty.Typechecker.Tc do
         with {:ok, :maty_actor_state, var_env} <- typecheck(var_env, state_ast) do
           case Map.fetch(st_map, {fun_name, 4}) do
             {:ok, st_keys} ->
-              :ok
-
               correct_handler_role? =
                 Enum.map(st_keys, &ST.Lookup.get/1)
                 |> Enum.any?(&(&1.from == expected_role))
@@ -205,7 +263,12 @@ defmodule Maty.Typechecker.Tc do
               {:error, "this function doesn't seem to have a session type stored"}
           end
         else
-          _ -> {:error, "something went wrong and I'm not sure what yet", var_env}
+          other ->
+            Logger.error(
+              "Unexpected return from session_typecheck ST.SHandler: #{inspect(other)}"
+            )
+
+            {:error, "something went wrong and I'm not sure what yet", var_env}
         end
 
       {:&, _meta1, [{:/, _meta2, [fun_name, 4]}]} ->
@@ -222,7 +285,12 @@ defmodule Maty.Typechecker.Tc do
             true -> {:error, "handler role mismatch", var_env}
           end
         else
-          _ -> {:error, "something went not well", var_env}
+          other ->
+            Logger.error(
+              "Unexpected return from session_typecheck ST.SHandler: #{inspect(other)}"
+            )
+
+            {:error, "something went not well", var_env}
         end
     end
   end
@@ -240,8 +308,14 @@ defmodule Maty.Typechecker.Tc do
           {:error, "Invalid left-hand side in assignment", var_env}
       end
     else
-      {:ok, :nothing} -> {:ok, :nothing, var_env}
-      {:error, err} -> {:error, err, var_env}
+      {:ok, :nothing} ->
+        {:ok, :nothing, var_env}
+
+      {:error, err} ->
+        {:error, err, var_env}
+
+      other ->
+        Logger.error("Unexpected return from session_typecheck match operator: #{inspect(other)}")
     end
   end
 
@@ -293,6 +367,7 @@ defmodule Maty.Typechecker.Tc do
       case return do
         {:ok, some_type} -> {:ok, {:just, {some_type, st}}, var_env}
         {:error, some_error} -> {:error, some_error, var_env}
+        other -> {:error, "This should be unreachable", var_env}
       end
     else
       :error -> {:error, "function doesn't seem to have a type", var_env}

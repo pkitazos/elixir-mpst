@@ -34,7 +34,7 @@ defmodule Maty.Typechecker do
   def handle_before_compile(env) do
     # Maybe finalise or cross-check certain data here
 
-    pairs = Module.get_attribute(env.module, :fn_st_keys)
+    pairs = Module.get_attribute(env.module, :pairs)
 
     module_header =
       "\n-------------------- #{inspect(env.module)} -------------------"
@@ -83,8 +83,6 @@ defmodule Maty.Typechecker do
          {:state, [version: 2, line: 71, column: 59], nil}
        ]}
     ]
-
-    IO.inspect(ast)
 
     var_env = %{title: :binary, session: :session_ctx, state: :maty_actor_state}
 
@@ -148,7 +146,25 @@ defmodule Maty.Typechecker do
          ]}
       )
 
-    Logger.log(:debug, "session typechecking 3: #{inspect(result3)}")
+    # Logger.log(:debug, "session typechecking 3: #{inspect(result3)}")
+
+    resultN =
+      Tc.session_typecheck_block(
+        env.module,
+        var_env,
+        %ST.SOut{
+          to: :buyer1,
+          message: {:quote, :number},
+          continue_as: [%ST.SHandler{handler: :decision_handler}]
+        },
+        function_block
+      )
+
+    Logger.log(:debug, "session typechecking: #{inspect(resultN)}")
+
+    # resultX = Tc.session_typecheck_handler(env.module, %{}, ast)
+
+    # Logger.log(:debug, "session typechecking: #{inspect(resultX)}")
   end
 
   defp read_debug_info(bytecode) do
