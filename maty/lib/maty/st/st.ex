@@ -1,10 +1,18 @@
 defmodule Maty.ST do
+  @type t :: SIn.t() | SOut.t() | SEnd.t() | SHandler.t()
+
   defmodule SIn do
     @enforce_keys [:from, :message, :continue_as]
     defstruct [:from, :message, :continue_as]
     # from :: atom()
     # message :: {label :: atom(), type :: atom()}
     # continue_as :: [SOut | SEnd | SHandler]
+
+    @type t :: %__MODULE__{
+            from: atom(),
+            message: {atom(), atom()},
+            continue_as: list(SOut.t() | SEnd.t() | SHandler.t())
+          }
   end
 
   defmodule SOut do
@@ -13,15 +21,28 @@ defmodule Maty.ST do
     # to :: atom()
     # message :: {label :: atom(), type :: atom()}
     # continue_as :: [SOut | SEnd | SHandler]
+
+    @type t :: %__MODULE__{
+            to: atom(),
+            message: {atom(), atom()},
+            continue_as: list(SOut.t() | SEnd.t() | SHandler.t())
+          }
   end
 
   defmodule SEnd do
     defstruct []
+
+    @type t :: %__MODULE__{}
   end
 
   defmodule SHandler do
     @enforce_keys [:handler]
     defstruct [:handler]
+
+    @type t :: %__MODULE__{
+            # Adjust this type as needed
+            handler: any()
+          }
   end
 end
 

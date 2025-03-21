@@ -1,6 +1,8 @@
 defmodule TwoBuyer.Participants.Seller do
   use Maty.Actor
 
+  @after_compile Maty.Hook
+
   @type session_id :: reference()
   @type init_token :: reference()
   @type role :: atom()
@@ -62,7 +64,7 @@ defmodule TwoBuyer.Participants.Seller do
   end
 
   @handler :title_handler
-  @spec title_handler({:title, String.t()}, role(), session_ctx(), maty_actor_state()) ::
+  @spec title_handler({:title, binary()}, role(), session_ctx(), maty_actor_state()) ::
           {:suspend, {function(), role()}, maty_actor_state()}
   def title_handler({:title, title}, :buyer1, session, state) do
     amount = lookup_price(title)
@@ -72,8 +74,8 @@ defmodule TwoBuyer.Participants.Seller do
   end
 
   @handler :decision_handler
-  @spec decision_handler({:address, String.t()}, :buyer2, session_ctx(), maty_actor_state()) ::
-          {:done, :unit, map()}
+  @spec decision_handler({:address, binary()}, :buyer2, session_ctx(), maty_actor_state()) ::
+          {:done, :unit, maty_actor_state()}
   def decision_handler({:address, addr}, :buyer2, session, state) do
     date = shipping_date(addr)
 
@@ -83,14 +85,14 @@ defmodule TwoBuyer.Participants.Seller do
 
   @handler :decision_handler
   @spec decision_handler({:quit, :unit}, :buyer2, session_ctx(), maty_actor_state()) ::
-          {:done, :unit, map()}
+          {:done, :unit, maty_actor_state()}
   def decision_handler({:quit, :unit}, :buyer2, _session, state), do: {:done, :unit, state}
 
   # -----------------------------------------------------------------
 
-  @spec lookup_price(String.t()) :: number()
+  @spec lookup_price(binary()) :: number()
   defp lookup_price(_title_str), do: 150
 
-  @spec shipping_date(String.t()) :: Date.t()
+  @spec shipping_date(binary()) :: Date.t()
   defp shipping_date(_addr_str), do: ~D[2021-12-31]
 end
