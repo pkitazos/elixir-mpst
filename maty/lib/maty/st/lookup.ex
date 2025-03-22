@@ -3,82 +3,122 @@ defmodule Maty.ST.Lookup do
 
   def get(key) do
     case key do
-      "buyer1&title(string).quote_handler" ->
+      "buyer1&{title(string).quote_handler}" ->
         %ST.SIn{
           from: :buyer1,
-          message: {:title, :string},
-          continue_as: [%ST.SHandler{handler: :quote_handler}]
-        }
-
-      "seller&quote(number).buyer2!share(number)" ->
-        %ST.SIn{
-          from: :seller,
-          message: {:quote, :number},
-          continue_as: [
-            %ST.SOut{
-              to: :buyer2,
-              message: {:share, :number},
-              continue_as: [%ST.SEnd{}]
+          branches: [
+            %ST.SBranch{
+              label: :title,
+              payload: :string,
+              continue_as: %ST.SName{handler: :quote_handler}
             }
           ]
         }
 
-      "buyer1&share(number).{ seller!address(string).date_handler, seller!quit(unit).end }" ->
+      "seller&{quote(number).buyer2!{share(number)}}" ->
+        %ST.SIn{
+          from: :seller,
+          branches: [
+            %ST.SBranch{
+              label: :quote,
+              payload: :number,
+              continue_as: %ST.SOut{
+                to: :buyer2,
+                branches: [
+                  %ST.SBranch{
+                    label: :share,
+                    payload: :number,
+                    continue_as: %ST.SEnd{}
+                  }
+                ]
+              }
+            }
+          ]
+        }
+
+      "buyer1&{share(number).seller!{address(string).date_handler, quit(unit).end}}}" ->
         %ST.SIn{
           from: :buyer1,
-          message: {:share, :number},
-          continue_as: [
-            %ST.SOut{
-              to: :seller,
-              message: {:address, :string},
-              continue_as: [%ST.SHandler{handler: :date_handler}]
+          branches: [
+            %ST.SBranch{
+              label: :share,
+              payload: :number,
+              continue_as: %ST.SOut{
+                to: :seller,
+                branches: [
+                  %ST.SBranch{
+                    label: :address,
+                    payload: :string,
+                    continue_as: %ST.SName{handler: :date_handler}
+                  },
+                  %ST.SBranch{
+                    label: :quit,
+                    payload: :unit,
+                    continue_as: %ST.SEnd{}
+                  }
+                ]
+              }
+            }
+          ]
+        }
+
+      "seller&{date(date).end}" ->
+        %ST.SIn{
+          from: :seller,
+          branches: [
+            %ST.SBranch{
+              label: :date,
+              payload: :date,
+              continue_as: %ST.SEnd{}
+            }
+          ]
+        }
+
+      "buyer1&{title(string).buyer1!{quote(number).decision_handler}}" ->
+        %ST.SIn{
+          from: :buyer1,
+          branches: [
+            %ST.SBranch{
+              label: :title,
+              payload: :string,
+              continue_as: %ST.SOut{
+                to: :buyer1,
+                branches: [
+                  %ST.SBranch{
+                    label: :quote,
+                    payload: :number,
+                    continue_as: %ST.SName{handler: :decision_handler}
+                  }
+                ]
+              }
+            }
+          ]
+        }
+
+      "buyer2&{address(string).buyer2!{date(date).end, quit(unit).end}}" ->
+        %ST.SIn{
+          from: :buyer2,
+          branches: [
+            %ST.SBranch{
+              label: :address,
+              payload: :string,
+              continue_as: %ST.SOut{
+                to: :buyer2,
+                branches: [
+                  %ST.SBranch{
+                    label: :date,
+                    payload: :date,
+                    continue_as: %ST.SEnd{}
+                  }
+                ]
+              }
             },
-            %ST.SOut{
-              to: :seller,
-              message: {:quit, :unit},
-              continue_as: [%ST.SEnd{}]
+            %ST.SBranch{
+              label: :quit,
+              payload: :unit,
+              continue_as: %ST.SEnd{}
             }
           ]
-        }
-
-      "seller&date(date).end" ->
-        %ST.SIn{
-          from: :seller,
-          message: {:date, :date},
-          continue_as: [%ST.SEnd{}]
-        }
-
-      "buyer1&title(string).buyer1!quote(number).decision_handler" ->
-        %ST.SIn{
-          from: :buyer1,
-          message: {:title, :string},
-          continue_as: [
-            %ST.SOut{
-              to: :buyer1,
-              message: {:quote, :number},
-              continue_as: [%ST.SHandler{handler: :decision_handler}]
-            }
-          ]
-        }
-
-      "buyer2&address(string).buyer2!date(date).end" ->
-        %ST.SIn{
-          from: :buyer2,
-          message: {:address, :string},
-          continue_as: [
-            %ST.SOut{
-              to: :buyer2,
-              message: {:date, :date},
-              continue_as: [%ST.SEnd{}]
-            }
-          ]
-        }
-
-      "buyer2&quit(unit).end" ->
-        %ST.SIn{
-          from: :buyer2,
-          message: {:quit, :unit},
-          continue_as: [%ST.SEnd{}]
         }
     end
   end

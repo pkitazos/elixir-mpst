@@ -7,10 +7,10 @@ defmodule TwoBuyer.Participants.Buyer2 do
   #   address(String). B2_b
   #   quit(Unit).end }
   @st {:share_handler,
-       ["buyer1&share(number).{ seller!address(string).date_handler, seller!quit(unit).end }"]}
+       "buyer1&{share(number).seller!{address(string).date_handler, quit(unit).end}}}"}
 
   # Seller & date(Date).end
-  @st {:date_handler, ["seller&date(date).end"]}
+  @st {:date_handler, "seller&{date(date).end}"}
 
   @impl true
   def init_actor(ap_pid) do

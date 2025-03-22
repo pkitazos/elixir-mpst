@@ -59,64 +59,6 @@ defmodule Maty.Typechecker.CoreChecker do
     @all_elixir_types
   end
 
-  def process_type_annotation(env, {name, args, body}) do
-    case Module.get_attribute(env.module, :spec) do
-      [{:spec, {:"::", _, [{spec_name, _, args_types}, return_type]}, _module} | _] ->
-        arity = length(args)
-
-        args_types_converted = get_type(args_types || [])
-        return_type_converted = get_type(return_type)
-
-        if Utils.deep_contains?([args_types_converted], :error) or
-             Utils.deep_contains?([return_type_converted], :error) do
-          Logger.log(
-            :error,
-            Error.spec_not_well_typed(spec_name, args_types_converted, return_type_converted)
-          )
-
-          # todo collect errors and report after checking everything
-
-          error_message =
-            "Problem with @spec for #{spec_name}/#{length(args_types)} " <>
-              Macro.to_string(args_types) <>
-              " :: " <>
-              Macro.to_string(return_type)
-
-          Module.put_attribute(env.module, :spec_errors, {{name, arity}, error_message})
-        else
-          types = {spec_name, length(args_types)}
-
-          case types do
-            {^name, ^arity} ->
-              # Spec describes the current function
-              Logger.log(
-                :debug,
-                "saving type for #{inspect({name, arity})}\n#{inspect({args_types_converted, return_type_converted})}"
-              )
-
-              Utils.ModAttr.append_to_key(
-                env,
-                :type_specs,
-                {name, arity},
-                {args_types_converted, return_type_converted}
-              )
-
-            _ ->
-              Logger.log(
-                :debug,
-                "throwing spec away because #{name} and #{spec_name} are not the same"
-              )
-
-              # No spec match
-              :ok
-          end
-        end
-
-      _ ->
-        :ok
-    end
-  end
-
   @doc """
     Process types in @spec format and returns usable types.
 
@@ -165,7 +107,7 @@ defmodule Maty.Typechecker.CoreChecker do
 
   # this case is for types that may be valid in Elixir but which we do not support
   defp get_type_internal({type, _, _}, _env) when type not in @supported_payload_types do
-    Logger.log(:error, "still blowing up in here")
+    Logger.error("Unsupported type in @spec annotation")
     :error
   end
 

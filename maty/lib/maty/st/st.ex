@@ -1,31 +1,34 @@
 defmodule Maty.ST do
-  @type t :: SIn.t() | SOut.t() | SEnd.t() | SHandler.t()
+  @type t :: SIn.t() | SOut.t() | SEnd.t() | SName.t() | SBranch.t()
+
+  defmodule SBranch do
+    @enforce_keys [:label, :payload, :continue_as]
+    defstruct [:label, :payload, :continue_as]
+
+    @type t :: %__MODULE__{
+            label: atom(),
+            payload: atom(),
+            continue_as: SOut.t() | SEnd.t() | SName.t()
+          }
+  end
 
   defmodule SIn do
-    @enforce_keys [:from, :message, :continue_as]
-    defstruct [:from, :message, :continue_as]
-    # from :: atom()
-    # message :: {label :: atom(), type :: atom()}
-    # continue_as :: [SOut | SEnd | SHandler]
+    @enforce_keys [:from, :branches]
+    defstruct [:from, :branches]
 
     @type t :: %__MODULE__{
             from: atom(),
-            message: {atom(), atom()},
-            continue_as: list(SOut.t() | SEnd.t() | SHandler.t())
+            branches: [Branch.t()]
           }
   end
 
   defmodule SOut do
-    @enforce_keys [:to, :message, :continue_as]
-    defstruct [:to, :message, :continue_as]
-    # to :: atom()
-    # message :: {label :: atom(), type :: atom()}
-    # continue_as :: [SOut | SEnd | SHandler]
+    @enforce_keys [:to, :branches]
+    defstruct [:to, :branches]
 
     @type t :: %__MODULE__{
             to: atom(),
-            message: {atom(), atom()},
-            continue_as: list(SOut.t() | SEnd.t() | SHandler.t())
+            branches: [Branch.t()]
           }
   end
 
@@ -40,43 +43,56 @@ defmodule Maty.ST do
     defstruct [:handler]
 
     @type t :: %__MODULE__{
-            # Adjust this type as needed
-            handler: any()
+            handler: atom()
           }
   end
 end
 
 # examples
 
-# @st "buyer1&share(float).{ seller!address(string).date_handler, seller!quit(unit).end }"
-# %SIn{
+# @st "buyer1&{share(number).seller!{address(string).date_handler, quit(unit).end }}"
+# %ST.SIn{
 #   from: :buyer1,
-#   message: {:share, some_float},
-#   continue_as: [
-#     %SOut{
-#       to: :seller,
-#       message: {:address, some_string},
-#       continue_as: [%SHandler{handler: :date_handler}]
-#     },
-#     %SOut{
-#       to: :seller,
-#       message: {:quit, some_unit},
-#       continue_as: [%SEnd{}]
+#   branches: [
+#     %ST.SBranch{
+#       label: :share,
+#       payload: :number,
+#       continue_as: %ST.SOut{
+#         to: :seller,
+#         branches: [
+#           %ST.SBranch{
+#             label: :address,
+#             payload: :string,
+#             continue_as: %ST.SName{handler: :date_handler}
+#           },
+#           %ST.SBranch{
+#             label: :quit,
+#             payload: :unit,
+#             continue_as: %ST.SEnd{}
+#           }
+#         ]
+#       }
 #     }
 #   ]
 # }
 
-# @st "buyer1&title(string) . buyer1!quote(float) . decision_handler"
-# # {:buyer1, :&, {:title, some_string}, [{:buyer1, :!, {:quote, some_float}, [:decision_handler]}]}
-
-# %SIn{
+# @st "buyer1&{title(string).buyer1!{quote(number).decision_handler}}"
+# %ST.SIn{
 #   from: :buyer1,
-#   message: {:title, some_string},
-#   continue_as: [
-#     %SOut{
-#       to: :buyer1,
-#       message: {:quote, some_float},
-#       continue_as: [%SHandler{handler: :decision_handler}]
+#   branches: [
+#     %ST.SBranch{
+#       label: :title,
+#       payload: :string,
+#       continue_as: %ST.SOut{
+#         to: :buyer1,
+#         branches: [
+#           %ST.SBranch{
+#             label: :quote,
+#             payload: :number,
+#             continue_as: %ST.SName{handler: :decision_handler}
+#           }
+#         ]
+#       }
 #     }
 #   ]
 # }

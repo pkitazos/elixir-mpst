@@ -1,8 +1,6 @@
 defmodule TwoBuyer.Participants.Seller do
   use Maty.Actor
 
-  @after_compile Maty.Hook
-
   @type session_id :: reference()
   @type init_token :: reference()
   @type role :: atom()
@@ -24,13 +22,12 @@ defmodule TwoBuyer.Participants.Seller do
   @role :seller
 
   # Buyer1 & title(String).Buyer1 + quote(Int). S_b
-  @st {:title_handler, ["buyer1&title(string).buyer1!quote(number).decision_handler"]}
+  @st {:title_handler, "buyer1&{title(string).buyer1!{quote(number).decision_handler}}"}
 
   # Buyer2 &{
   #   address(String).Buyer2 + date(Date).end
   #   quit(Unit).end
-  @st {:decision_handler,
-       ["buyer2&address(string).buyer2!date(date).end", "buyer2&quit(unit).end"]}
+  @st {:decision_handler, "buyer2&{address(string).buyer2!{date(date).end, quit(unit).end}}"}
 
   @impl true
   def init_actor(ap_pid) do

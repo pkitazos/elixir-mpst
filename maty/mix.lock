@@ -2,4 +2,6 @@
   "dialyxir": {:hex, :dialyxir, "1.4.5", "ca1571ac18e0f88d4ab245f0b60fa31ff1b12cbae2b11bd25d207f865e8ae78a", [:mix], [{:erlex, ">= 0.2.7", [hex: :erlex, repo: "hexpm", optional: false]}], "hexpm", "b0fb08bb8107c750db5c0b324fa2df5ceaa0f9307690ee3c1f6ba5b9eb5d35c3"},
   "erlex": {:hex, :erlex, "0.2.7", "810e8725f96ab74d17aac676e748627a07bc87eb950d2b83acd29dc047a30595", [:mix], [], "hexpm", "3ed95f79d1a844c3f6bf0cea61e0d5612a42ce56da9c03f01df538685365efb0"},
   "nimble_parsec": {:hex, :nimble_parsec, "1.4.2", "8efba0122db06df95bfaa78f791344a89352ba04baedd3849593bfce4d0dc1c6", [:mix], [], "hexpm", "4b21398942dda052b403bbe1da991ccd03a053668d147d53fb8c4e0efe09c973"},
+  "pane": {:hex, :pane, "0.5.0", "9151be55a29c1ef3f772ceabc33bc4aa00d32846c93350416af9fe7470af7dc5", [:mix], [], "hexpm", "71ad875092bff3c249195881a56df836ca5f9f2dcd668a21dd2b1b5d9549b7b9"},
+  "scribe": {:hex, :scribe, "0.11.0", "6cbeea62486f682fec02b7064b0d2f764fa9749a3c0460feaf48b85b9f572682", [:mix], [{:pane, "~> 0.2", [hex: :pane, repo: "hexpm", optional: false]}], "hexpm", "fff15704b6a400125b4200b0bc052e589e831092991140ddb178cc0deb0e7885"},
 }

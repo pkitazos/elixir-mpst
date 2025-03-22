@@ -6,7 +6,9 @@ defmodule Maty.Hook do
       import Maty.Hook
 
       Module.register_attribute(__MODULE__, :st, accumulate: true, persist: true)
-      Module.register_attribute(__MODULE__, :handler, accumulate: false)
+      Module.register_attribute(__MODULE__, :handler, accumulate: false, persist: false)
+
+      Module.register_attribute(__MODULE__, :annotated_handlers, accumulate: true, persist: true)
       Module.register_attribute(__MODULE__, :pairs, accumulate: true, persist: true)
       Module.register_attribute(__MODULE__, :fn_st_keys, accumulate: true, persist: true)
 

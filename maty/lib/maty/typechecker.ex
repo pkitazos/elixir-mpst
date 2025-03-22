@@ -7,11 +7,13 @@ defmodule Maty.Typechecker do
   """
   alias Maty.ST
 
+  alias Maty.Typechecker.Tc, as: TC
+
   alias Maty.Typechecker.{
+    Preprocessor,
     SessionChecker,
     CoreChecker,
-    Error,
-    Tc
+    Error
   }
 
   require Logger
@@ -19,32 +21,33 @@ defmodule Maty.Typechecker do
   @doc """
   Called by Hook when a function definition is encountered (`@on_definition`).
   """
-  def handle_on_definition(env, kind, name, args, guards, body) do
-    # Possibly gather all necessary info from module attributes
-    # Then delegate or store for a later pass
-    # e.g. SessionChecker.check_handler_header(env, name, args, body)
-    # or CoreChecker.collect_specs(...)
-    SessionChecker.process_handler_annotation(env, {name, args, body})
-    CoreChecker.process_type_annotation(env, {name, args, body})
+  def handle_on_definition(env, kind, name, args, _guards, body) do
+    case handler = Module.get_attribute(env.module, :handler) do
+      handler when not is_nil(handler) ->
+        Preprocessor.process_handler_annotation(env.module, kind, name, length(args), handler)
+
+      nil ->
+        :ok
+    end
+
+    Preprocessor.process_type_annotation(env, {name, args, body})
   end
 
   @doc """
   Called by Hook at `@before_compile`.
   """
   def handle_before_compile(env) do
-    # Maybe finalise or cross-check certain data here
-
-    pairs = Module.get_attribute(env.module, :pairs)
+    attr = Module.get_attribute(env.module, :type_specs)
 
     module_header =
       "\n-------------------- #{inspect(env.module)} -------------------"
 
-    pairs_string =
-      Enum.map_join(pairs, "\n\n", fn {k, v} ->
+    display =
+      Enum.map_join(attr, "\n\n", fn {k, v} ->
         "#{inspect(k)} --> \n#{inspect(v)}"
       end)
 
-    IO.puts(module_header <> "\n" <> pairs_string <> "\n")
+    IO.puts(module_header <> "\n" <> display <> "\n")
   end
 
   @doc """
@@ -87,13 +90,18 @@ defmodule Maty.Typechecker do
     var_env = %{title: :binary, session: :session_ctx, state: :maty_actor_state}
 
     result1 =
-      Tc.session_typecheck(
+      TC.session_typecheck(
         env.module,
         var_env,
         %ST.SOut{
           to: :buyer1,
-          message: {:quote, :number},
-          continue_as: [%ST.SHandler{handler: :decision_handler}]
+          branches: [
+            %ST.SBranch{
+              label: :quote,
+              payload: :number,
+              continue_as: %ST.SName{handler: :decision_handler}
+            }
+          ]
         },
         {:=, [line: 68, column: 12],
          [
@@ -105,64 +113,64 @@ defmodule Maty.Typechecker do
 
     # Logger.log(:debug, "session typechecking 1: #{inspect(result1)}")
 
-    result2 =
-      Tc.session_typecheck(
-        env.module,
-        %{title: :binary, session: :session_ctx, amount: :number, state: :maty_actor_state},
-        %ST.SOut{
-          to: :buyer1,
-          message: {:quote, :number},
-          continue_as: [%ST.SHandler{handler: :decision_handler}]
-        },
-        {:maty_send, [line: 70, column: 5],
-         [
-           {:session, [version: 1, line: 70, column: 15], nil},
-           :buyer1,
-           {:quote, {:amount, [version: 3, line: 70, column: 42], nil}}
-         ]}
-      )
+    # result2 =
+    #   TC.session_typecheck(
+    #     env.module,
+    #     %{title: :binary, session: :session_ctx, amount: :number, state: :maty_actor_state},
+    #     %ST.SOut{
+    #       to: :buyer1,
+    #       message: {:quote, :number},
+    #       continue_as: [%ST.SHandler{handler: :decision_handler}]
+    #     },
+    #     {:maty_send, [line: 70, column: 5],
+    #      [
+    #        {:session, [version: 1, line: 70, column: 15], nil},
+    #        :buyer1,
+    #        {:quote, {:amount, [version: 3, line: 70, column: 42], nil}}
+    #      ]}
+    #   )
 
     # Logger.log(:debug, "session typechecking 2: #{inspect(result2)}")
 
-    result3 =
-      Tc.session_typecheck(
-        env.module,
-        %{title: :binary, session: :session_ctx, amount: :number, state: :maty_actor_state},
-        %ST.SHandler{handler: :decision_handler},
-        {:{}, [line: 71, column: 5],
-         [
-           :suspend,
-           {{:&, [line: 71, column: 17],
-             [
-               {:/, [],
-                [
-                  {{:., [line: 71, column: 28],
-                    [TwoBuyer.Participants.Seller, :decision_handler]},
-                   [no_parens: true, line: 71, column: 29], []},
-                  4
-                ]}
-             ]}, :buyer2},
-           {:state, [version: 2, line: 71, column: 59], nil}
-         ]}
-      )
+    # result3 =
+    #   TC.session_typecheck(
+    #     env.module,
+    #     %{title: :binary, session: :session_ctx, amount: :number, state: :maty_actor_state},
+    #     %ST.SHandler{handler: :decision_handler},
+    #     {:{}, [line: 71, column: 5],
+    #      [
+    #        :suspend,
+    #        {{:&, [line: 71, column: 17],
+    #          [
+    #            {:/, [],
+    #             [
+    #               {{:., [line: 71, column: 28],
+    #                 [TwoBuyer.Participants.Seller, :decision_handler]},
+    #                [no_parens: true, line: 71, column: 29], []},
+    #               4
+    #             ]}
+    #          ]}, :buyer2},
+    #        {:state, [version: 2, line: 71, column: 59], nil}
+    #      ]}
+    #   )
 
     # Logger.log(:debug, "session typechecking 3: #{inspect(result3)}")
 
-    resultN =
-      Tc.session_typecheck_block(
-        env.module,
-        var_env,
-        %ST.SOut{
-          to: :buyer1,
-          message: {:quote, :number},
-          continue_as: [%ST.SHandler{handler: :decision_handler}]
-        },
-        function_block
-      )
+    # resultN =
+    #   TC.session_typecheck_block(
+    #     env.module,
+    #     var_env,
+    #     %ST.SOut{
+    #       to: :buyer1,
+    #       message: {:quote, :number},
+    #       continue_as: [%ST.SHandler{handler: :decision_handler}]
+    #     },
+    #     function_block
+    #   )
 
-    Logger.log(:debug, "session typechecking: #{inspect(resultN)}")
+    # Logger.log(:debug, "session typechecking: #{inspect(resultN)}")
 
-    # resultX = Tc.session_typecheck_handler(env.module, %{}, ast)
+    # resultX = TC.session_typecheck_handler(env.module, %{}, ast)
 
     # Logger.log(:debug, "session typechecking: #{inspect(resultX)}")
   end
