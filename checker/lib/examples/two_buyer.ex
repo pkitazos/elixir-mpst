@@ -1,7 +1,7 @@
 defmodule Examples.PingPong do
   use Checker
 
-  @st {:title_handler, ["B1&title(string).B1!quote(float).decision_handler"]}
+  @st {:title_handler, ["B1&title(string).B1!quote(number).decision_handler"]}
 
   @st {:decision_handler, ["B2&address(string).B2!date(date).end", "B2&quit(unit).end"]}
 

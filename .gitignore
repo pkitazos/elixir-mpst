@@ -2,3 +2,4 @@
 .zed
 *.t.*
 .DS_Store
+docs/notes
