@@ -35,4 +35,8 @@ defmodule Maty.Typechecker.Error do
   def no_private_handlers() do
     "Handlers can't be private functions"
   end
+
+  def unsupported_spec_type() do
+    "Unsupported type in @spec annotation"
+  end
 end

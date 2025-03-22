@@ -1,6 +1,5 @@
 defmodule Maty.Typechecker.CoreChecker do
   alias Maty.Typechecker.Error
-  alias Maty.Utils
   require Logger
 
   @moduledoc """
@@ -107,7 +106,8 @@ defmodule Maty.Typechecker.CoreChecker do
 
   # this case is for types that may be valid in Elixir but which we do not support
   defp get_type_internal({type, _, _}, _env) when type not in @supported_payload_types do
-    Logger.error("Unsupported type in @spec annotation")
+    error = Error.unsupported_spec_type()
+    Logger.error(error)
     :error
   end
 

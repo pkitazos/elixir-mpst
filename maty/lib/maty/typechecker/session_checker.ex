@@ -1,10 +1,4 @@
 defmodule Maty.Typechecker.SessionChecker do
-  alias Maty.Typechecker.CoreChecker
-  alias Maty.ST, as: ST
-  alias Maty.Typechecker.Error, as: Err
-  alias Maty.Typechecker.Message, as: Message
-  alias Maty.Utils
-
   @type value ::
           :any
           | :atom
@@ -118,29 +112,4 @@ defmodule Maty.Typechecker.SessionChecker do
   #     _ -> {:error, "if this is the last expression in the function it should suspend here"}
   #   end
   # end
-
-  # # sessionTypechecker :: Env -> ST -> Expr -> Either String (Maybe (Type, ST))
-  # def session_typechecker(var_env, pre, expr) do
-  #   case CoreChecker.get_type(expr, var_env) do
-  #     :error -> {:error, "some error message"}
-  #     type -> {:ok, {type, pre}}
-  #   end
-  # end
-
-  # replace with proper typechecking functions
-
-  # defp extract_body(do: {:__block__, [], block}), do: block
-  # defp extract_body(do: expr), do: expr
-
-  defp monad_sum(bs) do
-    case Enum.find(bs, fn {atom, _} -> atom == :ok end) do
-      {:ok, id} ->
-        {:ok, id}
-
-      _ ->
-        # * handle different errors
-        # may be a non-issue once I start consuming session types from my annotations
-        List.first(bs)
-    end
-  end
 end

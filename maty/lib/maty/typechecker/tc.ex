@@ -80,6 +80,27 @@ defmodule Maty.Typechecker.Tc do
   #   end
   # end
 
+  %ST.SIn{
+    from: :buyer1,
+    branches: [
+      %ST.SBranch{
+        label: :title,
+        payload: :string,
+        continue_as: %ST.SName{handler: :quote_handler}
+      }
+    ]
+  }
+
+  [
+    {:title, {:title, [version: 0, line: 67, column: 30], nil}},
+    :buyer1,
+    {:session, [version: 1, line: 67, column: 47], nil},
+    {:state, [version: 2, line: 67, column: 56], nil}
+  ]
+
+  def session_typecheck_header(_module, _var_env, _header) do
+  end
+
   def session_typecheck_block(module, var_env, st, expressions) when is_list(expressions) do
     Enum.reduce_while(expressions, {:ok, st, var_env}, fn expr, {:ok, current_st, current_env} ->
       case session_typecheck(module, current_env, current_st, expr) do
@@ -101,7 +122,7 @@ defmodule Maty.Typechecker.Tc do
   end
 
   def session_typecheck(
-        module,
+        _module,
         var_env,
         %ST.SOut{
           to: expected_role,
@@ -134,7 +155,7 @@ defmodule Maty.Typechecker.Tc do
   def session_typecheck(
         module,
         var_env,
-        %ST.SName{handler: handler},
+        %ST.SName{handler: _handler},
         {:{}, _meta, [:suspend, {fun_capture, expected_role}, state_ast]}
       )
       when is_atom(expected_role) do
@@ -256,7 +277,7 @@ defmodule Maty.Typechecker.Tc do
       case return do
         {:ok, some_type} -> {:ok, {:just, {some_type, st}}, var_env}
         {:error, some_error} -> {:error, some_error, var_env}
-        other -> {:error, "This should be unreachable", var_env}
+        _ -> {:error, "This should be unreachable", var_env}
       end
     else
       :error -> {:error, "function doesn't seem to have a type", var_env}

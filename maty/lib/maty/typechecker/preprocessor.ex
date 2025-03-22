@@ -15,7 +15,7 @@ defmodule Maty.Typechecker.Preprocessor do
 
       true ->
         with {:ok, st_key} <- Map.fetch(sts, handler) do
-          case Enum.find(annotated_handlers, fn {k, v} -> v == st_key end) do
+          case Enum.find(annotated_handlers, fn {_, v} -> v == st_key end) do
             {{^name, ^arity}, ^st_key} ->
               :ok
 
@@ -42,7 +42,7 @@ defmodule Maty.Typechecker.Preprocessor do
     Module.delete_attribute(module, :handler)
   end
 
-  def process_type_annotation(env, {name, args, body}) do
+  def process_type_annotation(env, {name, args}) do
     case Module.get_attribute(env.module, :spec) do
       [{:spec, {:"::", _, [{spec_name, _, args_types}, return_type]}, _module} | _] ->
         arity = length(args)

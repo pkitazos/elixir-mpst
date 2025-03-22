@@ -12,7 +12,6 @@ defmodule Maty.Typechecker do
   alias Maty.Typechecker.{
     Preprocessor,
     SessionChecker,
-    CoreChecker,
     Error
   }
 
@@ -21,8 +20,8 @@ defmodule Maty.Typechecker do
   @doc """
   Called by Hook when a function definition is encountered (`@on_definition`).
   """
-  def handle_on_definition(env, kind, name, args, _guards, body) do
-    case handler = Module.get_attribute(env.module, :handler) do
+  def handle_on_definition(env, kind, name, args, _guards, _body) do
+    case Module.get_attribute(env.module, :handler) do
       handler when not is_nil(handler) ->
         Preprocessor.process_handler_annotation(env.module, kind, name, length(args), handler)
 
@@ -30,7 +29,7 @@ defmodule Maty.Typechecker do
         :ok
     end
 
-    Preprocessor.process_type_annotation(env, {name, args, body})
+    Preprocessor.process_type_annotation(env, {name, args})
   end
 
   @doc """
@@ -54,9 +53,9 @@ defmodule Maty.Typechecker do
   Called by Hook at `@after_compile`.
   """
   def handle_after_compile(env, bytecode) do
-    dbgi_map = read_debug_info(bytecode)
+    _dbgi_map = read_debug_info!(bytecode)
 
-    ast = SessionChecker.sample_handler()
+    _ast = SessionChecker.sample_handler()
 
     function_block = [
       {:=, [line: 68, column: 12],
@@ -133,7 +132,7 @@ defmodule Maty.Typechecker do
       ]
     }
 
-    {:ok, {:just, {:number, pre_st_1}}, var_env_1} = result1
+    {:ok, {:just, {:number, ^pre_st_1}}, ^var_env_1} = result1
 
     result2 =
       TC.session_typecheck(
@@ -154,7 +153,7 @@ defmodule Maty.Typechecker do
 
     pre_st_2 = %ST.SName{handler: :decision_handler}
 
-    {:ok, {:just, {nil, pre_st_2}}, var_env_2} = result2
+    {:ok, {:just, {nil, ^pre_st_2}}, ^var_env_2} = result2
 
     result3 =
       TC.session_typecheck(
@@ -182,7 +181,7 @@ defmodule Maty.Typechecker do
 
     var_env_3 = var_env_2
 
-    {:ok, :nothing, var_env_3} = result3
+    {:ok, :nothing, ^var_env_3} = result3
 
     resultN =
       TC.session_typecheck_block(
@@ -192,14 +191,18 @@ defmodule Maty.Typechecker do
         function_block
       )
 
-    Logger.log(:debug, "session typechecking block: #{inspect(resultN)}")
+    # Logger.log(:debug, "session typechecking block: #{inspect(resultN)}")
+
+    var_env_N = var_env_3
+
+    {:ok, :nothing, ^var_env_N} = resultN
 
     # resultX = TC.session_typecheck_handler(env.module, %{}, ast)
 
     # Logger.log(:debug, "session typechecking: #{inspect(resultX)}")
   end
 
-  defp read_debug_info(bytecode) do
+  defp read_debug_info!(bytecode) do
     try do
       try do
         chunks =
@@ -209,17 +212,16 @@ defmodule Maty.Typechecker do
           end
 
         # Gets the (extended) Elixir abstract syntax tree from debug_info chunk
-        dbgi_map =
-          case chunks[:debug_info] do
-            {:debug_info_v1, :elixir_erl, metadata} ->
-              case metadata do
-                {:elixir_v1, map, _} -> map
-                {version, _, _} -> throw({:error, Error.version_mismatch(:elixir_v1, version)})
-              end
+        case chunks[:debug_info] do
+          {:debug_info_v1, :elixir_erl, metadata} ->
+            case metadata do
+              {:elixir_v1, map, _} -> map
+              {version, _, _} -> throw({:error, Error.version_mismatch(:elixir_v1, version)})
+            end
 
-            x ->
-              throw({:error, inspect(x)})
-          end
+          x ->
+            throw({:error, inspect(x)})
+        end
       catch
         _ -> throw({:error, :oops})
       end
