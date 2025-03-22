@@ -1,5 +1,6 @@
 defmodule TwoBuyer.Participants.Seller do
   use Maty.Actor
+  @after_compile Maty.Hook
 
   @type session_id :: reference()
   @type init_token :: reference()

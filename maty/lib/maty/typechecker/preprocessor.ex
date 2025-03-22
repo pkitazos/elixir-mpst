@@ -14,8 +14,6 @@ defmodule Maty.Typechecker.Preprocessor do
         {:error, error}
 
       true ->
-        IO.puts("\n--> #{name} #{inspect(handler)}\n\n#{inspect(sts)}\n\n")
-
         with {:ok, st_key} <- Map.fetch(sts, handler) do
           case Enum.find(annotated_handlers, fn {k, v} -> v == st_key end) do
             {{^name, ^arity}, ^st_key} ->
