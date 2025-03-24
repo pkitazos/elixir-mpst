@@ -4,7 +4,7 @@ defmodule TwoBuyer.Participants.Buyer1 do
   @role :buyer1
 
   # Seller + title(String). B1_b
-  @st {:install, "buyer1&{title(string).quote_handler}"}
+  @st {:install, "buyer1&{title(binary).quote_handler}"}
 
   # Seller & quote(String).Buyer2 + share(Int).end
   @st {:quote_handler, "seller&{quote(number).buyer2!{share(number)}}"}

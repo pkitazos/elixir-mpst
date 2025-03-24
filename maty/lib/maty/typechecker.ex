@@ -71,13 +71,6 @@ defmodule Maty.Typechecker do
 
     {fn_info, _kind, _meta0, fn_clauses} = fn_definition
 
-    _function_header = [
-      {:title, {:title, [version: 0, line: 67, column: 30], nil}},
-      :buyer1,
-      {:session, [version: 1, line: 67, column: 47], nil},
-      {:state, [version: 2, line: 67, column: 56], nil}
-    ]
-
     _function_block = [
       {:=, [line: 68, column: 12],
        [

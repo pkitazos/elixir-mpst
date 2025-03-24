@@ -3,13 +3,13 @@ defmodule Maty.ST.Lookup do
 
   def get(key) do
     case key do
-      "buyer1&{title(string).quote_handler}" ->
+      "buyer1&{title(binary).quote_handler}" ->
         %ST.SIn{
           from: :buyer1,
           branches: [
             %ST.SBranch{
               label: :title,
-              payload: :string,
+              payload: :binary,
               continue_as: %ST.SName{handler: :quote_handler}
             }
           ]
@@ -36,7 +36,7 @@ defmodule Maty.ST.Lookup do
           ]
         }
 
-      "buyer1&{share(number).seller!{address(string).date_handler, quit(unit).end}}}" ->
+      "buyer1&{share(number).seller!{address(binary).date_handler, quit(unit).end}}}" ->
         %ST.SIn{
           from: :buyer1,
           branches: [
@@ -48,7 +48,7 @@ defmodule Maty.ST.Lookup do
                 branches: [
                   %ST.SBranch{
                     label: :address,
-                    payload: :string,
+                    payload: :binary,
                     continue_as: %ST.SName{handler: :date_handler}
                   },
                   %ST.SBranch{
@@ -74,13 +74,13 @@ defmodule Maty.ST.Lookup do
           ]
         }
 
-      "buyer1&{title(string).buyer1!{quote(number).decision_handler}}" ->
+      "buyer1&{title(binary).buyer1!{quote(number).decision_handler}}" ->
         %ST.SIn{
           from: :buyer1,
           branches: [
             %ST.SBranch{
               label: :title,
-              payload: :string,
+              payload: :binary,
               continue_as: %ST.SOut{
                 to: :buyer1,
                 branches: [
@@ -95,13 +95,13 @@ defmodule Maty.ST.Lookup do
           ]
         }
 
-      "buyer2&{address(string).buyer2!{date(date).end, quit(unit).end}}" ->
+      "buyer2&{address(binary).buyer2!{date(date).end, quit(unit).end}}" ->
         %ST.SIn{
           from: :buyer2,
           branches: [
             %ST.SBranch{
               label: :address,
-              payload: :string,
+              payload: :binary,
               continue_as: %ST.SOut{
                 to: :buyer2,
                 branches: [

@@ -100,6 +100,9 @@ defmodule Maty.Typechecker.Tc do
     end
   end
 
+  defp extract_body({:__block__, [], block}), do: block
+  defp extract_body(expr), do: expr
+
   # def session_typecheck_handler(module, var_env, {{name, 4}, :def, _meta, clauses}) do
   #   st_pairs = Module.get_attribute(module, :pairs) |> Enum.into(%{})
 
@@ -135,6 +138,7 @@ defmodule Maty.Typechecker.Tc do
   #   end
   # end
 
+  # spec_types
   [
     {
       [
@@ -147,6 +151,7 @@ defmodule Maty.Typechecker.Tc do
     }
   ]
 
+  # definition
   {[line: 67, column: 7],
    [
      {:title, {:title, [version: 0, line: 67, column: 30], nil}},
@@ -184,6 +189,7 @@ defmodule Maty.Typechecker.Tc do
        ]}
     ]}}
 
+  # :title_handler session type
   %Maty.ST.SIn{
     from: :buyer1,
     branches: [
@@ -208,34 +214,115 @@ defmodule Maty.Typechecker.Tc do
     annotated_handlers = Module.get_attribute(module, :annotated_handlers) |> Enum.into(%{})
     type_specs = Module.get_attribute(module, :type_specs) |> Enum.into(%{})
 
-    var_env = %{}
     func = "#{name}/#{arity}"
 
-    with {:handler, {:ok, _st}} <- {:handler, Map.fetch(annotated_handlers, fn_info)},
-         {:spec, {:ok, fn_types}} <- {:spec, Map.fetch(type_specs, fn_info)} do
-      definitions = fn_types |> Enum.reverse() |> Enum.zip(clauses)
+    with {:handler, {:ok, st}} <- {:handler, Map.fetch(annotated_handlers, fn_info)},
+         {:spec, {:ok, fn_types}} <- {:spec, Map.fetch(type_specs, fn_info)},
+         variants = length(fn_types),
+         {:branches, ^variants} <- {:branches, length(st.branches)} do
+      defs = Enum.zip([Enum.reverse(fn_types), clauses, st.branches])
 
       # for each clause for a given function do a bunch of checks
-      for {{spec, clause}, idx} <- Enum.with_index(definitions, 1) do
-        "clause #{idx}/#{length(clauses)} \nspec: #{inspect(spec)}\n\nclause: #{inspect(clause)}"
-        :ok
-        # |> Logger.debug()
+      for {{{spec_args, spec_return}, clause, branch}, idx} <- Enum.with_index(defs, 1) do
+        "clause #{idx}/#{length(clauses)}" |> Logger.debug()
 
         # do the spec checks here
-        # construct the type environment
-        # typecheck the function body
-        # typecheck the function return type against the spec return type
+        with {:spec_args, [message_t, role_t, session_ctx_t, state_t]} <- {:spec_args, spec_args},
+             {:a1, {:tuple, [:atom, payload_t]}} <- {:a1, message_t},
+             {:a2, :role} <- {:a2, role_t},
+             {:a3, :session_ctx} <- {:a3, session_ctx_t},
+             {:a4, :maty_actor_state} <- {:a4, state_t},
+             {:spec_return, ret_t} when ret_t in [:suspend, :done] <- {:spec_return, spec_return} do
+          {_meta, args, _guards, block} = clause
+
+          [
+            {label, {payload_var, _, _}},
+            role,
+            {session_ctx_var, _, _},
+            {maty_actor_state_var, _, _}
+          ] = args
+
+          Logger.debug("branches: #{length(st.branches)}")
+
+          # construct the type environment
+
+          var_env = %{
+            payload_var => :binary,
+            session_ctx_var => :session_ctx,
+            maty_actor_state_var => :maty_actor_state
+          }
+
+          cond do
+            role != st.from ->
+              Logger.error("handler role mismatch")
+
+            branch.label != label ->
+              Logger.error("message label mismatch")
+
+            branch.payload != payload_t ->
+              Logger.error("message payload type mismatch")
+
+            true ->
+              st = branch.continue_as
+              # typecheck the function body
+              body = block |> extract_body()
+              res = session_typecheck_block(module, var_env, st, body)
+              Logger.debug(inspect(res))
+
+              # typecheck the function return type against the spec return type
+              :ok
+          end
+        else
+          {:spec_args, _} ->
+            error = "handler args shape not looking good"
+            Logger.error(error)
+            {:error, error}
+
+          {:a1, _} ->
+            error = "message not formatted properly"
+            Logger.error(error)
+            {:error, error}
+
+          {:a2, _} ->
+            error = "role not typed properly"
+            Logger.error(error)
+            {:error, error}
+
+          {:a3, _} ->
+            error = "session_ctx not typed properly"
+            Logger.error(error)
+            {:error, error}
+
+          {:a4, _} ->
+            error = "maty_actor_state not typed properly"
+            Logger.error(error)
+            {:error, error}
+
+          {:spec_return, _} ->
+            error = "invalid return type for handler"
+            Logger.error(error)
+            {:error, error}
+        end
+
+        :ok
       end
     else
       {:handler, :error} ->
         error = Error.unannotated_handler(func)
         Logger.error(error)
-        {:error, error, var_env}
+        {:error, error}
 
       {:spec, :error} ->
         error = Error.missing_spec_annotation(func)
         Logger.error(error)
-        {:error, error, var_env}
+        {:error, error}
+
+      {:branches, _} ->
+        error =
+          "not enough function clauses to support the annotated session type"
+
+        Logger.error(error)
+        {:error, error}
     end
   end
 
@@ -306,8 +393,6 @@ defmodule Maty.Typechecker.Tc do
           # - second variable is a `role` (and later on that the session type :from role matches)
           # - third variable is a `session_ctx` (if the argument passed is just a variable then that's fine, if it is destructured it should match the correct structure, if it's anything else it should probably error)
           # - fourth variable is a `maty_actor_state`
-
-          Enum.find(fn_types, fn _ -> nil end)
 
           var_env = %{
             payload_var => :binary,
@@ -507,7 +592,9 @@ defmodule Maty.Typechecker.Tc do
         _ -> {:error, "This should be unreachable", var_env}
       end
     else
-      :error -> {:error, "function doesn't seem to have a type", var_env}
+      :error ->
+        Logger.error("var: #{inspect(name)} - ctx: #{inspect(args)}\n\n#{inspect(st)}")
+        {:error, "function doesn't seem to have a type", var_env}
     end
   end
 end
