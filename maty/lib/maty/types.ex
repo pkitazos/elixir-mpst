@@ -1,4 +1,8 @@
 defmodule Maty.Types do
+  @moduledoc """
+  Custom types used in Maty.
+  """
+
   @type session_id :: reference()
   @type init_token :: reference()
   @type role :: atom()
@@ -10,6 +14,8 @@ defmodule Maty.Types do
           local_state: any()
         }
 
+  @type session_ctx :: {session(), role()}
+
   @type maty_actor_state :: %{
           sessions: %{session_id() => session()},
           callbacks: %{init_token() => {role(), function()}}
@@ -18,4 +24,26 @@ defmodule Maty.Types do
   @type access_point_state :: %{
           participants: %{role() => :queue.queue({pid(), init_token()})}
         }
+
+  @type suspend :: {:suspend, {function(), role()}, maty_actor_state()}
+  @type done :: {:done, :unit, maty_actor_state()}
+
+  @maty_types [
+    :session_id,
+    :init_token,
+    :role,
+    :session,
+    :session_ctx,
+    :maty_actor_state,
+    :suspend,
+    :done
+  ]
+
+  def get do
+    @maty_types
+  end
+
+  def map do
+    get() |> Enum.map(&{&1, &1}) |> Enum.into(%{})
+  end
 end

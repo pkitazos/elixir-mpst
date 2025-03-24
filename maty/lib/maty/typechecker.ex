@@ -30,34 +30,55 @@ defmodule Maty.Typechecker do
     end
 
     Preprocessor.process_type_annotation(env, {name, args})
+    # todo: instead of saving to another module attribute, just return the errors here
+    spec_errors = Module.get_attribute(env.module, :spec_errors)
+
+    cond do
+      Enum.empty?(spec_errors) -> :ok
+      true -> Logger.error("There are #{length(spec_errors)} errors in this module's specs")
+    end
   end
 
   @doc """
   Called by Hook at `@before_compile`.
   """
   def handle_before_compile(env) do
-    attr = Module.get_attribute(env.module, :type_specs)
+    # debug
+    if env.module == TwoBuyer.Participants.Seller do
+      attr = Module.get_attribute(env.module, :type_specs)
 
-    module_header =
-      "\n-------------------- #{inspect(env.module)} -------------------"
+      module_header =
+        "\n-------------------- #{inspect(env.module)} -------------------"
 
-    display =
-      Enum.map_join(attr, "\n\n", fn {k, v} ->
-        "#{inspect(k)} --> \n#{inspect(v)}"
-      end)
+      display =
+        Enum.map_join(attr, "\n\n", fn {k, v} ->
+          "#{inspect(k)} --> \n#{inspect(v)}"
+        end)
 
-    IO.puts(module_header <> "\n" <> display <> "\n")
+      IO.puts(module_header <> "\n" <> display <> "\n")
+    end
   end
 
   @doc """
   Called by Hook at `@after_compile`.
   """
   def handle_after_compile(env, bytecode) do
-    _dbgi_map = read_debug_info!(bytecode)
+    dbgi_map = read_debug_info!(bytecode)
 
-    _ast = SessionChecker.sample_handler()
+    fn_definition = SessionChecker.sample_handler()
 
-    function_block = [
+    # IO.inspect(dbgi_map[:definitions])
+
+    {fn_info, _kind, _meta0, fn_clauses} = fn_definition
+
+    _function_header = [
+      {:title, {:title, [version: 0, line: 67, column: 30], nil}},
+      :buyer1,
+      {:session, [version: 1, line: 67, column: 47], nil},
+      {:state, [version: 2, line: 67, column: 56], nil}
+    ]
+
+    _function_block = [
       {:=, [line: 68, column: 12],
        [
          {:amount, [version: 3, line: 68, column: 5], nil},
@@ -183,21 +204,34 @@ defmodule Maty.Typechecker do
 
     {:ok, :nothing, ^var_env_3} = result3
 
-    resultN =
-      TC.session_typecheck_block(
+    # result_block =
+    #   TC.session_typecheck_block(
+    #     env.module,
+    #     var_env,
+    #     pre_st,
+    #     function_block
+    #   )
+
+    # Logger.log(:debug, "session typechecking block: #{inspect(result_block)}")
+
+    # var_env_N = var_env_3
+
+    # {:ok, :nothing, ^var_env_N} = result_block
+
+    result_header =
+      TC.session_typecheck_handler(
         env.module,
-        var_env,
-        pre_st,
-        function_block
+        fn_info,
+        fn_clauses
       )
 
-    # Logger.log(:debug, "session typechecking block: #{inspect(resultN)}")
+    Logger.log(:debug, "session typechecking header: #{inspect(result_header)}")
 
-    var_env_N = var_env_3
+    _module_definitions =
+      dbgi_map[:definitions]
+      |> Enum.filter(fn {_, _, meta, _} -> Keyword.get(meta, :context) != Maty.Actor end)
 
-    {:ok, :nothing, ^var_env_N} = resultN
-
-    # resultX = TC.session_typecheck_handler(env.module, %{}, ast)
+    # resultX = TC.session_typecheck_handler(env.module, %{}, fn_definition)
 
     # Logger.log(:debug, "session typechecking: #{inspect(resultX)}")
   end

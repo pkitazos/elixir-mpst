@@ -2,24 +2,6 @@ defmodule TwoBuyer.Participants.Seller do
   use Maty.Actor
   @after_compile Maty.Hook
 
-  @type session_id :: reference()
-  @type init_token :: reference()
-  @type role :: atom()
-
-  @type session :: %{
-          id: session_id(),
-          handlers: %{role() => {function(), role()}},
-          participants: %{role() => pid()},
-          local_state: any()
-        }
-
-  @type session_ctx :: {session(), role()}
-
-  @type maty_actor_state :: %{
-          sessions: %{session_id() => session()},
-          callbacks: %{init_token() => {role(), function()}}
-        }
-
   @role :seller
 
   # Buyer1 & title(String).Buyer1 + quote(Int). S_b
@@ -47,8 +29,7 @@ defmodule TwoBuyer.Participants.Seller do
 
   # ------------------------------------------------------------------
 
-  @spec install(session(), maty_actor_state()) ::
-          {:suspend, {function(), role()}, maty_actor_state()}
+  @spec install(session(), maty_actor_state()) :: suspend()
   def install(_session, state) do
     {:ok, updated_state} =
       register(
@@ -62,8 +43,7 @@ defmodule TwoBuyer.Participants.Seller do
   end
 
   @handler :title_handler
-  @spec title_handler({:title, binary()}, role(), session_ctx(), maty_actor_state()) ::
-          {:suspend, {function(), role()}, maty_actor_state()}
+  @spec title_handler({:title, binary()}, role(), session_ctx(), maty_actor_state()) :: suspend()
   def title_handler({:title, title}, :buyer1, session, state) do
     amount = lookup_price(title)
 
@@ -73,7 +53,7 @@ defmodule TwoBuyer.Participants.Seller do
 
   @handler :decision_handler
   @spec decision_handler({:address, binary()}, :buyer2, session_ctx(), maty_actor_state()) ::
-          {:done, :unit, maty_actor_state()}
+          done()
   def decision_handler({:address, addr}, :buyer2, session, state) do
     date = shipping_date(addr)
 
@@ -82,8 +62,7 @@ defmodule TwoBuyer.Participants.Seller do
   end
 
   @handler :decision_handler
-  @spec decision_handler({:quit, :unit}, :buyer2, session_ctx(), maty_actor_state()) ::
-          {:done, :unit, maty_actor_state()}
+  @spec decision_handler({:quit, :unit}, :buyer2, session_ctx(), maty_actor_state()) :: done()
   def decision_handler({:quit, :unit}, :buyer2, _session, state), do: {:done, :unit, state}
 
   # -----------------------------------------------------------------

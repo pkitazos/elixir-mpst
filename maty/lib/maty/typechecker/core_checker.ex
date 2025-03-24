@@ -123,7 +123,11 @@ defmodule Maty.Typechecker.CoreChecker do
   defp get_type_internal(type, _env) when is_nil(type), do: nil
   defp get_type_internal(type, _env) when is_number(type), do: :number
   defp get_type_internal(type, _env) when is_pid(type), do: :pid
-  defp get_type_internal(type, _env) when is_atom(type), do: :atom
+
+  # atoms are literal types
+  defp get_type_internal(type, _env) when is_atom(type), do: type
 
   defp get_type_internal(_, _), do: :error
+
+  # todo: possibly split/reserve this module for @spec typing only
 end

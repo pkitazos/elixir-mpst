@@ -39,4 +39,12 @@ defmodule Maty.Typechecker.Error do
   def unsupported_spec_type() do
     "Unsupported type in @spec annotation"
   end
+
+  def unannotated_handler(func) do
+    "Function: #{func} has not been annotated with a handler"
+  end
+
+  def missing_spec_annotation(func) do
+    "Function: #{func} is missing a @spec annotation"
+  end
 end

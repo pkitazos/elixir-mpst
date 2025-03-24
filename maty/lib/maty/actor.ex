@@ -8,6 +8,15 @@ defmodule Maty.Actor do
       use Maty.Hook
       @behaviour Maty.Actor
 
+      @type role :: Maty.Types.role()
+      @type session_id :: Maty.Types.session_id()
+      @type init_token :: Maty.Types.init_token()
+      @type session :: Maty.Types.session()
+      @type session_ctx :: Maty.Types.session_ctx()
+      @type maty_actor_state :: Maty.Types.maty_actor_state()
+      @type suspend :: Maty.Types.suspend()
+      @type done :: Maty.Types.done()
+
       def start_link(args) do
         Maty.Actor.start_link(__MODULE__, args)
       end

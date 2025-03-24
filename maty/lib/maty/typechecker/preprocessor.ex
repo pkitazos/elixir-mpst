@@ -1,6 +1,7 @@
 defmodule Maty.Typechecker.Preprocessor do
+  alias Maty.Typechecker.Tc, as: TC
   alias Maty.Typechecker.{CoreChecker, Error}
-  alias Maty.Utils
+  alias Maty.{ST, Utils}
   require Logger
 
   def process_handler_annotation(module, kind, name, arity, handler) do
@@ -15,12 +16,18 @@ defmodule Maty.Typechecker.Preprocessor do
 
       true ->
         with {:ok, st_key} <- Map.fetch(sts, handler) do
-          case Enum.find(annotated_handlers, fn {_, v} -> v == st_key end) do
-            {{^name, ^arity}, ^st_key} ->
+          st = ST.Lookup.get(st_key)
+
+          case Enum.find(annotated_handlers, fn {_, v} -> v == st end) do
+            {{^name, ^arity}, ^st} ->
               :ok
 
             nil ->
-              Module.put_attribute(module, :annotated_handlers, {{name, arity}, st_key})
+              Module.put_attribute(
+                module,
+                :annotated_handlers,
+                {{name, arity}, st}
+              )
 
             {{prev_fn_name, prev_fn_arity}, _} ->
               prev = "#{to_string(prev_fn_name)}/#{prev_fn_arity}"
@@ -43,41 +50,40 @@ defmodule Maty.Typechecker.Preprocessor do
   end
 
   def process_type_annotation(env, {name, args}) do
+    var_env =
+      CoreChecker.accepted_types()
+      |> Enum.map(&{&1, &1})
+      |> Enum.into(%{})
+      |> Map.merge(Maty.Types.map())
+
     case Module.get_attribute(env.module, :spec) do
       [{:spec, {:"::", _, [{spec_name, _, args_types}, return_type]}, _module} | _] ->
         arity = length(args)
 
-        args_types_checked = CoreChecker.get_type(args_types || [])
-        return_type_checked = CoreChecker.get_type(return_type)
+        with {:info, {^name, ^arity}} <- {:info, {spec_name, length(args_types)}},
+             {:args, {:ok, {:list, typed_args}, _}} <- {:args, TC.typecheck(var_env, args_types)},
+             {:return, {:ok, typed_return, _}} <- {:return, TC.typecheck(var_env, return_type)} do
+          Utils.ModAttr.append_to_key(
+            env,
+            :type_specs,
+            {name, arity},
+            {typed_args, typed_return}
+          )
+        else
+          {:info, _} ->
+            error = "Spec name: #{spec_name} doesn't match function name: #{name}"
+            Logger.error(error)
+            Module.put_attribute(env.module, :spec_errors, {{name, arity}, error})
 
-        cond do
-          Utils.deep_contains?([args_types_checked], :error) ->
+          {:args, {:error, _, _}} ->
             error = Error.spec_args_not_well_typed(spec_name, args_types)
             Logger.error(error)
             Module.put_attribute(env.module, :spec_errors, {{name, arity}, error})
 
-          Utils.deep_contains?([return_type_checked], :error) ->
+          {:return, {:error, _, _}} ->
             error = Error.spec_return_not_well_typed(spec_name, return_type)
             Logger.error(error)
             Module.put_attribute(env.module, :spec_errors, {{name, arity}, error})
-
-          true ->
-            types = {spec_name, length(args_types)}
-
-            case types do
-              {^name, ^arity} ->
-                Utils.ModAttr.append_to_key(
-                  env,
-                  :type_specs,
-                  {name, arity},
-                  {args_types_checked, return_type_checked}
-                )
-
-              _ ->
-                error = "Spec name: #{spec_name} doesn't match function name: #{name}"
-                Logger.error(error)
-                Module.put_attribute(env.module, :spec_errors, {{name, arity}, error})
-            end
         end
 
       _ ->
