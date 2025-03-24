@@ -34,3 +34,12 @@ Multiparty Session Typing for Elixir apps using the Maty language design
 - [ ] actually typechecking the AST using the Maty typechecker
 - ...
 - [ ] evaluation: case studies (w11)
+
+
+## Tasks
+
+- [ ] clean up repo (move the unrelated sub-directories)
+- [ ] centralise errors to dedicated module
+- [ ] polish up error reporting to use meta information
+- [ ] add doc comments to code
+- [ ] add a couple more examples
