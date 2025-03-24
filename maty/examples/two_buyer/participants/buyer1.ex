@@ -24,6 +24,7 @@ defmodule TwoBuyer.Participants.Buyer1 do
   end
 
   @handler :install
+  @spec install({:title, binary()}, role(), session_ctx(), maty_actor_state()) :: suspend()
   def install({:title, title}, :buyer1, session, state) do
     # if i change :buyer1 to @role I currently get an error
     maty_send(session, :seller, {:title, title})
@@ -34,6 +35,7 @@ defmodule TwoBuyer.Participants.Buyer1 do
   # ------------------------------------------------------------------
 
   @handler :quote_handler
+  @spec quote_handler({:quote, number()}, role(), session_ctx(), maty_actor_state()) :: done()
   def quote_handler({:quote, amount}, :seller, session, state) do
     share_amount = amount / 2
 

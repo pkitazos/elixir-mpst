@@ -1,6 +1,6 @@
 defmodule Maty.Typechecker.Preprocessor do
   alias Maty.Typechecker.Tc, as: TC
-  alias Maty.Typechecker.{CoreChecker, Error}
+  alias Maty.Typechecker.{Error}
   alias Maty.{ST, Utils}
   require Logger
 
@@ -51,7 +51,7 @@ defmodule Maty.Typechecker.Preprocessor do
 
   def process_type_annotation(env, {name, args}) do
     var_env =
-      CoreChecker.accepted_types()
+      Maty.Types.payload_types()
       |> Enum.map(&{&1, &1})
       |> Enum.into(%{})
       |> Map.merge(Maty.Types.map())

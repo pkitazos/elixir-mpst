@@ -46,4 +46,26 @@ defmodule Maty.Types do
   def map do
     get() |> Enum.map(&{&1, &1}) |> Enum.into(%{})
   end
+
+  # List of accepted types in session types
+  @supported_payload_types [
+    :any,
+    :atom,
+    :binary,
+    :boolean,
+    :date,
+    :number,
+    :pid,
+    :string,
+    :no_return,
+    nil
+  ]
+
+  @doc """
+  Returns a list of all accepted types, including :number, :atom, ...
+  """
+  @spec payload_types :: [atom]
+  def payload_types() do
+    @supported_payload_types
+  end
 end

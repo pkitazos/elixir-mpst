@@ -54,14 +54,6 @@ defmodule Maty.Typechecker.Tc do
     end
   end
 
-  # functions - or other stuff with a ctx list
-  def typecheck(var_env, {var, _meta, ctx}) when is_atom(var) and is_list(ctx) do
-    case Map.fetch(var_env, var) do
-      {:ok, type} -> {:ok, type, var_env}
-      :error -> {:error, "function doesn't exist", var_env}
-    end
-  end
-
   # 2-tuples
   def typecheck(var_env, {lhs, rhs}) do
     with {:lhs, {:ok, lhs_type, _}} <- {:lhs, typecheck(var_env, lhs)},
@@ -100,115 +92,27 @@ defmodule Maty.Typechecker.Tc do
     end
   end
 
+  # type spec or
+  def typecheck(var_env, {:|, _, items}) when is_list(items) do
+    case typecheck(var_env, items) do
+      {:ok, {:list, types}, var_env} -> {:ok, {:|, Enum.sort(types)}, var_env}
+      {:error, _, _} = error -> error
+    end
+  end
+
+  # functions - or other stuff with a ctx list
+  def typecheck(var_env, {var, _meta, ctx}) when is_atom(var) and is_list(ctx) do
+    case Map.fetch(var_env, var) do
+      {:ok, type} -> {:ok, type, var_env}
+      :error -> {:error, "function doesn't exist", var_env}
+    end
+  end
+
   defp extract_body({:__block__, [], block}), do: block
   defp extract_body(expr), do: expr
 
-  # def session_typecheck_handler(module, var_env, {{name, 4}, :def, _meta, clauses}) do
-  #   st_pairs = Module.get_attribute(module, :pairs) |> Enum.into(%{})
-
-  #   for {_meta1, [{expected_label, payload}, expected_role, session_ctx, maty_actor_state], _,
-  #        block} <-
-  #         clauses do
-  #     case Map.fetch(st_pairs, {name, 4, expected_label}) do
-  #       {:ok, {handler, st_key}} ->
-  #         st = ST.Lookup.get(st_key)
-
-  #         # %Maty.ST.SIn{
-  #         #   from: :buyer1,
-  #         #   message: {:title, :string},
-  #         #   continue_as: [
-  #         #     %Maty.ST.SOut{
-  #         #       to: :buyer1,
-  #         #       message: {:quote, :number},
-  #         #       continue_as: [%Maty.ST.SHandler{handler: :decision_handler}]
-  #         #     }
-  #         #   ]
-  #         # }
-
-  #         cond do
-  #           st.from != expected_role -> {:error, "role mismatch"}
-  #           elem(st.msg, 0) != expected_label -> {:error, "message label mismatch"}
-  #         end
-
-  #         {:ok, "something something"}
-
-  #       other ->
-  #         Logger.error("Unexpected return from session_typecheck: #{inspect(other)}")
-  #     end
-  #   end
-  # end
-
-  # spec_types
-  [
-    {
-      [
-        {:tuple, [:title, :binary]},
-        :atom,
-        :session_ctx,
-        :maty_actor_state
-      ],
-      {:tuple, [:suspend, {:tuple, [:function, :atom]}, :maty_actor_state]}
-    }
-  ]
-
-  # definition
-  {[line: 67, column: 7],
-   [
-     {:title, {:title, [version: 0, line: 67, column: 30], nil}},
-     :buyer1,
-     {:session, [version: 1, line: 67, column: 47], nil},
-     {:state, [version: 2, line: 67, column: 56], nil}
-   ], [],
-   {:__block__, [],
-    [
-      {:=, [line: 68, column: 12],
-       [
-         {:amount, [version: 3, line: 68, column: 5], nil},
-         {:lookup_price, [line: 68, column: 14],
-          [{:title, [version: 0, line: 68, column: 27], nil}]}
-       ]},
-      {:maty_send, [line: 70, column: 5],
-       [
-         {:session, [version: 1, line: 70, column: 15], nil},
-         :buyer1,
-         {:quote, {:amount, [version: 3, line: 70, column: 42], nil}}
-       ]},
-      {:{}, [line: 71, column: 5],
-       [
-         :suspend,
-         {{:&, [line: 71, column: 17],
-           [
-             {:/, [],
-              [
-                {{:., [line: 71, column: 28], [TwoBuyer.Participants.Seller, :decision_handler]},
-                 [no_parens: true, line: 71, column: 29], []},
-                4
-              ]}
-           ]}, :buyer2},
-         {:state, [version: 2, line: 71, column: 59], nil}
-       ]}
-    ]}}
-
-  # :title_handler session type
-  %Maty.ST.SIn{
-    from: :buyer1,
-    branches: [
-      %Maty.ST.SBranch{
-        label: :title,
-        payload: :string,
-        continue_as: %Maty.ST.SOut{
-          to: :buyer1,
-          branches: [
-            %Maty.ST.SBranch{
-              label: :quote,
-              payload: :number,
-              continue_as: %Maty.ST.SName{handler: :decision_handler}
-            }
-          ]
-        }
-      }
-    ]
-  }
+  defguardp is_handler_return(type) when is_atom(type) and type in [:done, :suspend]
+  defguardp is_handler_return(type) when is_tuple(type) and type == {:|, [:done, :suspend]}
 
   def session_typecheck_handler(module, {name, arity} = fn_info, clauses) do
     annotated_handlers = Module.get_attribute(module, :annotated_handlers) |> Enum.into(%{})
@@ -224,7 +128,7 @@ defmodule Maty.Typechecker.Tc do
 
       # for each clause for a given function do a bunch of checks
       for {{{spec_args, spec_return}, clause, branch}, idx} <- Enum.with_index(defs, 1) do
-        "clause #{idx}/#{length(clauses)}" |> Logger.debug()
+        Logger.debug("clause #{idx}/#{length(clauses)}")
 
         # do the spec checks here
         with {:spec_args, [message_t, role_t, session_ctx_t, state_t]} <- {:spec_args, spec_args},
@@ -232,7 +136,7 @@ defmodule Maty.Typechecker.Tc do
              {:a2, :role} <- {:a2, role_t},
              {:a3, :session_ctx} <- {:a3, session_ctx_t},
              {:a4, :maty_actor_state} <- {:a4, state_t},
-             {:spec_return, ret_t} when ret_t in [:suspend, :done] <- {:spec_return, spec_return} do
+             {:spec_return, ret_t} when is_handler_return(ret_t) <- {:spec_return, spec_return} do
           {_meta, args, _guards, block} = clause
 
           [
@@ -242,10 +146,7 @@ defmodule Maty.Typechecker.Tc do
             {maty_actor_state_var, _, _}
           ] = args
 
-          Logger.debug("branches: #{length(st.branches)}")
-
           # construct the type environment
-
           var_env = %{
             payload_var => :binary,
             session_ctx_var => :session_ctx,
@@ -264,13 +165,13 @@ defmodule Maty.Typechecker.Tc do
 
             true ->
               st = branch.continue_as
+
               # typecheck the function body
               body = block |> extract_body()
               res = session_typecheck_block(module, var_env, st, body)
-              Logger.debug(inspect(res))
 
-              # typecheck the function return type against the spec return type
-              :ok
+              # todo: typecheck the function return type against the spec return type
+              res
           end
         else
           {:spec_args, _} ->
@@ -303,8 +204,6 @@ defmodule Maty.Typechecker.Tc do
             Logger.error(error)
             {:error, error}
         end
-
-        :ok
       end
     else
       {:handler, :error} ->
@@ -324,97 +223,6 @@ defmodule Maty.Typechecker.Tc do
         Logger.error(error)
         {:error, error}
     end
-  end
-
-  def session_typecheck_header(module, {name, arity} = fn_info, meta, args) do
-    annotated_handlers = Module.get_attribute(module, :annotated_handlers) |> Enum.into(%{})
-    type_specs = Module.get_attribute(module, :type_specs) |> Enum.into(%{})
-
-    [
-      {_label, {payload_var, _, _}},
-      role,
-      {session_ctx_var, _, _},
-      {maty_actor_state_var, _, _}
-    ] = args
-
-    # this function currently assumes that I'm going to nicely be given a single branch to typecheck
-    # in reality the function should be able to work given various clauses and various typespecs
-
-    func = "#{name}/#{arity}"
-
-    [line: line, column: _column] = meta
-
-    var_env = %{}
-
-    with {:handler, {:ok, st}} <- {:handler, Map.fetch(annotated_handlers, fn_info)},
-         {:spec, {:ok, fn_types}} <- {:spec, Map.fetch(type_specs, fn_info)} do
-      [
-        {
-          [
-            {:tuple, [:atom, :binary]},
-            :atom,
-            :session_ctx,
-            :maty_actor_state
-          ],
-          {:tuple, [:atom, {:tuple, [:function, :atom]}, :maty_actor_state]}
-        }
-      ]
-
-      [
-        {
-          [
-            {:tuple, [:title, :binary]},
-            :atom,
-            :session_ctx,
-            :maty_actor_state
-          ],
-          {:tuple, [:suspend, {:tuple, [:function, :atom]}, :maty_actor_state]}
-        }
-      ]
-
-      # {{name, arity}, kind, meta_1,
-      #  [
-      #    {meta_1, args_1, [], {:__block__, [], block_1}},
-      #    {meta_2, args_2, [], {:__block__, [], block_1}}
-      #  ]}
-
-      cond do
-        st.from != role ->
-          error = Error.participant_mismatch(func, line, expected: st.from, got: role)
-          Logger.error(error)
-          {:error, error, var_env}
-
-        true ->
-          # all I know at this point is that there is a @spec associated with this function,
-          # but not what that spec is and whether it's a valid handler type
-          # need to check that it actually matches that shape I so eagerly destructured above
-          # need to make sure that:
-          # - first variable is a message = {:atom, var} or something equivalent
-          # - second variable is a `role` (and later on that the session type :from role matches)
-          # - third variable is a `session_ctx` (if the argument passed is just a variable then that's fine, if it is destructured it should match the correct structure, if it's anything else it should probably error)
-          # - fourth variable is a `maty_actor_state`
-
-          var_env = %{
-            payload_var => :binary,
-            session_ctx_var => :session_ctx,
-            maty_actor_state_var => :maty_actor_state
-          }
-
-          {:ok, {:just, {nil, st}}, var_env}
-      end
-    else
-      {:handler, :error} ->
-        error = Error.unannotated_handler(func)
-        Logger.error(error)
-        {:error, error, var_env}
-
-      {:spec, :error} ->
-        error = Error.missing_spec_annotation(func)
-        Logger.error(error)
-        {:error, error, var_env}
-    end
-
-    :in_progress
   end
 
   def session_typecheck_block(module, var_env, st, expressions) when is_list(expressions) do

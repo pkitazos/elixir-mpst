@@ -5,15 +5,10 @@ defmodule Maty.Typechecker do
   - Called by `Maty.Hook` at compile-time
   - Delegates detailed checks to submodules
   """
-  alias Maty.ST
 
   alias Maty.Typechecker.Tc, as: TC
 
-  alias Maty.Typechecker.{
-    Preprocessor,
-    SessionChecker,
-    Error
-  }
+  alias Maty.Typechecker.{Preprocessor, Error}
 
   require Logger
 
@@ -42,21 +37,18 @@ defmodule Maty.Typechecker do
   @doc """
   Called by Hook at `@before_compile`.
   """
-  def handle_before_compile(env) do
-    # debug
-    if env.module == TwoBuyer.Participants.Seller do
-      attr = Module.get_attribute(env.module, :type_specs)
+  def handle_before_compile(_env) do
+    # attr = Module.get_attribute(env.module, :type_specs)
 
-      module_header =
-        "\n-------------------- #{inspect(env.module)} -------------------"
+    # module_header =
+    #   "\n-------------------- #{inspect(env.module)} -------------------"
 
-      display =
-        Enum.map_join(attr, "\n\n", fn {k, v} ->
-          "#{inspect(k)} --> \n#{inspect(v)}"
-        end)
+    # display =
+    #   Enum.map_join(attr, "\n\n", fn {k, v} ->
+    #     "#{inspect(k)} --> \n#{inspect(v)}"
+    #   end)
 
-      IO.puts(module_header <> "\n" <> display <> "\n")
-    end
+    # IO.puts(module_header <> "\n" <> display <> "\n")
   end
 
   @doc """
@@ -65,151 +57,9 @@ defmodule Maty.Typechecker do
   def handle_after_compile(env, bytecode) do
     dbgi_map = read_debug_info!(bytecode)
 
-    fn_definition = SessionChecker.sample_handler()
-
     # IO.inspect(dbgi_map[:definitions])
 
-    {fn_info, _kind, _meta0, fn_clauses} = fn_definition
-
-    _function_block = [
-      {:=, [line: 68, column: 12],
-       [
-         {:amount, [version: 3, line: 68, column: 5], nil},
-         {:lookup_price, [line: 68, column: 14],
-          [{:title, [version: 0, line: 68, column: 27], nil}]}
-       ]},
-      {:maty_send, [line: 70, column: 5],
-       [
-         {:session, [version: 1, line: 70, column: 15], nil},
-         :buyer1,
-         {:quote, {:amount, [version: 3, line: 70, column: 42], nil}}
-       ]},
-      {:{}, [line: 71, column: 5],
-       [
-         :suspend,
-         {{:&, [line: 71, column: 17],
-           [
-             {:/, [],
-              [
-                {{:., [line: 71, column: 28], [TwoBuyer.Participants.Seller, :decision_handler]},
-                 [no_parens: true, line: 71, column: 29], []},
-                4
-              ]}
-           ]}, :buyer2},
-         {:state, [version: 2, line: 71, column: 59], nil}
-       ]}
-    ]
-
-    var_env = %{title: :binary, session: :session_ctx, state: :maty_actor_state}
-
-    pre_st = %ST.SOut{
-      to: :buyer1,
-      branches: [
-        %ST.SBranch{
-          label: :quote,
-          payload: :number,
-          continue_as: %ST.SName{handler: :decision_handler}
-        }
-      ]
-    }
-
-    result1 =
-      TC.session_typecheck(
-        env.module,
-        var_env,
-        pre_st,
-        {:=, [line: 68, column: 12],
-         [
-           {:amount, [version: 3, line: 68, column: 5], nil},
-           {:lookup_price, [line: 68, column: 14],
-            [{:title, [version: 0, line: 68, column: 27], nil}]}
-         ]}
-      )
-
-    # Logger.log(:debug, "session typechecking 1: #{inspect(result1)}")
-
-    var_env_1 = %{
-      session: :session_ctx,
-      state: :maty_actor_state,
-      title: :binary,
-      amount: :number
-    }
-
-    pre_st_1 = %ST.SOut{
-      to: :buyer1,
-      branches: [
-        %ST.SBranch{
-          label: :quote,
-          payload: :number,
-          continue_as: %ST.SName{handler: :decision_handler}
-        }
-      ]
-    }
-
-    {:ok, {:just, {:number, ^pre_st_1}}, ^var_env_1} = result1
-
-    result2 =
-      TC.session_typecheck(
-        env.module,
-        var_env_1,
-        pre_st_1,
-        {:maty_send, [line: 70, column: 5],
-         [
-           {:session, [version: 1, line: 70, column: 15], nil},
-           :buyer1,
-           {:quote, {:amount, [version: 3, line: 70, column: 42], nil}}
-         ]}
-      )
-
-    # Logger.log(:debug, "session typechecking 2: #{inspect(result2)}")
-
-    var_env_2 = var_env_1
-
-    pre_st_2 = %ST.SName{handler: :decision_handler}
-
-    {:ok, {:just, {nil, ^pre_st_2}}, ^var_env_2} = result2
-
-    result3 =
-      TC.session_typecheck(
-        env.module,
-        var_env_2,
-        pre_st_2,
-        {:{}, [line: 71, column: 5],
-         [
-           :suspend,
-           {{:&, [line: 71, column: 17],
-             [
-               {:/, [],
-                [
-                  {{:., [line: 71, column: 28],
-                    [TwoBuyer.Participants.Seller, :decision_handler]},
-                   [no_parens: true, line: 71, column: 29], []},
-                  4
-                ]}
-             ]}, :buyer2},
-           {:state, [version: 2, line: 71, column: 59], nil}
-         ]}
-      )
-
-    # Logger.log(:debug, "session typechecking 3: #{inspect(result3)}")
-
-    var_env_3 = var_env_2
-
-    {:ok, :nothing, ^var_env_3} = result3
-
-    # result_block =
-    #   TC.session_typecheck_block(
-    #     env.module,
-    #     var_env,
-    #     pre_st,
-    #     function_block
-    #   )
-
-    # Logger.log(:debug, "session typechecking block: #{inspect(result_block)}")
-
-    # var_env_N = var_env_3
-
-    # {:ok, :nothing, ^var_env_N} = result_block
+    {fn_info, _kind, _meta0, fn_clauses} = sample_handler()
 
     result_header =
       TC.session_typecheck_handler(
@@ -218,15 +68,11 @@ defmodule Maty.Typechecker do
         fn_clauses
       )
 
-    Logger.log(:debug, "session typechecking header: #{inspect(result_header)}")
+    Logger.log(:debug, "session typechecking handler: #{inspect(result_header)}")
 
     _module_definitions =
       dbgi_map[:definitions]
       |> Enum.filter(fn {_, _, meta, _} -> Keyword.get(meta, :context) != Maty.Actor end)
-
-    # resultX = TC.session_typecheck_handler(env.module, %{}, fn_definition)
-
-    # Logger.log(:debug, "session typechecking: #{inspect(resultX)}")
   end
 
   defp read_debug_info!(bytecode) do
@@ -256,5 +102,48 @@ defmodule Maty.Typechecker do
       :error, error ->
         throw({:error, inspect(error)})
     end
+  end
+
+  defp sample_handler() do
+    {{:title_handler, 4}, :def, [line: 67, column: 7],
+     [
+       {[line: 67, column: 7],
+        [
+          {:title, {:title, [version: 0, line: 67, column: 30], nil}},
+          :buyer1,
+          {:session, [version: 1, line: 67, column: 47], nil},
+          {:state, [version: 2, line: 67, column: 56], nil}
+        ], [],
+        {:__block__, [],
+         [
+           {:=, [line: 68, column: 12],
+            [
+              {:amount, [version: 3, line: 68, column: 5], nil},
+              {:lookup_price, [line: 68, column: 14],
+               [{:title, [version: 0, line: 68, column: 27], nil}]}
+            ]},
+           {:maty_send, [line: 70, column: 5],
+            [
+              {:session, [version: 1, line: 70, column: 15], nil},
+              :buyer1,
+              {:quote, {:amount, [version: 3, line: 70, column: 42], nil}}
+            ]},
+           {:{}, [line: 71, column: 5],
+            [
+              :suspend,
+              {{:&, [line: 71, column: 17],
+                [
+                  {:/, [],
+                   [
+                     {{:., [line: 71, column: 28],
+                       [TwoBuyer.Participants.Seller, :decision_handler]},
+                      [no_parens: true, line: 71, column: 29], []},
+                     4
+                   ]}
+                ]}, :buyer2},
+              {:state, [version: 2, line: 71, column: 59], nil}
+            ]}
+         ]}}
+     ]}
   end
 end
