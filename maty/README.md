@@ -10,7 +10,7 @@ by adding `maty` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:maty, "~> 0.6.2"}
+    {:maty, "~> 0.7.0"}
   ]
 end
 ```

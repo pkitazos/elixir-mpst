@@ -1,7 +1,6 @@
 defmodule Maty.Typechecker.Tc do
-  alias Maty.ST
+  alias Maty.{ST, Utils}
   alias Maty.Typechecker.Error
-  alias Maty.Utils
 
   require Logger
 
@@ -109,10 +108,18 @@ defmodule Maty.Typechecker.Tc do
   end
 
   defp extract_body({:__block__, [], block}), do: block
-  defp extract_body(expr), do: expr
+  defp extract_body(expr), do: [expr]
 
   defguardp is_handler_return(type) when is_atom(type) and type in [:done, :suspend]
   defguardp is_handler_return(type) when is_tuple(type) and type == {:|, [:done, :suspend]}
+
+  defguardp is_supported_type(val)
+            when is_atom(val) or
+                   is_binary(val) or
+                   is_boolean(val) or
+                   is_number(val) or
+                   is_pid(val) or
+                   (is_map_key(val, :__struct__) and val.__struct__ == Date)
 
   def session_typecheck_handler(module, {name, arity} = fn_info, clauses) do
     annotated_handlers = Module.get_attribute(module, :annotated_handlers) |> Enum.into(%{})
@@ -127,8 +134,8 @@ defmodule Maty.Typechecker.Tc do
       defs = Enum.zip([Enum.reverse(fn_types), clauses, st.branches])
 
       # for each clause for a given function do a bunch of checks
-      for {{{spec_args, spec_return}, clause, branch}, idx} <- Enum.with_index(defs, 1) do
-        Logger.debug("clause #{idx}/#{length(clauses)}")
+      for {{{spec_args, spec_return}, clause, branch}, _idx} <- Enum.with_index(defs, 1) do
+        # Logger.debug("clause #{idx}/#{length(clauses)}")
 
         # do the spec checks here
         with {:spec_args, [message_t, role_t, session_ctx_t, state_t]} <- {:spec_args, spec_args},
@@ -140,7 +147,7 @@ defmodule Maty.Typechecker.Tc do
           {_meta, args, _guards, block} = clause
 
           [
-            {label, {payload_var, _, _}},
+            {label, payload},
             role,
             {session_ctx_var, _, _},
             {maty_actor_state_var, _, _}
@@ -148,10 +155,23 @@ defmodule Maty.Typechecker.Tc do
 
           # construct the type environment
           var_env = %{
-            payload_var => :binary,
             session_ctx_var => :session_ctx,
             maty_actor_state_var => :maty_actor_state
           }
+
+          var_env =
+            case payload do
+              val when is_supported_type(val) ->
+                var_env
+
+              {payload_var, _, nil} when is_atom(payload_var) ->
+                var_env = Map.put(var_env, payload_var, payload_t)
+                var_env
+
+              other ->
+                Logger.error("Payload has some other value: #{inspect(other)}")
+                var_env
+            end
 
           cond do
             role != st.from ->
@@ -171,6 +191,8 @@ defmodule Maty.Typechecker.Tc do
               res = session_typecheck_block(module, var_env, st, body)
 
               # todo: typecheck the function return type against the spec return type
+              # will need to change the session typecheck function return type for that
+
               res
           end
         else
@@ -323,6 +345,14 @@ defmodule Maty.Typechecker.Tc do
           :error ->
             {:error, "this function doesn't seem to have a session type stored"}
         end
+    end
+  end
+
+  def session_typecheck(_module, var_env, %ST.SEnd{}, {:{}, _, [:done, :unit, state_ast]}) do
+    with {:ok, :maty_actor_state, var_env} <- typecheck(var_env, state_ast) do
+      {:ok, :nothing, var_env}
+    else
+      {:error, error, _var_env} -> {:error, error, var_env}
     end
   end
 

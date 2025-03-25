@@ -38,6 +38,16 @@ Multiparty Session Typing for Elixir apps using the Maty language design
 
 ## Tasks
 
+### things to typecheck
+- [ ] binary operators
+- [ ] branch and control flow
+- [ ] non-variables as arguments to handlers
+
+- [ ] non-handler functions
+- [ ] make sure that there are no session types left over
+
+
+### general
 - [ ] clean up repo (move the unrelated sub-directories)
 - [ ] centralise errors to dedicated module
 - [ ] polish up error reporting to use meta information

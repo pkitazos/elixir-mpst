@@ -1,6 +1,6 @@
 defmodule TwoBuyer.Participants.Seller do
   use Maty.Actor
-  @after_compile Maty.Hook
+  # @after_compile Maty.Hook
 
   @role :seller
 
@@ -52,7 +52,7 @@ defmodule TwoBuyer.Participants.Seller do
   end
 
   @handler :decision_handler
-  @spec decision_handler({:address, binary()}, :buyer2, session_ctx(), maty_actor_state()) ::
+  @spec decision_handler({:address, binary()}, role(), session_ctx(), maty_actor_state()) ::
           done()
   def decision_handler({:address, addr}, :buyer2, session, state) do
     date = shipping_date(addr)
@@ -62,7 +62,7 @@ defmodule TwoBuyer.Participants.Seller do
   end
 
   @handler :decision_handler
-  @spec decision_handler({:quit, :unit}, :buyer2, session_ctx(), maty_actor_state()) :: done()
+  @spec decision_handler({:quit, :unit}, role(), session_ctx(), maty_actor_state()) :: done()
   def decision_handler({:quit, :unit}, :buyer2, _session, state), do: {:done, :unit, state}
 
   # -----------------------------------------------------------------
