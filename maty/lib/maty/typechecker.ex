@@ -80,18 +80,41 @@ defmodule Maty.Typechecker do
     handler_definitions =
       dbgi_map[:definitions] |> Enum.filter(&(elem(&1, 0) in module_handlers))
 
-    for {fn_info, :def, _meta, fn_clauses} <- handler_definitions do
-      res =
-        TC.session_typecheck_handler(
-          env.module,
-          fn_info,
-          fn_clauses
-        )
+    {fn_info, :def, _meta, fn_clauses} =
+      Enum.find(handler_definitions, fn x -> elem(x, 0) == {:share_handler, 4} end)
 
-      # todo: typecheck normal functions
+    res =
+      TC.session_typecheck_handler(
+        env.module,
+        fn_info,
+        fn_clauses
+      )
 
-      Logger.debug("session typechecking handler: #{inspect(fn_info)}\n#{inspect(res)}")
-    end
+    Logger.debug("session typechecking handler: #{inspect(fn_info)}\n#{inspect(res)}")
+
+    # for {fn_info, :def, _meta, fn_clauses} <- handler_definitions do
+    #   res =
+    #     TC.session_typecheck_handler(
+    #       env.module,
+    #       fn_info,
+    #       fn_clauses
+    #     )
+
+    #   Logger.debug("session typechecking handler: #{inspect(fn_info)}\n#{inspect(res)}")
+    # end
+
+    # function_definitions = [Maty.Typechecker.Ast.lookup_price(), shipping_date]
+
+    # for {fn_info, _kind, _meta, fn_clauses} <- function_definitions do
+    #   res =
+    #     TC.typecheck_function(
+    #       env.module,
+    #       fn_info,
+    #       fn_clauses
+    #     )
+
+    #   Logger.debug("typechecking regular function: #{inspect(fn_info)}\n#{inspect(res)}")
+    # end
   end
 
   defp read_debug_info!(bytecode) do

@@ -16,6 +16,13 @@ defmodule TwoBuyer.Participants.Seller do
   def init_actor(ap_pid) do
     initial_state = %{sessions: %{}, callbacks: %{}, global: %{ap_pid: ap_pid}}
 
+    # to typecheck this function I need to make sure that the function calls register at some point with the following:
+    # - a pid
+    # - an atom
+    # - a function with arity 2 that suspends with a handler
+    # - some maty actor state
+
+    # and that it returns a tuple {:ok, maty_actor updated_state}
     {:ok, updated_state} =
       register(
         ap_pid,
@@ -31,6 +38,8 @@ defmodule TwoBuyer.Participants.Seller do
 
   @spec install(session(), maty_actor_state()) :: suspend()
   def install(_session, state) do
+    # in this case all that's important to me is that this is a function with arity 2 which suspends that's it
+    # oh it has to suspend with a handler
     {:ok, updated_state} =
       register(
         state.global.ap_pid,

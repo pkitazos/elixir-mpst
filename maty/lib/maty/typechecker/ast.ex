@@ -1,7 +1,12 @@
 defmodule Maty.Typechecker.Ast do
   def throwaway() do
+    init_actor()
+    install()
     title_handler()
     decision_handler()
+    lookup_price()
+    shipping_date()
+
     share_handler()
     date_handler()
   end
@@ -174,6 +179,118 @@ defmodule Maty.Typechecker.Ast do
         ], [],
         {:{}, [line: 46, column: 5],
          [:done, :unit, {:state, [version: 2, line: 46, column: 20], nil}]}}
+     ]}
+  end
+
+  def lookup_price() do
+    {{:lookup_price, 1}, :defp, [line: 71, column: 8],
+     [
+       {[line: 71, column: 8], [{:_title_str, [version: 0, line: 71, column: 21], nil}], [], 150}
+     ]}
+  end
+
+  def shipping_date() do
+    {{:shipping_date, 1}, :defp, [line: 74, column: 8],
+     [
+       {[line: 74, column: 8], [{:_addr_str, [version: 0, line: 74, column: 22], nil}], [],
+        {:%, [line: 74],
+         [Date, {:%{}, [line: 74], [calendar: Calendar.ISO, year: 2021, month: 12, day: 31]}]}}
+     ]}
+  end
+
+  def install() do
+    {{:install, 2}, :def, [line: 33, column: 7],
+     [
+       {[line: 33, column: 7],
+        [
+          {:_session, [version: 0, line: 33, column: 15], nil},
+          {:state, [version: 1, line: 33, column: 25], nil}
+        ], [],
+        {:__block__, [],
+         [
+           {:=, [line: 34, column: 26],
+            [
+              {:ok, {:updated_state, [version: 2, line: 34, column: 11], nil}},
+              {:register, [line: 35, column: 7],
+               [
+                 {{:., [line: 36, column: 21],
+                   [
+                     {{:., [line: 36, column: 14],
+                       [{:state, [version: 1, line: 36, column: 9], nil}, :global]},
+                      [no_parens: true, line: 36, column: 15], []},
+                     :ap_pid
+                   ]}, [no_parens: true, line: 36, column: 22], []},
+                 :seller,
+                 {:&, [line: 38, column: 9],
+                  [
+                    {:/, [],
+                     [
+                       {{:., [line: 38, column: 20], [TwoBuyer.Participants.Seller, :install]},
+                        [no_parens: true, line: 38, column: 21], []},
+                       2
+                     ]}
+                  ]},
+                 {:state, [version: 1, line: 39, column: 9], nil}
+               ]}
+            ]},
+           {:{}, [line: 42, column: 5],
+            [
+              :suspend,
+              {{:&, [line: 42, column: 17],
+                [
+                  {:/, [],
+                   [
+                     {{:., [line: 42, column: 28],
+                       [TwoBuyer.Participants.Seller, :title_handler]},
+                      [no_parens: true, line: 42, column: 29], []},
+                     4
+                   ]}
+                ]}, :buyer1},
+              {:updated_state, [version: 2, line: 42, column: 56], nil}
+            ]}
+         ]}}
+     ]}
+  end
+
+  def init_actor do
+    {{:init_actor, 1}, :def, [line: 16, column: 7],
+     [
+       {[line: 16, column: 7], [{:ap_pid, [version: 0, line: 16, column: 18], nil}], [],
+        {:__block__, [],
+         [
+           {:=, [line: 17, column: 19],
+            [
+              {:initial_state, [version: 1, line: 17, column: 5], nil},
+              {:%{}, [line: 17, column: 21],
+               [
+                 sessions: {:%{}, [line: 17, column: 33], []},
+                 callbacks: {:%{}, [line: 17, column: 49], []},
+                 global:
+                   {:%{}, [line: 17, column: 62],
+                    [ap_pid: {:ap_pid, [version: 0, line: 17, column: 72], nil}]}
+               ]}
+            ]},
+           {:=, [line: 19, column: 26],
+            [
+              {:ok, {:updated_state, [version: 2, line: 19, column: 11], nil}},
+              {:register, [line: 20, column: 7],
+               [
+                 {:ap_pid, [version: 0, line: 21, column: 9], nil},
+                 :seller,
+                 {:&, [line: 23, column: 9],
+                  [
+                    {:/, [],
+                     [
+                       {{:., [line: 23, column: 20], [TwoBuyer.Participants.Seller, :install]},
+                        [no_parens: true, line: 23, column: 21], []},
+                       2
+                     ]}
+                  ]},
+                 {:initial_state, [version: 1, line: 24, column: 9], nil}
+               ]}
+            ]},
+           {:ok, {:updated_state, [version: 2, line: 27, column: 11], nil}}
+         ]}}
      ]}
   end
 end

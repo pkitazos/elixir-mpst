@@ -39,7 +39,7 @@ defmodule Maty.Typechecker.Tc do
   def typecheck(var_env, val) when is_reference(val), do: {:ok, :reference, var_env}
 
   # date literal
-  def typecheck(var_env, %Date{}), do: {:ok, :date, var_env}
+  def typecheck(var_env, {:%, _, [Date, {:%{}, _, _}]}), do: {:ok, :date, var_env}
 
   # date type
   def typecheck(var_env, {{:., _, [{:__aliases__, _, [:Date]}, :t]}, _, []}),
@@ -107,11 +107,71 @@ defmodule Maty.Typechecker.Tc do
     end
   end
 
-  defp extract_body({:__block__, [], block}), do: block
+  defp extract_body({:__block__, _, block}), do: block
   defp extract_body(expr), do: [expr]
 
-  defguardp is_handler_return(type) when is_atom(type) and type in [:done, :suspend]
+  def typecheck_function(module, {_name, arity} = fn_info, clauses) do
+    type_specs = Module.get_attribute(module, :type_specs) |> Enum.into(%{})
+
+    with {:spec, {:ok, fn_types}} <- {:spec, Map.fetch(type_specs, fn_info)} do
+      defs = fn_types |> Enum.reverse() |> Enum.zip(clauses)
+
+      for {{spec_args, spec_return}, {_meta, args, _guards, block}} <- defs do
+        # todo: typecheck args
+        # if they are variables add them to the type environment
+        # if they are expressions check that the expression evaluates to the type specified in the spec
+
+        var_env = %{}
+
+        with {:spec_args, ^arity} <- {:spec_args, length(spec_args)} do
+          # todo convert to reduce or reduce while
+          spec_errors =
+            for {arg_type, arg} <- Enum.zip(spec_args, args) do
+              case arg do
+                {arg_var, _, nil} ->
+                  var_env = Map.put(var_env, arg_var, arg_type)
+                  {:ok, arg_type, var_env}
+
+                other ->
+                  Logger.error("arg looks like this: #{inspect(other)}")
+                  {:error, "not yet handled", var_env}
+              end
+            end
+            |> Enum.any?(fn {result, _, _} -> result == :error end)
+
+          cond do
+            spec_errors ->
+              {:error, "at least one argument is not well typed"}
+
+            true ->
+              body = block |> extract_body()
+              res = typecheck(var_env, body)
+
+              with {:ok, {:list, types}, _var_env} <- res,
+                   {:return, ^spec_return} <- {:return, List.last(types)} do
+                {:ok, spec_return, var_env}
+              else
+                {:error, error, _var_env} -> {:error, error, var_env}
+                {:return, _other} -> {:error, "return types don't match", var_env}
+              end
+          end
+        else
+          {:spec_args, _} ->
+            error = "arity mismatch"
+            Logger.error(error)
+            {:error, error}
+        end
+      end
+    else
+      {:spec, :error} ->
+        error = "no spec for this function"
+        Logger.error(error)
+        {:error, error}
+    end
+  end
+
   defguardp is_handler_return(type) when is_tuple(type) and type == {:|, [:done, :suspend]}
+  defguardp is_handler_return(type) when is_atom(type) and type in [:done, :suspend]
 
   defguardp is_supported_type(val)
             when is_atom(val) or
@@ -165,8 +225,7 @@ defmodule Maty.Typechecker.Tc do
                 var_env
 
               {payload_var, _, nil} when is_atom(payload_var) ->
-                var_env = Map.put(var_env, payload_var, payload_t)
-                var_env
+                Map.put(var_env, payload_var, payload_t)
 
               other ->
                 Logger.error("Payload has some other value: #{inspect(other)}")
@@ -221,9 +280,11 @@ defmodule Maty.Typechecker.Tc do
             Logger.error(error)
             {:error, error}
 
-          {:spec_return, _} ->
+          {:spec_return, other} ->
             error = "invalid return type for handler"
-            Logger.error(error)
+
+            Logger.error("#{error}: #{inspect(other)} is #{inspect(other)}")
+
             {:error, error}
         end
       end
@@ -256,13 +317,13 @@ defmodule Maty.Typechecker.Tc do
         {:ok, :nothing, new_env} ->
           {:halt, {:ok, :nothing, new_env}}
 
-        {:error, error_msg, new_env} ->
-          {:halt, {:error, error_msg, new_env}}
+        {:error, error, new_env} ->
+          {:halt, {:error, error, new_env}}
 
         other ->
-          Logger.error("Unexpected return from session_typecheck: #{inspect(other)}")
-
-          {:halt, other}
+          error = "Unexpected return from session_typecheck: #{inspect(other)}"
+          Logger.error(error)
+          {:halt, {:error, error, var_env}}
       end
     end)
   end
@@ -294,7 +355,41 @@ defmodule Maty.Typechecker.Tc do
         end
 
       nil ->
-        {:error, "message label incompatible with session precondition"}
+        {:error, "message label incompatible with session precondition", var_env}
+    end
+  end
+
+  def session_typecheck(module, var_env, st, {:case, _meta, [expr, [do: branches]]}) do
+    with {:ok, _expr_type, var_env} <- typecheck(var_env, expr) do
+      all_branches = MapSet.new(st.branches)
+      st_branches = flatten_branches(st)
+
+      handled_branch_ids =
+        for {:->, _meta, [_, branch_block]} <- branches do
+          body = branch_block |> extract_body()
+
+          [handled_id] =
+            for st_branch <- st_branches, reduce: [] do
+              acc ->
+                res = session_typecheck_block(module, var_env, st_branch, body)
+                branch_id = st_branch.branches |> List.first()
+
+                case res do
+                  {:ok, :nothing, _} -> [branch_id | acc]
+                  {:error, _, _} -> acc
+                end
+            end
+
+          handled_id
+        end
+        |> MapSet.new()
+
+      cond do
+        all_branches != handled_branch_ids -> {:error, "unhandled session type branches", var_env}
+        true -> {:ok, :nothing, var_env}
+      end
+    else
+      error -> error
     end
   end
 
@@ -431,8 +526,20 @@ defmodule Maty.Typechecker.Tc do
       end
     else
       :error ->
-        Logger.error("var: #{inspect(name)} - ctx: #{inspect(args)}\n\n#{inspect(st)}")
+        Logger.error("var: #{inspect(name)}\n\n ctx: #{inspect(args)}\n\n#{inspect(st)}")
         {:error, "function doesn't seem to have a type", var_env}
     end
   end
+
+  def flatten_branches(%ST.SOut{to: role} = st) do
+    st.branches |> Enum.map(fn x -> %ST.SOut{to: role, branches: [x]} end)
+  end
+
+  def flatten_branches(%ST.SIn{from: role} = st) do
+    st.branches |> Enum.map(fn x -> %ST.SIn{from: role, branches: [x]} end)
+  end
+
+  # def merge_branches(%ST.SOut{to: role} = st, branches) do
+  #   %ST.SOut{to: role, branches: branches}
+  # end
 end

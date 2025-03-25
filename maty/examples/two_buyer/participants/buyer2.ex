@@ -1,5 +1,6 @@
 defmodule TwoBuyer.Participants.Buyer2 do
   use Maty.Actor
+  @after_compile Maty.Hook
 
   @role :buyer2
 
@@ -27,8 +28,8 @@ defmodule TwoBuyer.Participants.Buyer2 do
   @handler :share_handler
   @spec share_handler({:share, number()}, role(), session_ctx(), maty_actor_state()) ::
           suspend() | done()
-  def share_handler({:share, amount}, :buyer1, session, state) do
-    if amount > 100 do
+  def share_handler({:share, _amount}, :buyer1, session, state) do
+    if true do
       maty_send(session, :seller, {:quit, :unit})
       {:done, :unit, state}
     else
