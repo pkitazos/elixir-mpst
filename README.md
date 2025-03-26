@@ -30,8 +30,8 @@ Multiparty Session Typing for Elixir apps using the Maty language design
   you are bound to run into problems here at which point we will re-asses
 - ...
 - [ ] Scribble protocol code-gen
-- [ ] rewrite typechecker in Elixir
-- [ ] actually typechecking the AST using the Maty typechecker
+- [x] rewrite typechecker in Elixir
+- [x] actually typechecking the AST using the Maty typechecker
 - ...
 - [ ] evaluation: case studies (w11)
 
@@ -39,11 +39,12 @@ Multiparty Session Typing for Elixir apps using the Maty language design
 ## Tasks
 
 ### things to typecheck
-- [ ] binary operators
-- [ ] branch and control flow
+- [x] binary operators
+- [x] branch and control flow
 - [ ] non-variables as arguments to handlers
 
-- [ ] non-handler functions
+- [x] helper functions
+- [ ] init_actor callback
 - [ ] make sure that there are no session types left over
 
 

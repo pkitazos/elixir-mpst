@@ -1,6 +1,25 @@
-Buyer1 -> Seller : title(String) .
-Seller -> Buyer1 : quote(Int) .
-Buyer1 -> Buyer2 : share(Int) . {
-    Buyer2 -> Seller : address(String) . Seller -> Buyer2 : date(Date) . end,
-    Buyer2 -> Seller : quit(Unit) . end
+Buyer1 -> Seller : title(string) .
+Seller -> Buyer1 : quote(number) .
+Buyer1 -> Buyer2 : share(number) . {
+    Buyer2 -> Seller : address(string) . Seller -> Buyer2 : date(date) . end,
+    Buyer2 -> Seller : quit(unit) . end
+}
+
+
+B1->S:title(string).S->B1:quote(number).B1->B2:share(number).{
+    B2->S:address(string).S->B2:date(date).end,
+    B2->S:quit(unit).end
+}
+
+
+S === &B1:title(string).+B1:quote(number).&B2:{
+    address(string).+B2:date(date).end,
+    quit(unit).end
+}
+
+B1 === +S:title(string).&S:quote(number).+B2:share(number).end
+
+B2 === &B1:share(number).+S:{
+    address(string).&S:date(date).end,
+    quit(unit).end
 }
