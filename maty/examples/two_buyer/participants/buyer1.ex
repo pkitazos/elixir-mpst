@@ -11,6 +11,7 @@ defmodule TwoBuyer.Participants.Buyer1 do
   @st {:quote_handler, "seller&{quote(number).buyer2!{share(number)}}"}
 
   @impl true
+  @spec init_actor(any()) :: {:ok, maty_actor_state()}
   def init_actor({ap_pid, title}) do
     initial_state = %{sessions: %{}, callbacks: %{}}
 

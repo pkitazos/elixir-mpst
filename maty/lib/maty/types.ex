@@ -54,6 +54,7 @@ defmodule Maty.Types do
     :binary,
     :boolean,
     :date,
+    :function,
     :number,
     :pid,
     :string,

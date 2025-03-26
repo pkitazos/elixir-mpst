@@ -21,10 +21,12 @@ defmodule Maty.Actor do
         Maty.Actor.start_link(__MODULE__, args)
       end
 
+      @spec maty_send({session(), role()}, role(), {atom(), any()}) :: no_return()
       def maty_send({session, from}, to, msg) do
         send(session.participants[to], {:maty_message, session.id, to, from, msg})
       end
 
+      @spec register(pid(), role(), function(), maty_actor_state()) :: {:ok, maty_actor_state()}
       def register(ap_pid, role, callback, state) do
         init_token = make_ref()
         send(ap_pid, {:register, role, self(), init_token})

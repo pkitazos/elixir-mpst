@@ -46,10 +46,15 @@ defmodule Maty.Typechecker.Tc do
     do: {:ok, :date, var_env}
 
   # variables
-  def typecheck(var_env, {var, _meta, ctx}) when is_atom(var) and (is_atom(ctx) or is_nil(ctx)) do
+  def typecheck(var_env, {var, _meta, ctx} = expr)
+      when is_atom(var) and (is_atom(ctx) or is_nil(ctx)) do
     case Map.fetch(var_env, var) do
-      {:ok, type} -> {:ok, type, var_env}
-      :error -> {:error, "variable doesn't exist", var_env}
+      {:ok, type} ->
+        {:ok, type, var_env}
+
+      :error ->
+        Logger.error("var: #{inspect(expr)}")
+        {:error, Error.variable_not_exist(), var_env}
     end
   end
 
@@ -59,8 +64,8 @@ defmodule Maty.Typechecker.Tc do
          {:rhs, {:ok, rhs_type, _}} <- {:rhs, typecheck(var_env, rhs)} do
       {:ok, {:tuple, [lhs_type, rhs_type]}, var_env}
     else
-      {:lhs, {:error, msg, _}} -> {:error, "lhs failed: #{msg}", var_env}
-      {:rhs, {:error, msg, _}} -> {:error, "rhs failed: #{msg}", var_env}
+      {:lhs, {:error, msg, _}} -> {:error, Error.lhs_failed(msg), var_env}
+      {:rhs, {:error, msg, _}} -> {:error, Error.rhs_failed(msg), var_env}
     end
   end
 
@@ -74,20 +79,22 @@ defmodule Maty.Typechecker.Tc do
 
   # lists
   def typecheck(var_env, vals) when is_list(vals) do
-    types =
+    res =
       vals
-      |> Enum.reduce_while([], fn x, acc ->
+      |> Enum.reduce_while({[], var_env}, fn x, {acc, var_env} ->
         case typecheck(var_env, x) do
-          {:ok, type, _var_env} -> {:cont, [type | acc]}
+          {:ok, type, var_env} ->
+            {:cont, {[type | acc], var_env}}
+
           # todo give better error messages
-          {:error, msg, _var_env} -> {:halt, msg}
+          {:error, msg, _var_env} ->
+            {:halt, {:error, msg, var_env}}
         end
       end)
-      |> Enum.reverse()
 
-    cond do
-      Utils.deep_contains?(types, :error) -> {:error, types, var_env}
-      true -> {:ok, {:list, types}, var_env}
+    case res do
+      {types, _} -> {:ok, {:list, Enum.reverse(types)}, var_env}
+      {:error, error, var_env} -> {:error, error, var_env}
     end
   end
 
@@ -104,13 +111,8 @@ defmodule Maty.Typechecker.Tc do
     with {:ok, lhs_type, var_env} <- typecheck(var_env, lhs),
          {:ok, rhs_type, var_env} <- typecheck(var_env, rhs) do
       case {lhs_type, rhs_type} do
-        {:number, :number} ->
-          {:ok, :number, var_env}
-
-        _ ->
-          {:error,
-           "Binary operator #{op} requires numbers, got #{inspect(lhs_type)} and #{inspect(rhs_type)}",
-           var_env}
+        {:number, :number} -> {:ok, :number, var_env}
+        _ -> {:error, Error.binary_operator_requires_numbers(op, lhs_type, rhs_type), var_env}
       end
     end
   end
@@ -120,13 +122,8 @@ defmodule Maty.Typechecker.Tc do
     with {:ok, lhs_type, var_env} <- typecheck(var_env, lhs),
          {:ok, rhs_type, var_env} <- typecheck(var_env, rhs) do
       case {lhs_type, rhs_type} do
-        {:binary, :binary} ->
-          {:ok, :binary, var_env}
-
-        _ ->
-          {:error,
-           "Binary operator <> requires binaries, got #{inspect(lhs_type)} and #{inspect(rhs_type)}",
-           var_env}
+        {:binary, :binary} -> {:ok, :binary, var_env}
+        _ -> {:error, Error.binary_operator_requires_binaries(lhs_type, rhs_type), var_env}
       end
     end
   end
@@ -142,9 +139,8 @@ defmodule Maty.Typechecker.Tc do
           if lhs_type == rhs_type do
             {:ok, :boolean, var_env}
           else
-            {:error,
-             "Comparison operator #{op} requires both operands to be of the same type, got #{inspect(lhs_type)} and #{inspect(rhs_type)}",
-             var_env}
+            error = Error.comparison_operator_requires_same_type(op, lhs_type, rhs_type)
+            {:error, error, var_env}
           end
 
         # for ordering comparisons, we assume numbers are required
@@ -152,9 +148,8 @@ defmodule Maty.Typechecker.Tc do
           if lhs_type == :number and rhs_type == :number do
             {:ok, :boolean, var_env}
           else
-            {:error,
-             "Comparison operator #{op} requires both operands to be numbers, got #{inspect(lhs_type)} and #{inspect(rhs_type)}",
-             var_env}
+            error = Error.comparison_operator_requires_numbers(op, lhs_type, rhs_type)
+            {:error, error, var_env}
           end
       end
     end
@@ -166,17 +161,183 @@ defmodule Maty.Typechecker.Tc do
       if expr_type == :boolean do
         {:ok, :boolean, var_env}
       else
-        {:error, "Logical operator not requires a boolean operand, got #{inspect(expr_type)}",
-         var_env}
+        error = Error.logical_operator_requires_boolean("not", expr_type)
+        {:error, error, var_env}
       end
     end
   end
 
+  # match operator
+  def typecheck(var_env, {:=, _meta, [lhs, rhs]}) when lhs == rhs, do: typecheck(var_env, rhs)
+
+  def typecheck(var_env, {:=, _meta, [lhs, rhs]} = _expr) do
+    with {:ok, rhs_type, updated_env} <- typecheck(var_env, rhs) do
+      case lhs do
+        {a, b} when is_atom(a) and is_atom(b) ->
+          with {:z, {_, [rhs_a, rhs_b]}} <- {:z, rhs_type},
+               {:a, ^a} <- {:a, rhs_a},
+               {:b, ^b} <- {:b, rhs_b} do
+            {:ok, rhs_type, updated_env}
+          else
+            {:z, other} -> Logger.error("1 something else happened: #{inspect(other)}")
+            {:a, _} -> Logger.error("a1 is not the same")
+            {:b, _} -> Logger.error("b1 is not the same")
+          end
+
+        {a, b} when is_atom(a) ->
+          with {:z, {_, [rhs_a, rhs_b]}} <- {:z, rhs_type},
+               {:a, ^a} <- {:a, rhs_a},
+               {:b, {var, _, nil}} when is_atom(var) <- {:b, b} do
+            # todo: check that b and rhs_b have the same type
+            updated_env = Map.update(updated_env, var, rhs_b, fn _ -> rhs_b end)
+
+            # Logger.debug(
+            #   "expr: #{inspect(expr)}\n\nhas type: #{inspect(rhs_type)}\n\nwith env: #{inspect(updated_env)}"
+            # )
+
+            {:ok, rhs_type, updated_env}
+          else
+            {:z, other} ->
+              Logger.debug("lhs: \n#{inspect(rhs)}")
+
+              Logger.error("2 something else happened: #{inspect(other)}")
+
+            {:a, _} ->
+              Logger.error("a2 is not the same")
+
+            {:b, _} ->
+              Logger.error("b2 is not a variable")
+          end
+
+        {a, b} when not (is_list(a) or is_list(b)) ->
+          Logger.debug("pin 2: #{inspect(rhs_type)}")
+          # rhs must return a tuple with two types
+          {_, [a_type, b_type]} = rhs_type
+
+          res = typecheck(var_env, b)
+
+          Logger.debug(inspect(res))
+
+          checked_a =
+            case a do
+              {var_a, _, ctx_a} when is_atom(var_a) and is_nil(ctx_a) ->
+                # just update the env
+                updated_env = Map.update(updated_env, var_a, a_type, fn _ -> a_type end)
+                {:ok, a_type, updated_env}
+
+              otherwise ->
+                # check its type
+                res_a = typecheck(var_env, a)
+
+                Logger.debug("pin 4: #{inspect(otherwise)}\n\n#{inspect(res_a)}")
+                {:error, "a types don't agree", updated_env}
+            end
+
+          checked_b =
+            case b do
+              {var_b, _, ctx_b} when is_atom(var_b) and is_nil(ctx_b) ->
+                # just update the env
+                updated_env = Map.update(updated_env, var_b, b_type, fn _ -> b_type end)
+                {:ok, b_type, updated_env}
+
+              otherwise ->
+                # check its type
+                res_b = typecheck(var_env, b)
+
+                Logger.debug("pin 5: #{inspect(otherwise)}\n\n#{inspect(res_b)}")
+                {:error, "b types don't agree", updated_env}
+            end
+
+          with {:a, {:ok, _, _}} <- {:a, checked_a},
+               {:b, {:ok, _, updated_env}} <- {:b, checked_b} do
+            {:ok, rhs, updated_env}
+          else
+            {:a, other_a} ->
+              other_a
+
+            {:b, other_b} ->
+              other_b
+          end
+
+        {collection, types} when collection in [:tuple, :list] ->
+          {^collection, r_types} = rhs_type
+
+          res =
+            Enum.zip(types, r_types)
+            |> Enum.with_index()
+            |> Enum.reduce([], fn {{x, r_type}, idx}, acc ->
+              cond do
+                typecheck(updated_env, x) != r_type ->
+                  [{:error, "lhs and rhs don't match at position #{idx}"} | acc]
+
+                true ->
+                  [{:ok, r_type} | acc]
+              end
+            end)
+            |> Enum.reverse()
+
+          if Utils.deep_contains?(res, :error) do
+            {:error, "there are errors", updated_env}
+          else
+            {:ok, rhs_type, updated_env}
+          end
+
+        {var, _, ctx} when is_atom(var) and is_nil(ctx) ->
+          updated_env = Map.update(updated_env, var, rhs_type, fn _ -> rhs_type end)
+          {:ok, rhs_type, updated_env}
+
+        other ->
+          Logger.error("unexpected situation: #{inspect(other)}")
+          {:error, "unexp", updated_env}
+      end
+    else
+      {:error, error, _} ->
+        Logger.error(error)
+        {:error, error, var_env}
+    end
+  end
+
+  # Special handler for register function
+  def typecheck(var_env, {:register, _meta, args}) when length(args) == 4 do
+    [ap_pid, role, callback, state] = args
+
+    with {:a1, {:ok, :pid, var_env}} <- {:a1, typecheck(var_env, ap_pid)},
+         {:a2, {:ok, :atom, var_env}} <- {:a2, typecheck(var_env, role)},
+         {:a3, {:ok, _, var_env}} <- {:a3, typecheck(var_env, callback)},
+         {:a4, {:ok, :maty_actor_state, var_env}} <- {:a4, typecheck(var_env, state)} do
+      {:ok, {:tuple, [:ok, :maty_actor_state]}, var_env}
+      # todo add granularity to reported errors
+    else
+      {:a1, _} -> {:error, "register function not typed properly or something", var_env}
+      {:a2, _} -> {:error, "a2 is busted", var_env}
+      {:a3, _} -> {:error, "a3 is busted", var_env}
+      {:a4, _} -> {:error, "a4 is busted", var_env}
+    end
+  end
+
+  def typecheck(var_env, {:fn, _, [{:->, _, [_args, _expr]}]}) do
+    {:ok, :function, var_env}
+  end
+
+  def typecheck(var_env, {:&, _, [{:/, _, [{{:., _, [_module, _function]}, _, _}, _arity]}]}) do
+    {:ok, :function, var_env}
+  end
+
+  def typecheck(var_env, {:&, _, [{:/, _, [_function, _arity]}]}) do
+    {:ok, :function, var_env}
+  end
+
   # functions - or other stuff with a ctx list
-  def typecheck(var_env, {var, _meta, ctx}) when is_atom(var) and is_list(ctx) do
+  def typecheck(var_env, {var, _meta, ctx} = expr) when is_atom(var) and is_list(ctx) do
+    func = "#{var}/#{length(ctx)}"
+
     case Map.fetch(var_env, var) do
-      {:ok, type} -> {:ok, type, var_env}
-      :error -> {:error, "function doesn't exist", var_env}
+      {:ok, type} ->
+        {:ok, type, var_env}
+
+      :error ->
+        Logger.error(inspect(expr))
+        {:error, Error.function_not_exist(func), var_env}
     end
   end
 
@@ -194,50 +355,46 @@ defmodule Maty.Typechecker.Tc do
         # if they are variables add them to the type environment
         # if they are expressions check that the expression evaluates to the type specified in the spec
 
-        var_env = %{}
-
         with {:spec_args, ^arity} <- {:spec_args, length(spec_args)} do
-          # todo convert to reduce or reduce while
-          spec_errors =
-            for {arg_type, arg} <- Enum.zip(spec_args, args) do
-              case arg do
-                {arg_var, _, nil} ->
-                  var_env = Map.put(var_env, arg_var, arg_type)
-                  {:ok, arg_type, var_env}
-
-                other ->
-                  Logger.error("arg looks like this: #{inspect(other)}")
-                  {:error, "not yet handled", var_env}
+          typed_args =
+            Enum.zip(spec_args, args)
+            |> Enum.reduce_while(
+              {:ok, %{}},
+              fn {arg_type, arg}, {_, var_env} ->
+                case arg do
+                  {arg_var, _, nil} -> {:cont, {:ok, Map.put(var_env, arg_var, arg_type)}}
+                  _ -> {:halt, :error}
+                end
               end
-            end
-            |> Enum.any?(fn {result, _, _} -> result == :error end)
+            )
 
-          cond do
-            spec_errors ->
-              {:error, "at least one argument is not well typed"}
+          case typed_args do
+            :error ->
+              {:error, Error.at_least_one_arg_not_well_typed()}
 
-            true ->
+            {:ok, var_env} ->
               body = block |> extract_body()
               res = typecheck(var_env, body)
 
               with {:ok, {:list, types}, _var_env} <- res,
-                   {:return, ^spec_return} <- {:return, List.last(types)} do
-                {:ok, spec_return, var_env}
+                   block_return = types |> List.last() |> to_suspend(),
+                   {:return, ^spec_return} <- {:return, block_return} do
+                {:ok, spec_return}
               else
-                {:error, error, _var_env} -> {:error, error, var_env}
-                {:return, _other} -> {:error, "return types don't match", var_env}
+                {:error, error, _var_env} -> {:error, error}
+                {:return, _other} -> {:error, Error.return_types_mismatch()}
               end
           end
         else
           {:spec_args, _} ->
-            error = "arity mismatch"
+            error = Error.arity_mismatch()
             Logger.error(error)
             {:error, error}
         end
       end
     else
       {:spec, :error} ->
-        error = "no spec for this function: #{inspect(type_specs)}"
+        error = Error.no_spec_for_function(type_specs)
         Logger.error(error)
         {:error, error}
     end
@@ -302,63 +459,69 @@ defmodule Maty.Typechecker.Tc do
                 Map.put(var_env, payload_var, payload_t)
 
               other ->
-                Logger.error("Payload has some other value: #{inspect(other)}")
+                error = Error.payload_var_has_other_value(other)
+                Logger.error(error)
                 var_env
             end
 
           cond do
             role != st.from ->
-              Logger.error("handler role mismatch")
+              error = Error.handler_role_mismatch()
+              Logger.error(error)
+              {:error, error}
 
             branch.label != label ->
-              Logger.error("message label mismatch")
+              error = Error.message_label_mismatch()
+              Logger.error(error)
+              {:error, error}
 
             branch.payload != payload_t ->
-              Logger.error("message payload type mismatch")
+              error = Error.message_payload_type_mismatch()
+              Logger.error(error)
+              {:error, error}
 
             true ->
               st = branch.continue_as
 
               # typecheck the function body
-              body = block |> extract_body()
-              res = session_typecheck_block(module, var_env, st, body)
-
+              body = extract_body(block)
               # todo: typecheck the function return type against the spec return type
               # will need to change the session typecheck function return type for that
 
-              res
+              case session_typecheck_block(module, var_env, st, body) do
+                {:ok, :nothing, _var_env} -> {:ok, spec_return}
+                {:error, error, _var_env} -> {:error, error}
+              end
           end
         else
           {:spec_args, _} ->
-            error = "handler args shape not looking good"
+            error = Error.handler_args_shape_invalid()
             Logger.error(error)
             {:error, error}
 
           {:a1, _} ->
-            error = "message not formatted properly"
+            error = Error.message_format_invalid()
             Logger.error(error)
             {:error, error}
 
           {:a2, _} ->
-            error = "role not typed properly"
+            error = Error.role_type_invalid()
             Logger.error(error)
             {:error, error}
 
           {:a3, _} ->
-            error = "session_ctx not typed properly"
+            error = Error.session_ctx_type_invalid()
             Logger.error(error)
             {:error, error}
 
           {:a4, _} ->
-            error = "maty_actor_state not typed properly"
+            error = Error.maty_actor_state_type_invalid()
             Logger.error(error)
             {:error, error}
 
           {:spec_return, other} ->
-            error = "invalid return type for handler"
-
-            Logger.error("#{error}: #{inspect(other)} is #{inspect(other)}")
-
+            error = Error.handler_return_type_invalid(other)
+            Logger.error(error)
             {:error, error}
         end
       end
@@ -374,9 +537,7 @@ defmodule Maty.Typechecker.Tc do
         {:error, error}
 
       {:branches, _} ->
-        error =
-          "not enough function clauses to support the annotated session type"
-
+        error = "not enough function clauses to support the annotated session type"
         Logger.error(error)
         {:error, error}
     end
@@ -416,7 +577,7 @@ defmodule Maty.Typechecker.Tc do
         with {:ok, :session_ctx, _} <- typecheck(var_env, session),
              {:ok, ^expected_payload, _} <- typecheck(var_env, payload) do
           cond do
-            expected_role != role -> {:error, "role mismatch", var_env}
+            expected_role != role -> {:error, Error.role_mismatch(), var_env}
             true -> {:ok, {:just, {nil, branch.continue_as}}, var_env}
           end
         else
@@ -426,7 +587,8 @@ defmodule Maty.Typechecker.Tc do
         end
 
       nil ->
-        {:error, "message label incompatible with session precondition", var_env}
+        error = Error.message_label_incompatible()
+        {:error, error, var_env}
     end
   end
 
@@ -447,8 +609,12 @@ defmodule Maty.Typechecker.Tc do
         end
 
       cond do
-        all_branches != handled_branch_ids -> {:error, "unhandled session type branches", var_env}
-        true -> {:ok, :nothing, var_env}
+        all_branches != handled_branch_ids ->
+          error = Error.unhandled_session_branches()
+          {:error, error, var_env}
+
+        true ->
+          {:ok, :nothing, var_env}
       end
     else
       error -> error
@@ -465,42 +631,42 @@ defmodule Maty.Typechecker.Tc do
     st_map = Module.get_attribute(module, :annotated_handlers) |> Enum.into(%{})
 
     case fun_capture do
-      {:&, _meta1, [{:/, _meta2, [{{:., _meta3, [mod, fun_name]}, _meta4, _}, 4]}]} ->
+      {:&, _, [{:/, _, [{{:., _, [mod, fn_name]}, _, _}, 4]}]} ->
         # explicit module form: &Module.fun/arity
         with {:ok, :maty_actor_state, var_env} <- typecheck(var_env, state_ast),
-             {:ok, st} <- Map.fetch(st_map, {fun_name, 4}) do
+             {:ok, st} <- Map.fetch(st_map, {fn_name, 4}) do
           cond do
-            mod != module -> {:error, "Handler function from unexpected module", var_env}
-            st.from != expected_role -> {:error, "handler role mismatch", var_env}
+            mod != module -> {:error, Error.handler_from_unexpected_module(), var_env}
+            st.from != expected_role -> {:error, Error.handler_role_mismatch(), var_env}
             true -> {:ok, :nothing, var_env}
           end
         else
           {:error, msg, var_env} ->
-            error = "Unexpected return from session_typecheck ST.SHandler: #{inspect(msg)}"
+            error = Error.session_typecheck_handler_unexpected(msg)
             Logger.error(error)
-            {:error, "something went wrong and I'm not sure what yet", var_env}
+            {:error, Error.something_went_wrong(), var_env}
 
           :error ->
-            {:error, "this function doesn't seem to have a session type stored"}
+            {:error, Error.function_missing_session_type()}
         end
 
-      {:&, _meta1, [{:/, _meta2, [fun_name, 4]}]} ->
+      {:&, _, [{:/, _, [fn_name, 4]}]} ->
         # implicit module form: &fun/arity
         with {:ok, :maty_actor_state, var_env} <- typecheck(var_env, state_ast),
-             {:ok, st} <- Map.fetch(st_map, {fun_name, 4}) do
+             {:ok, st} <- Map.fetch(st_map, {fn_name, 4}) do
           cond do
-            st.from != expected_role -> {:error, "handler role mismatch", var_env}
+            st.from != expected_role -> {:error, Error.handler_role_mismatch(), var_env}
             true -> {:ok, :nothing, var_env}
           end
         else
           {:error, msg, var_env} ->
-            error = "Unexpected return from session_typecheck ST.SHandler: #{inspect(msg)}"
+            error = Error.session_typecheck_handler_unexpected(msg)
             Logger.error(error)
 
-            {:error, "something went not well", var_env}
+            {:error, Error.something_went_wrong(), var_env}
 
           :error ->
-            {:error, "this function doesn't seem to have a session type stored"}
+            {:error, Error.function_missing_session_type()}
         end
     end
   end
@@ -522,7 +688,7 @@ defmodule Maty.Typechecker.Tc do
           {:ok, {:just, {rhs_type, new_st}}, var_env}
 
         _ ->
-          {:error, "Invalid lhs-hand side in assignment", var_env}
+          {:error, Error.invalid_lhs_assignment(), var_env}
       end
     else
       {:ok, :nothing} ->
@@ -532,7 +698,7 @@ defmodule Maty.Typechecker.Tc do
         {:error, err, var_env}
 
       other ->
-        Logger.error("Unexpected return from session_typecheck match operator: #{inspect(other)}")
+        Logger.error(Error.session_typecheck_match_unexpected(other))
     end
   end
 
@@ -565,31 +731,26 @@ defmodule Maty.Typechecker.Tc do
             |> Enum.filter(&(not &1))
 
           cond do
-            length(param_types) != arity ->
-              {:error, "not enough params"}
-
-            length(params_type_errors) != 0 ->
-              {:error, "mismatch between param and arg types"}
-
-            true ->
-              {:ok, return_type}
+            length(param_types) != arity -> {:error, "not enough params"}
+            length(params_type_errors) != 0 -> {:error, "mismatch between param and arg types"}
+            true -> {:ok, return_type}
           end
         end
 
       return =
-        Enum.find(clause_results, {:error, "something went wrong"}, fn {status, _} ->
+        Enum.find(clause_results, {:error, Error.something_went_wrong()}, fn {status, _} ->
           status == :ok
         end)
 
       case return do
         {:ok, some_type} -> {:ok, {:just, {some_type, st}}, var_env}
         {:error, some_error} -> {:error, some_error, var_env}
-        _ -> {:error, "This should be unreachable", var_env}
+        _ -> {:error, Error.unreachable(), var_env}
       end
     else
       :error ->
         Logger.error("var: #{inspect(name)}\n\n ctx: #{inspect(args)}\n\n#{inspect(st)}")
-        {:error, "function doesn't seem to have a type", var_env}
+        {:error, Error.function_no_type(), var_env}
     end
   end
 
@@ -617,8 +778,8 @@ defmodule Maty.Typechecker.Tc do
 
     case result do
       [handled_id] -> {:ok, handled_id}
-      [] -> {:error, "No matching session branch found"}
-      _ -> {:error, "Multiple matching session branches found"}
+      [] -> {:error, Error.no_matching_session_branch()}
+      _ -> {:error, Error.multiple_matching_session_branches()}
     end
   end
 
@@ -629,4 +790,7 @@ defmodule Maty.Typechecker.Tc do
   def flatten_branches(%ST.SIn{from: role} = st) do
     st.branches |> Enum.map(fn x -> %ST.SIn{from: role, branches: [x]} end)
   end
+
+  def to_suspend({:tuple, [:atom, {:tuple, [:function, :atom]}, :maty_actor_state]}), do: :suspend
+  def to_suspend(val), do: val
 end

@@ -7,7 +7,6 @@ defmodule Maty.Typechecker do
   """
 
   alias Maty.Typechecker.Tc, as: TC
-
   alias Maty.Typechecker.{Preprocessor, Error}
 
   require Logger
@@ -16,47 +15,35 @@ defmodule Maty.Typechecker do
   Called by Hook when a function definition is encountered (`@on_definition`).
   """
   def handle_on_definition(env, kind, name, args, _guards, _body) do
-    case Module.get_attribute(env.module, :handler) do
-      handler when not is_nil(handler) ->
-        Preprocessor.process_handler_annotation(env.module, kind, name, length(args), handler)
+    handler = Module.get_attribute(env.module, :handler)
 
-      nil ->
-        :ok
+    if not is_nil(handler) do
+      Preprocessor.process_handler_annotation(env.module, kind, name, length(args), handler)
     end
 
     Preprocessor.process_type_annotation(env, {name, args})
-    # todo: instead of saving to another module attribute, just return the errors here
-    spec_errors = Module.get_attribute(env.module, :spec_errors)
-
-    cond do
-      Enum.empty?(spec_errors) -> :ok
-      true -> Logger.error("There are #{length(spec_errors)} errors in this module's specs")
-    end
   end
 
   @doc """
   Called by Hook at `@before_compile`.
   """
-  def handle_before_compile(_env) do
-    # attr = Module.get_attribute(env.module, :type_specs)
+  def handle_before_compile(env) do
+    spec_errors = Module.get_attribute(env.module, :spec_errors)
 
-    # module_header =
-    #   "\n-------------------- #{inspect(env.module)} -------------------"
+    if length(spec_errors) > 0 do
+      out =
+        for err <- spec_errors, reduce: "" do
+          acc -> acc <> "#{inspect(err)}\n"
+        end
 
-    # display =
-    #   Enum.map_join(attr, "\n\n", fn {k, v} ->
-    #     "#{inspect(k)} --> \n#{inspect(v)}"
-    #   end)
-
-    # IO.puts(module_header <> "\n" <> display <> "\n")
+      Logger.error(out)
+    end
   end
 
   @doc """
   Called by Hook at `@after_compile`.
   """
   def handle_after_compile(env, bytecode) do
-    _ = Maty.Typechecker.Ast.throwaway()
-
     dbgi_map = read_debug_info!(bytecode)
 
     module_handlers =
@@ -66,35 +53,20 @@ defmodule Maty.Typechecker do
       dbgi_map[:definitions]
       |> Enum.filter(fn {_, _, meta, _} -> Keyword.get(meta, :context) != Maty.Actor end)
 
-    handler_definitions =
-      all_module_definitions |> Enum.filter(&(elem(&1, 0) in module_handlers))
+    for {fn_info, _kind, _meta, fn_clauses} <- all_module_definitions do
+      cond do
+        fn_info in module_handlers ->
+          res = TC.session_typecheck_handler(env.module, fn_info, fn_clauses)
+          Logger.debug("session typechecking handler: #{inspect(fn_info)}\n#{inspect(res)}")
 
-    # function_definitions =
-    #   all_module_definitions
-    #   |> Enum.filter(&(elem(&1, 0) not in module_handlers))
-    #   |> Enum.filter(&(elem(&1, 0) != {:init_actor, 1}))
+        fn_info == {:init_actor, 1} ->
+          Logger.debug("this is the init_actor function:")
 
-    for {fn_info, :def, _meta, fn_clauses} <- handler_definitions do
-      res =
-        TC.session_typecheck_handler(
-          env.module,
-          fn_info,
-          fn_clauses
-        )
-
-      Logger.debug("session typechecking handler: #{inspect(fn_info)}\n#{inspect(res)}")
+        true ->
+          res = TC.typecheck_function(env.module, fn_info, fn_clauses)
+          Logger.debug("typechecking regular function: #{inspect(fn_info)}\n#{inspect(res)}")
+      end
     end
-
-    # for {fn_info, _kind, _meta, fn_clauses} <- function_definitions do
-    #   res =
-    #     TC.typecheck_function(
-    #       env.module,
-    #       fn_info,
-    #       fn_clauses
-    #     )
-
-    #   Logger.debug("typechecking regular function: #{inspect(fn_info)}\n#{inspect(res)}")
-    # end
   end
 
   defp read_debug_info!(bytecode) do
