@@ -59,51 +59,31 @@ defmodule Maty.Typechecker do
 
     dbgi_map = read_debug_info!(bytecode)
 
-    # {fn_info, :def, _meta, fn_clauses} = share_handler()
-
-    # result_header =
-    #   TC.session_typecheck_handler(
-    #     env.module,
-    #     fn_info,
-    #     fn_clauses
-    #   )
-
-    # Logger.log(:debug, "session typechecking handler: #{inspect(result_header)}")
-
-    _module_definitions =
-      dbgi_map[:definitions]
-      |> Enum.filter(fn {_, _, meta, _} -> Keyword.get(meta, :context) != Maty.Actor end)
-
     module_handlers =
       Module.get_attribute(env.module, :annotated_handlers) |> Enum.map(&elem(&1, 0))
 
+    all_module_definitions =
+      dbgi_map[:definitions]
+      |> Enum.filter(fn {_, _, meta, _} -> Keyword.get(meta, :context) != Maty.Actor end)
+
     handler_definitions =
-      dbgi_map[:definitions] |> Enum.filter(&(elem(&1, 0) in module_handlers))
+      all_module_definitions |> Enum.filter(&(elem(&1, 0) in module_handlers))
 
-    {fn_info, :def, _meta, fn_clauses} =
-      Enum.find(handler_definitions, fn x -> elem(x, 0) == {:share_handler, 4} end)
+    # function_definitions =
+    #   all_module_definitions
+    #   |> Enum.filter(&(elem(&1, 0) not in module_handlers))
+    #   |> Enum.filter(&(elem(&1, 0) != {:init_actor, 1}))
 
-    res =
-      TC.session_typecheck_handler(
-        env.module,
-        fn_info,
-        fn_clauses
-      )
+    for {fn_info, :def, _meta, fn_clauses} <- handler_definitions do
+      res =
+        TC.session_typecheck_handler(
+          env.module,
+          fn_info,
+          fn_clauses
+        )
 
-    Logger.debug("session typechecking handler: #{inspect(fn_info)}\n#{inspect(res)}")
-
-    # for {fn_info, :def, _meta, fn_clauses} <- handler_definitions do
-    #   res =
-    #     TC.session_typecheck_handler(
-    #       env.module,
-    #       fn_info,
-    #       fn_clauses
-    #     )
-
-    #   Logger.debug("session typechecking handler: #{inspect(fn_info)}\n#{inspect(res)}")
-    # end
-
-    # function_definitions = [Maty.Typechecker.Ast.lookup_price(), shipping_date]
+      Logger.debug("session typechecking handler: #{inspect(fn_info)}\n#{inspect(res)}")
+    end
 
     # for {fn_info, _kind, _meta, fn_clauses} <- function_definitions do
     #   res =

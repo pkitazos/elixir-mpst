@@ -99,6 +99,79 @@ defmodule Maty.Typechecker.Tc do
     end
   end
 
+  # arithmetic operators
+  def typecheck(var_env, {{:., _, [:erlang, op]}, _, [lhs, rhs]}) when op in [:+, :-, :*, :/] do
+    with {:ok, lhs_type, var_env} <- typecheck(var_env, lhs),
+         {:ok, rhs_type, var_env} <- typecheck(var_env, rhs) do
+      case {lhs_type, rhs_type} do
+        {:number, :number} ->
+          {:ok, :number, var_env}
+
+        _ ->
+          {:error,
+           "Binary operator #{op} requires numbers, got #{inspect(lhs_type)} and #{inspect(rhs_type)}",
+           var_env}
+      end
+    end
+  end
+
+  # string concatenation operator
+  def typecheck(var_env, {:<<>>, _, [{:"::", _, [lhs, _]}, {:"::", _, [rhs, _]}]}) do
+    with {:ok, lhs_type, var_env} <- typecheck(var_env, lhs),
+         {:ok, rhs_type, var_env} <- typecheck(var_env, rhs) do
+      case {lhs_type, rhs_type} do
+        {:binary, :binary} ->
+          {:ok, :binary, var_env}
+
+        _ ->
+          {:error,
+           "Binary operator <> requires binaries, got #{inspect(lhs_type)} and #{inspect(rhs_type)}",
+           var_env}
+      end
+    end
+  end
+
+  # comparison operators
+  def typecheck(var_env, {{:., _, [:erlang, op]}, _, [lhs, rhs]})
+      when op in [:==, :!=, :<, :>, :<=, :>=] do
+    with {:ok, lhs_type, var_env} <- typecheck(var_env, lhs),
+         {:ok, rhs_type, var_env} <- typecheck(var_env, rhs) do
+      case op do
+        # for equality comparisons, require that both operands have the same type
+        op when op in [:==, :!=] ->
+          if lhs_type == rhs_type do
+            {:ok, :boolean, var_env}
+          else
+            {:error,
+             "Comparison operator #{op} requires both operands to be of the same type, got #{inspect(lhs_type)} and #{inspect(rhs_type)}",
+             var_env}
+          end
+
+        # for ordering comparisons, we assume numbers are required
+        _ ->
+          if lhs_type == :number and rhs_type == :number do
+            {:ok, :boolean, var_env}
+          else
+            {:error,
+             "Comparison operator #{op} requires both operands to be numbers, got #{inspect(lhs_type)} and #{inspect(rhs_type)}",
+             var_env}
+          end
+      end
+    end
+  end
+
+  # logical not
+  def typecheck(var_env, {{:., _, [:erlang, :not]}, _, [expr]}) do
+    with {:ok, expr_type, var_env} <- typecheck(var_env, expr) do
+      if expr_type == :boolean do
+        {:ok, :boolean, var_env}
+      else
+        {:error, "Logical operator not requires a boolean operand, got #{inspect(expr_type)}",
+         var_env}
+      end
+    end
+  end
+
   # functions - or other stuff with a ctx list
   def typecheck(var_env, {var, _meta, ctx}) when is_atom(var) and is_list(ctx) do
     case Map.fetch(var_env, var) do
@@ -164,14 +237,15 @@ defmodule Maty.Typechecker.Tc do
       end
     else
       {:spec, :error} ->
-        error = "no spec for this function"
+        error = "no spec for this function: #{inspect(type_specs)}"
         Logger.error(error)
         {:error, error}
     end
   end
 
-  defguardp is_handler_return(type) when is_tuple(type) and type == {:|, [:done, :suspend]}
-  defguardp is_handler_return(type) when is_atom(type) and type in [:done, :suspend]
+  defguardp is_handler_return(type)
+            when (is_atom(type) and type in [:done, :suspend]) or
+                   (is_tuple(type) and type == {:|, [:done, :suspend]})
 
   defguardp is_supported_type(val)
             when is_atom(val) or
@@ -331,10 +405,7 @@ defmodule Maty.Typechecker.Tc do
   def session_typecheck(
         _module,
         var_env,
-        %ST.SOut{
-          to: expected_role,
-          branches: branches
-        },
+        %ST.SOut{to: expected_role, branches: branches},
         {:maty_send, _meta, [session, role, {label, payload}]}
       )
       when is_atom(role) and is_atom(label) do
@@ -365,24 +436,15 @@ defmodule Maty.Typechecker.Tc do
       st_branches = flatten_branches(st)
 
       handled_branch_ids =
-        for {:->, _meta, [_, branch_block]} <- branches do
-          body = branch_block |> extract_body()
+        for {:->, _meta, [_, branch_block]} <- branches, reduce: MapSet.new() do
+          acc ->
+            body = extract_body(branch_block)
 
-          [handled_id] =
-            for st_branch <- st_branches, reduce: [] do
-              acc ->
-                res = session_typecheck_block(module, var_env, st_branch, body)
-                branch_id = st_branch.branches |> List.first()
-
-                case res do
-                  {:ok, :nothing, _} -> [branch_id | acc]
-                  {:error, _, _} -> acc
-                end
+            case handle_session_branch(module, var_env, st_branches, body) do
+              {:ok, id} -> MapSet.put(acc, id)
+              {:error, _} -> acc
             end
-
-          handled_id
         end
-        |> MapSet.new()
 
       cond do
         all_branches != handled_branch_ids -> {:error, "unhandled session type branches", var_env}
@@ -460,7 +522,7 @@ defmodule Maty.Typechecker.Tc do
           {:ok, {:just, {rhs_type, new_st}}, var_env}
 
         _ ->
-          {:error, "Invalid left-hand side in assignment", var_env}
+          {:error, "Invalid lhs-hand side in assignment", var_env}
       end
     else
       {:ok, :nothing} ->
@@ -531,6 +593,35 @@ defmodule Maty.Typechecker.Tc do
     end
   end
 
+  # def session_typecheck(_module, var_env, st, expr) do
+  #   Logger.debug("make it in here")
+
+  #   case typecheck(var_env, expr) do
+  #     {:ok, some_type, _} -> {:ok, {:just, {some_type, st}}, var_env}
+  #     error -> error
+  #   end
+  # end
+
+  defp handle_session_branch(module, var_env, st_branches, body) do
+    result =
+      for st_branch <- st_branches, reduce: [] do
+        acc ->
+          res = session_typecheck_block(module, var_env, st_branch, body)
+          branch_id = st_branch.branches |> List.first()
+
+          case res do
+            {:ok, :nothing, _} -> [branch_id | acc]
+            {:error, _, _} -> acc
+          end
+      end
+
+    case result do
+      [handled_id] -> {:ok, handled_id}
+      [] -> {:error, "No matching session branch found"}
+      _ -> {:error, "Multiple matching session branches found"}
+    end
+  end
+
   def flatten_branches(%ST.SOut{to: role} = st) do
     st.branches |> Enum.map(fn x -> %ST.SOut{to: role, branches: [x]} end)
   end
@@ -538,8 +629,4 @@ defmodule Maty.Typechecker.Tc do
   def flatten_branches(%ST.SIn{from: role} = st) do
     st.branches |> Enum.map(fn x -> %ST.SIn{from: role, branches: [x]} end)
   end
-
-  # def merge_branches(%ST.SOut{to: role} = st, branches) do
-  #   %ST.SOut{to: role, branches: branches}
-  # end
 end
