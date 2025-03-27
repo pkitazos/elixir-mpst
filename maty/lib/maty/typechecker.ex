@@ -47,28 +47,27 @@ defmodule Maty.Typechecker do
     dbgi_map = read_debug_info!(bytecode)
 
     module_handlers =
-      Module.get_attribute(env.module, :annotated_handlers) |> Enum.map(&elem(&1, 0))
+      env.module
+      |> Module.get_attribute(:annotated_handlers)
+      |> Enum.map(&elem(&1, 0))
 
     all_module_definitions =
       dbgi_map[:definitions]
       |> Enum.filter(fn {_, _, meta, _} -> Keyword.get(meta, :context) != Maty.Actor end)
 
-    for {fn_info, _kind, _meta, fn_clauses} = _fn_def <- all_module_definitions do
+    for {fn_info, _kind, _meta, fn_clauses} <- all_module_definitions do
       cond do
         fn_info in module_handlers ->
-          # res = TC.session_typecheck_handler(env.module, fn_info, fn_clauses)
-          # Logger.debug("session typechecking handler: #{inspect(fn_info)}\n#{inspect(res)}")
-          :ok
+          res = TC.session_typecheck_handler(env.module, fn_info, fn_clauses)
+          Logger.debug("session typechecking handler: #{inspect(fn_info)}\n#{inspect(res)}")
 
         fn_info == {:init_actor, 1} ->
           res = TC.session_typecheck_init_actor(env.module, fn_info, fn_clauses)
           Logger.debug("session typechecking init_actor: #{inspect(res)}")
-          :ok
 
         true ->
-          # res = TC.typecheck_function(env.module, fn_info, fn_clauses)
-          # Logger.debug("typechecking regular function: #{inspect(fn_info)}\n#{inspect(res)}")
-          :ok
+          res = TC.typecheck_function(env.module, fn_info, fn_clauses)
+          Logger.debug("typechecking regular function: #{inspect(fn_info)}\n#{inspect(res)}")
       end
     end
   end

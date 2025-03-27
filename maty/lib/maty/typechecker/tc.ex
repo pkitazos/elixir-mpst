@@ -2,6 +2,9 @@ defmodule Maty.Typechecker.Tc do
   alias Maty.{ST, Utils}
   alias Maty.Typechecker.Error
 
+  alias Maty.Types.T, as: Type
+  import Maty.Types.T, only: [is?: 2]
+
   require Logger
 
   @type value ::
@@ -322,9 +325,8 @@ defmodule Maty.Typechecker.Tc do
          {:a2, {:ok, :atom, var_env}} <- {:a2, typecheck(var_env, role)},
          {:a3, {:ok, _, var_env}} <- {:a3, typecheck(var_env, callback)},
          {:a4, {:ok, state_shape, var_env}} <- {:a4, typecheck(var_env, state)},
-         Logger.error(inspect(state_shape)),
-         {:z, :maty_actor_state} <- {:z, Maty.Types.T.to_maty_actor_state(state_shape)} do
-      {:ok, {:tuple, [:ok, :maty_actor_state]}, var_env}
+         {:z, true} <- {:z, is?(state_shape, :maty_actor_state)} do
+      {:ok, {:tuple, [:ok, Type.maty_actor_state()]}, var_env}
     else
       {:a1, _} -> {:error, "access point pid type is not pid", var_env}
       {:a2, _} -> {:error, "role type is not atom", var_env}
@@ -396,8 +398,7 @@ defmodule Maty.Typechecker.Tc do
               res = typecheck(var_env, body)
 
               with {:ok, {:list, types}, _var_env} <- res,
-                   block_return = types |> List.last() |> Maty.Types.T.to_suspend(),
-                   {:return, ^spec_return} <- {:return, block_return} do
+                   {:return, ^spec_return} <- {:return, List.last(types)} do
                 {:ok, spec_return}
               else
                 {:error, error, _var_env} -> {:error, error}
@@ -419,10 +420,6 @@ defmodule Maty.Typechecker.Tc do
     end
   end
 
-  defguardp is_handler_return(type)
-            when (is_atom(type) and type in [:done, :suspend]) or
-                   (is_tuple(type) and type == {:|, [:done, :suspend]})
-
   defguardp is_supported_type(val)
             when is_atom(val) or
                    is_binary(val) or
@@ -430,6 +427,11 @@ defmodule Maty.Typechecker.Tc do
                    is_number(val) or
                    is_pid(val) or
                    (is_map_key(val, :__struct__) and val.__struct__ == Date)
+
+  defp is_handler_return?({:|, [v1, v2]}),
+    do: (is?(v1, :done) and is?(v2, :suspend)) or (is?(v1, :suspend) and is?(v2, :done))
+
+  defp is_handler_return?(val), do: is?(val, :done) or is?(val, :suspend)
 
   def session_typecheck_handler(module, {name, arity} = fn_info, clauses) do
     annotated_handlers = Module.get_attribute(module, :annotated_handlers) |> Enum.into(%{})
@@ -450,23 +452,26 @@ defmodule Maty.Typechecker.Tc do
         # do the spec checks here
         with {:spec_args, [message_t, role_t, session_ctx_t, state_t]} <- {:spec_args, spec_args},
              {:a1, {:tuple, [:atom, payload_t]}} <- {:a1, message_t},
-             {:a2, :role} <- {:a2, role_t},
-             {:a3, :session_ctx} <- {:a3, session_ctx_t},
-             {:a4, :maty_actor_state} <- {:a4, state_t},
-             {:spec_return, ret_t} when is_handler_return(ret_t) <- {:spec_return, spec_return} do
+             #  todo: double match is redundant
+             {:a2, role_shape} <- {:a2, role_t},
+             {:r, true} <- {:r, is?(role_shape, :role)},
+             {:a3, true} <- {:a3, is?(session_ctx_t, :session_ctx)},
+             {:a4, state_shape} <- {:a4, state_t},
+             {:m, true} <- {:m, is?(state_shape, :maty_actor_state)},
+             {:spec_return, true} <- {:spec_return, is_handler_return?(spec_return)} do
           {_meta, args, _guards, block} = clause
 
           [
             {label, payload},
             role,
             {session_ctx_var, _, _},
-            {maty_actor_state_var, _, _}
+            {maty_actor_state_shape, _, _}
           ] = args
 
           # construct the type environment
           var_env = %{
-            session_ctx_var => :session_ctx,
-            maty_actor_state_var => :maty_actor_state
+            session_ctx_var => Type.session_ctx(),
+            maty_actor_state_shape => Type.maty_actor_state()
           }
 
           var_env =
@@ -528,6 +533,11 @@ defmodule Maty.Typechecker.Tc do
             Logger.error(error)
             {:error, error}
 
+          {:r, _} ->
+            error = Error.role_type_invalid()
+            Logger.error(error)
+            {:error, error}
+
           {:a3, _} ->
             error = Error.session_ctx_type_invalid()
             Logger.error(error)
@@ -537,6 +547,9 @@ defmodule Maty.Typechecker.Tc do
             error = Error.maty_actor_state_type_invalid()
             Logger.error(error)
             {:error, error}
+
+          {:m, _} ->
+            {:error, "maty state not well typed"}
 
           {:spec_return, other} ->
             error = Error.handler_return_type_invalid(other)
@@ -593,7 +606,8 @@ defmodule Maty.Typechecker.Tc do
       branch when not is_nil(branch) ->
         expected_payload = branch.payload
 
-        with {:ok, :session_ctx, _} <- typecheck(var_env, session),
+        with {:ok, session_ctx_shape, _} <- typecheck(var_env, session),
+             {:s, true} <- {:s, is?(session_ctx_shape, :session_ctx)},
              {:ok, ^expected_payload, _} <- typecheck(var_env, payload) do
           cond do
             expected_role != role -> {:error, Error.role_mismatch(), var_env}
@@ -601,6 +615,7 @@ defmodule Maty.Typechecker.Tc do
           end
         else
           other ->
+            # todo more granular errors
             Logger.error("Unexpected return from session_typecheck ST.SOut: #{inspect(other)}")
             {:error, "something went wrong", var_env}
         end
@@ -652,7 +667,8 @@ defmodule Maty.Typechecker.Tc do
     case fun_capture do
       {:&, _, [{:/, _, [{{:., _, [mod, fn_name]}, _, _}, 4]}]} ->
         # explicit module form: &Module.fun/arity
-        with {:ok, :maty_actor_state, var_env} <- typecheck(var_env, state_ast),
+        with {:ok, state_shape, var_env} <- typecheck(var_env, state_ast),
+             {:m, true} <- {:m, is?(state_shape, :maty_actor_state)},
              {:ok, st} <- Map.fetch(st_map, {fn_name, 4}) do
           cond do
             mod != module -> {:error, Error.handler_from_unexpected_module(), var_env}
@@ -665,13 +681,17 @@ defmodule Maty.Typechecker.Tc do
             Logger.error(error)
             {:error, Error.something_went_wrong(), var_env}
 
+          {:m, _} ->
+            {:error, "maty state not well typed", var_env}
+
           :error ->
             {:error, Error.function_missing_session_type()}
         end
 
       {:&, _, [{:/, _, [fn_name, 4]}]} ->
         # implicit module form: &fun/arity
-        with {:ok, :maty_actor_state, var_env} <- typecheck(var_env, state_ast),
+        with {:ok, state_shape, var_env} <- typecheck(var_env, state_ast),
+             {:m, true} <- {:m, is?(state_shape, :maty_actor_state)},
              {:ok, st} <- Map.fetch(st_map, {fn_name, 4}) do
           cond do
             st.from != expected_role -> {:error, Error.handler_role_mismatch(), var_env}
@@ -681,8 +701,10 @@ defmodule Maty.Typechecker.Tc do
           {:error, msg, var_env} ->
             error = Error.session_typecheck_handler_unexpected(msg)
             Logger.error(error)
-
             {:error, Error.something_went_wrong(), var_env}
+
+          {:m, _} ->
+            {:error, "maty state not well typed", var_env}
 
           :error ->
             {:error, Error.function_missing_session_type()}
@@ -691,10 +713,12 @@ defmodule Maty.Typechecker.Tc do
   end
 
   def session_typecheck(_module, var_env, %ST.SEnd{}, {:{}, _, [:done, :unit, state_ast]}) do
-    with {:ok, :maty_actor_state, var_env} <- typecheck(var_env, state_ast) do
+    with {:ok, state_shape, var_env} <- typecheck(var_env, state_ast),
+         {:m, true} <- {:m, is?(state_shape, :maty_actor_state)} do
       {:ok, :nothing, var_env}
     else
       {:error, error, _var_env} -> {:error, error, var_env}
+      {:m, _} -> {:error, "maty state not well typed", var_env}
     end
   end
 
@@ -788,11 +812,11 @@ defmodule Maty.Typechecker.Tc do
 
         body = block |> extract_body()
         res = typecheck(var_env, body)
-        Logger.debug("beep bop: #{inspect(res)}")
+
+        # todo: make sure that this function registers in session
 
         with {:ok, {:list, types}, _var_env} <- res,
-             block_return = types |> List.last() |> Maty.Types.T.to_suspend(),
-             {:return, ^spec_return} <- {:return, block_return} do
+             {:return, ^spec_return} <- {:return, List.last(types)} do
           {:ok, spec_return}
         else
           {:error, error, _var_env} -> {:error, error}

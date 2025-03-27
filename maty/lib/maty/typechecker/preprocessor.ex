@@ -54,7 +54,7 @@ defmodule Maty.Typechecker.Preprocessor do
       Maty.Types.payload_types()
       |> Enum.map(&{&1, &1})
       |> Enum.into(%{})
-      |> Map.merge(Maty.Types.map(:v2))
+      |> Map.merge(Maty.Types.map())
 
     case Module.get_attribute(env.module, :spec) do
       [{:spec, {:"::", _, [{spec_name, _, args_types}, return_type]}, _module} | _] ->
