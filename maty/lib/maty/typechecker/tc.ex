@@ -297,21 +297,40 @@ defmodule Maty.Typechecker.Tc do
     end
   end
 
+  def typecheck(var_env, {:%{}, _meta, pairs}) when is_list(pairs) do
+    Enum.reduce_while(pairs, {:ok, %{}, var_env}, fn {key, value}, {:ok, acc, var_env} ->
+      case typecheck(var_env, value) do
+        {:ok, v_type, var_env} ->
+          {:cont, {:ok, Map.put(acc, key, v_type), var_env}}
+
+        {:error, msg, var_env} ->
+          {:halt, {:error, msg, var_env}}
+      end
+    end)
+    |> case do
+      {:ok, type_map, var_env} -> {:ok, {:map, type_map}, var_env}
+      error -> error
+    end
+  end
+
   # Special handler for register function
   def typecheck(var_env, {:register, _meta, args}) when length(args) == 4 do
     [ap_pid, role, callback, state] = args
 
+    # todo make error messages more descriptive
     with {:a1, {:ok, :pid, var_env}} <- {:a1, typecheck(var_env, ap_pid)},
          {:a2, {:ok, :atom, var_env}} <- {:a2, typecheck(var_env, role)},
          {:a3, {:ok, _, var_env}} <- {:a3, typecheck(var_env, callback)},
-         {:a4, {:ok, :maty_actor_state, var_env}} <- {:a4, typecheck(var_env, state)} do
+         {:a4, {:ok, state_shape, var_env}} <- {:a4, typecheck(var_env, state)},
+         Logger.error(inspect(state_shape)),
+         {:z, :maty_actor_state} <- {:z, Maty.Types.T.to_maty_actor_state(state_shape)} do
       {:ok, {:tuple, [:ok, :maty_actor_state]}, var_env}
-      # todo add granularity to reported errors
     else
-      {:a1, _} -> {:error, "register function not typed properly or something", var_env}
-      {:a2, _} -> {:error, "a2 is busted", var_env}
-      {:a3, _} -> {:error, "a3 is busted", var_env}
-      {:a4, _} -> {:error, "a4 is busted", var_env}
+      {:a1, _} -> {:error, "access point pid type is not pid", var_env}
+      {:a2, _} -> {:error, "role type is not atom", var_env}
+      {:a3, _} -> {:error, "callback is not a function", var_env}
+      {:a4, _} -> {:error, "state variable not of type maty_actor_state", var_env}
+      {:z, other} -> {:error, "some other type error: #{inspect(other)}", var_env}
     end
   end
 
@@ -377,7 +396,7 @@ defmodule Maty.Typechecker.Tc do
               res = typecheck(var_env, body)
 
               with {:ok, {:list, types}, _var_env} <- res,
-                   block_return = types |> List.last() |> to_suspend(),
+                   block_return = types |> List.last() |> Maty.Types.T.to_suspend(),
                    {:return, ^spec_return} <- {:return, block_return} do
                 {:ok, spec_return}
               else
@@ -754,14 +773,36 @@ defmodule Maty.Typechecker.Tc do
     end
   end
 
-  # def session_typecheck(_module, var_env, st, expr) do
-  #   Logger.debug("make it in here")
+  def session_typecheck_init_actor(module, fn_info, clauses) do
+    type_specs = Module.get_attribute(module, :type_specs) |> Enum.into(%{})
 
-  #   case typecheck(var_env, expr) do
-  #     {:ok, some_type, _} -> {:ok, {:just, {some_type, st}}, var_env}
-  #     error -> error
-  #   end
-  # end
+    with {:spec, {:ok, fn_types}} <- {:spec, Map.fetch(type_specs, fn_info)} do
+      for {{spec_args, spec_return}, clause} <- Enum.zip(fn_types, clauses) do
+        {_meta, args, _guards, block} = clause
+
+        var_env =
+          Enum.zip(args, spec_args)
+          |> Enum.reduce(%{}, fn {{arg_var, _, _}, arg_typ}, acc ->
+            Map.put(acc, arg_var, arg_typ)
+          end)
+
+        body = block |> extract_body()
+        res = typecheck(var_env, body)
+        Logger.debug("beep bop: #{inspect(res)}")
+
+        with {:ok, {:list, types}, _var_env} <- res,
+             block_return = types |> List.last() |> Maty.Types.T.to_suspend(),
+             {:return, ^spec_return} <- {:return, block_return} do
+          {:ok, spec_return}
+        else
+          {:error, error, _var_env} -> {:error, error}
+          {:return, _other} -> {:error, Error.return_types_mismatch()}
+        end
+      end
+    else
+      {:spec, other} -> Logger.error("shits fucked: #{other}")
+    end
+  end
 
   defp handle_session_branch(module, var_env, st_branches, body) do
     result =
@@ -790,7 +831,4 @@ defmodule Maty.Typechecker.Tc do
   def flatten_branches(%ST.SIn{from: role} = st) do
     st.branches |> Enum.map(fn x -> %ST.SIn{from: role, branches: [x]} end)
   end
-
-  def to_suspend({:tuple, [:atom, {:tuple, [:function, :atom]}, :maty_actor_state]}), do: :suspend
-  def to_suspend(val), do: val
 end
