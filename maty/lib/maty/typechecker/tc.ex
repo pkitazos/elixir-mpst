@@ -797,6 +797,13 @@ defmodule Maty.Typechecker.Tc do
     end
   end
 
+  def session_typecheck(_module, var_env, st, expr) do
+    case typecheck(var_env, expr) do
+      {:ok, some_type, new_env} -> {:ok, {:just, {some_type, st}}, new_env}
+      error -> error
+    end
+  end
+
   def session_typecheck_init_actor(module, fn_info, clauses) do
     type_specs = Module.get_attribute(module, :type_specs) |> Enum.into(%{})
 
@@ -813,13 +820,15 @@ defmodule Maty.Typechecker.Tc do
         body = block |> extract_body()
         res = typecheck(var_env, body)
 
-        # todo: make sure that this function registers in session
+        # ? what if the register call happens in a helper?
 
         with {:ok, {:list, types}, _var_env} <- res,
+             {:register, true} <- {:register, contains_register_call?(block)},
              {:return, ^spec_return} <- {:return, List.last(types)} do
           {:ok, spec_return}
         else
           {:error, error, _var_env} -> {:error, error}
+          {:register, false} -> {:error, "init_actor function does not register actor in session"}
           {:return, _other} -> {:error, Error.return_types_mismatch()}
         end
       end
@@ -846,6 +855,19 @@ defmodule Maty.Typechecker.Tc do
       [] -> {:error, Error.no_matching_session_branch()}
       _ -> {:error, Error.multiple_matching_session_branches()}
     end
+  end
+
+  defp contains_register_call?(ast) do
+    {_, found} =
+      Macro.prewalk(ast, false, fn
+        {:register, _meta, _args} = node, _acc ->
+          {node, true}
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    found
   end
 
   def flatten_branches(%ST.SOut{to: role} = st) do

@@ -62,12 +62,12 @@ defmodule Maty.Typechecker do
           Logger.debug("session typechecking handler: #{inspect(fn_info)}\n#{inspect(res)}")
 
         fn_info == {:init_actor, 1} ->
+          # Logger.debug("session typechecking init_actor: #{inspect(res)}")
           res = TC.session_typecheck_init_actor(env.module, fn_info, fn_clauses)
-          Logger.debug("session typechecking init_actor: #{inspect(res)}")
 
         true ->
           res = TC.typecheck_function(env.module, fn_info, fn_clauses)
-          Logger.debug("typechecking regular function: #{inspect(fn_info)}\n#{inspect(res)}")
+          # Logger.debug("typechecking regular function: #{inspect(fn_info)}\n#{inspect(res)}")
       end
     end
   end

@@ -1,29 +1,16 @@
 defmodule TwoBuyer.Participants.Seller do
   use Maty.Actor
-  @after_compile Maty.Hook
 
   @role :seller
 
-  # Buyer1 & title(String).Buyer1 + quote(Int). S_b
   @st {:title_handler, "buyer1&{title(binary).buyer1!{quote(number).decision_handler}}"}
 
-  # Buyer2 &{
-  #   address(String).Buyer2 + date(Date).end
-  #   quit(Unit).end
   @st {:decision_handler, "buyer2&{address(binary).buyer2!{date(date).end, quit(unit).end}}"}
 
   @impl true
   @spec init_actor(pid()) :: {:ok, maty_actor_state()}
   def init_actor(ap_pid) do
     initial_state = %{sessions: %{}, callbacks: %{}}
-
-    # to typecheck this function I need to make sure that the function calls register at some point with the following:
-    # - a pid
-    # - an atom
-    # - a function with arity 2 that suspends with a handler
-    # - some maty actor state
-
-    # and that it returns a tuple {:ok, maty_actor updated_state}
 
     {:ok, updated_state} =
       register(
@@ -40,9 +27,6 @@ defmodule TwoBuyer.Participants.Seller do
 
   @spec install(session(), maty_actor_state(), pid()) :: suspend()
   def install(_session, state, ap_pid) do
-    # in this case all that's important to me is that this is a function with arity 2 which suspends that's it
-    # oh it has to suspend with a handler
-
     {:ok, updated_state} =
       register(
         ap_pid,

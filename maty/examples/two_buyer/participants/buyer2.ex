@@ -1,16 +1,11 @@
 defmodule TwoBuyer.Participants.Buyer2 do
   use Maty.Actor
-  # @after_compile Maty.Hook
 
   @role :buyer2
 
-  # Buyer1 & share(Int).Seller + {
-  #   address(String). B2_b
-  #   quit(Unit).end }
   @st {:share_handler,
        "buyer1&{share(number).seller!{address(binary).date_handler, quit(unit).end}}}"}
 
-  # Seller & date(Date).end
   @st {:date_handler, "seller&{date(date).end}"}
 
   @impl true

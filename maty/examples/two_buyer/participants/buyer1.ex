@@ -1,13 +1,11 @@
 defmodule TwoBuyer.Participants.Buyer1 do
   use Maty.Actor
-  # @after_compile Maty.Hook
+  @after_compile Maty.Hook
 
   @role :buyer1
 
-  # Seller + title(String). B1_b
   @st {:install, "buyer1&{title(binary).quote_handler}"}
 
-  # Seller & quote(String).Buyer2 + share(Int).end
   @st {:quote_handler, "seller&{quote(number).buyer2!{share(number)}}"}
 
   @impl true
