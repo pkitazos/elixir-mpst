@@ -22,6 +22,7 @@ defmodule Maty.Typechecker.Preprocessor do
             {{^name, ^arity}, ^st} ->
               :ok
 
+            # todo: also store the handler label
             nil ->
               Module.put_attribute(
                 module,

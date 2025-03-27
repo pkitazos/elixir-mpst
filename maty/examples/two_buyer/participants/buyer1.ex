@@ -1,24 +1,21 @@
 defmodule TwoBuyer.Participants.Buyer1 do
   use Maty.Actor
-  @after_compile Maty.Hook
 
   @role :buyer1
 
-  @st {:install, "buyer1&{title(binary).quote_handler}"}
+  @st {:install, "buyer1&{title(binary).seller!{title(binary).quote_handler}}"}
 
   @st {:quote_handler, "seller&{quote(number).buyer2!{share(number)}}"}
 
   @impl true
-  @spec init_actor(any()) :: {:ok, maty_actor_state()}
+  @spec init_actor({pid(), binary()}) :: {:ok, maty_actor_state()}
   def init_actor({ap_pid, title}) do
     initial_state = %{sessions: %{}, callbacks: %{}}
 
     register(
       ap_pid,
       @role,
-      fn session, state ->
-        install({:title, title}, @role, session, state)
-      end,
+      &install({:title, title}, @role, &1, &2),
       initial_state
     )
   end

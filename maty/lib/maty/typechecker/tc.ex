@@ -24,11 +24,13 @@ defmodule Maty.Typechecker.Tc do
 
   @type var_env() :: %{atom() => value()}
 
-  # tcExpr :: Env -> ST -> Expr -> Either String (Maybe (Type, ST))
-  @spec session_typecheck(module(), var_env(), ST.t(), ast()) ::
-          {:error, binary(), var_env()}
-          | {:ok, {:just, {value(), ST.t()}}, var_env()}
-          | {:ok, :nothing, var_env()}
+  defguardp is_supported_type(val)
+            when is_atom(val) or
+                   is_binary(val) or
+                   is_boolean(val) or
+                   is_number(val) or
+                   is_pid(val) or
+                   (is_map_key(val, :__struct__) and val.__struct__ == Date)
 
   # tcVal :: Env -> Val -> Either String Type
   @spec typecheck(var_env(), ast()) :: {:ok, value(), var_env()} | {:error, binary(), var_env()}
@@ -86,12 +88,9 @@ defmodule Maty.Typechecker.Tc do
       vals
       |> Enum.reduce_while({[], var_env}, fn x, {acc, var_env} ->
         case typecheck(var_env, x) do
-          {:ok, type, var_env} ->
-            {:cont, {[type | acc], var_env}}
-
+          {:ok, type, var_env} -> {:cont, {[type | acc], var_env}}
           # todo give better error messages
-          {:error, msg, _var_env} ->
-            {:halt, {:error, msg, var_env}}
+          {:error, msg, _var_env} -> {:halt, {:error, msg, var_env}}
         end
       end)
 
@@ -189,14 +188,11 @@ defmodule Maty.Typechecker.Tc do
 
         {a, b} when is_atom(a) ->
           with {:z, {_, [rhs_a, rhs_b]}} <- {:z, rhs_type},
-               {:a, ^a} <- {:a, rhs_a},
+               {:ok, a_type, updated_env} <- typecheck(updated_env, a),
+               {:a, ^a_type} <- {:a, rhs_a},
                {:b, {var, _, nil}} when is_atom(var) <- {:b, b} do
             # todo: check that b and rhs_b have the same type
             updated_env = Map.update(updated_env, var, rhs_b, fn _ -> rhs_b end)
-
-            # Logger.debug(
-            #   "expr: #{inspect(expr)}\n\nhas type: #{inspect(rhs_type)}\n\nwith env: #{inspect(updated_env)}"
-            # )
 
             {:ok, rhs_type, updated_env}
           else
@@ -205,8 +201,8 @@ defmodule Maty.Typechecker.Tc do
 
               Logger.error("2 something else happened: #{inspect(other)}")
 
-            {:a, _} ->
-              Logger.error("a2 is not the same")
+            {:a, other} ->
+              Logger.error("a2 is not the same: got #{inspect(other)}, expected: #{inspect(a)}")
 
             {:b, _} ->
               Logger.error("b2 is not a variable")
@@ -326,7 +322,7 @@ defmodule Maty.Typechecker.Tc do
          {:a3, {:ok, _, var_env}} <- {:a3, typecheck(var_env, callback)},
          {:a4, {:ok, state_shape, var_env}} <- {:a4, typecheck(var_env, state)},
          {:z, true} <- {:z, is?(state_shape, :maty_actor_state)} do
-      {:ok, {:tuple, [:ok, Type.maty_actor_state()]}, var_env}
+      {:ok, {:tuple, [:atom, Type.maty_actor_state()]}, var_env}
     else
       {:a1, _} -> {:error, "access point pid type is not pid", var_env}
       {:a2, _} -> {:error, "role type is not atom", var_env}
@@ -420,18 +416,230 @@ defmodule Maty.Typechecker.Tc do
     end
   end
 
-  defguardp is_supported_type(val)
-            when is_atom(val) or
-                   is_binary(val) or
-                   is_boolean(val) or
-                   is_number(val) or
-                   is_pid(val) or
-                   (is_map_key(val, :__struct__) and val.__struct__ == Date)
+  # tcExpr :: Env -> ST -> Expr -> Either String (Maybe (Type, ST))
+  @spec session_typecheck(module(), var_env(), ST.t(), ast()) ::
+          {:error, binary(), var_env()}
+          | {:ok, {:just, {value(), ST.t()}}, var_env()}
+          | {:ok, :nothing, var_env()}
 
-  defp is_handler_return?({:|, [v1, v2]}),
-    do: (is?(v1, :done) and is?(v2, :suspend)) or (is?(v1, :suspend) and is?(v2, :done))
+  def session_typecheck(
+        _module,
+        var_env,
+        st,
+        {:maty_send, _meta, [session, role, {label, payload}]}
+      )
+      when is_atom(role) and is_atom(label) do
+    with %ST.SOut{to: expected_role, branches: branches} <- st do
+      case Enum.find(branches, &(&1.label == label)) do
+        branch when not is_nil(branch) ->
+          expected_payload = branch.payload
 
-  defp is_handler_return?(val), do: is?(val, :done) or is?(val, :suspend)
+          with {:ok, session_ctx_shape, _} <- typecheck(var_env, session),
+               {:s, true} <- {:s, is?(session_ctx_shape, :session_ctx)},
+               {:ok, ^expected_payload, _} <- typecheck(var_env, payload) do
+            cond do
+              expected_role != role -> {:error, Error.role_mismatch(), var_env}
+              true -> {:ok, {:just, {nil, branch.continue_as}}, var_env}
+            end
+          else
+            other ->
+              # todo more granular errors
+
+              Logger.error("Unexpected return from session_typecheck ST.SOut: #{inspect(other)}")
+              {:error, "something went wrong", var_env}
+          end
+
+        nil ->
+          error = Error.message_label_incompatible()
+          {:error, error, var_env}
+      end
+    else
+      _pre ->
+        {:error, "session precondition does not allow program to send at this point", var_env}
+    end
+  end
+
+  # what about case expressions in regular functions?
+  def session_typecheck(module, var_env, st, {:case, _meta, [expr, [do: branches]]}) do
+    with {:ok, _expr_type, var_env} <- typecheck(var_env, expr) do
+      all_branches = MapSet.new(st.branches)
+      st_branches = flatten_branches(st)
+
+      handled_branch_ids =
+        for {:->, _meta, [_, branch_block]} <- branches, reduce: MapSet.new() do
+          acc ->
+            body = extract_body(branch_block)
+
+            case handle_session_branch(module, var_env, st_branches, body) do
+              {:ok, id} -> MapSet.put(acc, id)
+              {:error, _} -> acc
+            end
+        end
+
+      cond do
+        all_branches != handled_branch_ids ->
+          error = Error.unhandled_session_branches()
+          {:error, error, var_env}
+
+        true ->
+          {:ok, :nothing, var_env}
+      end
+    else
+      error -> error
+    end
+  end
+
+  def session_typecheck(
+        module,
+        var_env,
+        pre,
+        {:{}, _meta, [:suspend, {fun_capture, expected_role}, state_ast]}
+      )
+      when is_atom(expected_role) do
+    # ! need to check that this is the right handler that I suspended with
+    with %ST.SName{handler: _handler} <- pre do
+      st_map = Module.get_attribute(module, :annotated_handlers) |> Enum.into(%{})
+
+      case fun_capture do
+        {:&, _, [{:/, _, [{{:., _, [mod, fn_name]}, _, _}, 4]}]} ->
+          # explicit module form: &Module.fun/arity
+          with {:ok, state_shape, var_env} <- typecheck(var_env, state_ast),
+               {:m, true} <- {:m, is?(state_shape, :maty_actor_state)},
+               {:ok, st} <- Map.fetch(st_map, {fn_name, 4}) do
+            cond do
+              mod != module -> {:error, Error.handler_from_unexpected_module(), var_env}
+              st.from != expected_role -> {:error, Error.handler_role_mismatch(), var_env}
+              true -> {:ok, :nothing, var_env}
+            end
+          else
+            {:error, msg, var_env} ->
+              error = Error.session_typecheck_handler_unexpected(msg)
+              Logger.error(error)
+              {:error, Error.something_went_wrong(), var_env}
+
+            {:m, _} ->
+              {:error, "maty state not well typed", var_env}
+
+            :error ->
+              {:error, Error.function_missing_session_type()}
+          end
+
+        {:&, _, [{:/, _, [fn_name, 4]}]} ->
+          # implicit module form: &fun/arity
+          with {:ok, state_shape, var_env} <- typecheck(var_env, state_ast),
+               {:m, true} <- {:m, is?(state_shape, :maty_actor_state)},
+               {:ok, st} <- Map.fetch(st_map, {fn_name, 4}) do
+            cond do
+              st.from != expected_role -> {:error, Error.handler_role_mismatch(), var_env}
+              true -> {:ok, :nothing, var_env}
+            end
+          else
+            {:error, msg, var_env} ->
+              error = Error.session_typecheck_handler_unexpected(msg)
+              Logger.error(error)
+              {:error, Error.something_went_wrong(), var_env}
+
+            {:m, _} ->
+              {:error, "maty state not well typed", var_env}
+
+            :error ->
+              {:error, Error.function_missing_session_type()}
+          end
+      end
+    else
+      _pre -> {:error, "precondition doesn't allow suspending at this point", var_env}
+    end
+  end
+
+  def session_typecheck(_module, var_env, pre, {:{}, _, [:done, :unit, state_ast]}) do
+    with {:pre, %ST.SEnd{}} <- {:pre, pre},
+         {:ok, state_shape, var_env} <- typecheck(var_env, state_ast),
+         {:m, true} <- {:m, is?(state_shape, :maty_actor_state)} do
+      {:ok, :nothing, var_env}
+    else
+      {:pre, _pre} ->
+        {:error, "precondition doesn't allow ending communication at this point", var_env}
+
+      {:error, error, _var_env} ->
+        {:error, error, var_env}
+
+      {:m, _} ->
+        {:error, "maty state not well typed", var_env}
+    end
+  end
+
+  def session_typecheck(module, var_env, st, {:=, _meta, [lhs, rhs]}) do
+    with {:ok, {:just, {rhs_type, new_st}}, var_env} <-
+           session_typecheck(module, var_env, st, rhs) do
+      case lhs do
+        {var, _meta, context} when is_atom(var) and (is_atom(context) or is_nil(context)) ->
+          var_env = Map.put(var_env, var, rhs_type)
+          {:ok, {:just, {rhs_type, new_st}}, var_env}
+
+        _ ->
+          {:error, Error.invalid_lhs_assignment(), var_env}
+      end
+    else
+      {:ok, :nothing} ->
+        {:ok, :nothing, var_env}
+
+      {:error, err} ->
+        {:error, err, var_env}
+
+      other ->
+        Logger.error(Error.session_typecheck_match_unexpected(other))
+    end
+  end
+
+  def session_typecheck(module, var_env, st, {name, _meta, args})
+      when is_atom(name) and is_list(args) do
+    arity = length(args)
+    func_types = Module.get_attribute(module, :type_specs) |> Enum.into(%{})
+
+    with {:ok, types} <- Map.fetch(func_types, {name, arity}) do
+      clause_results =
+        for {param_types, return_type} <- types do
+          # the fact that I'm doing this before the cond-do expression kinda defeats the purpose
+
+          params_type_errors =
+            Enum.zip_with(param_types, args, fn p, a ->
+              case typecheck(var_env, a) do
+                {:ok, ^p, _var_env} -> true
+                _ -> false
+              end
+            end)
+            |> Enum.filter(&(not &1))
+
+          cond do
+            length(param_types) != arity -> {:error, "not enough params"}
+            length(params_type_errors) != 0 -> {:error, "mismatch between param and arg types"}
+            true -> {:ok, return_type}
+          end
+        end
+
+      return =
+        Enum.find(clause_results, {:error, Error.something_went_wrong()}, fn {status, _} ->
+          status == :ok
+        end)
+
+      case return do
+        {:ok, some_type} -> {:ok, {:just, {some_type, st}}, var_env}
+        {:error, some_error} -> {:error, some_error, var_env}
+        _ -> {:error, Error.unreachable(), var_env}
+      end
+    else
+      :error ->
+        Logger.error("var: #{inspect(name)}\n\n ctx: #{inspect(args)}\n\n#{inspect(st)}")
+        {:error, Error.function_no_type(), var_env}
+    end
+  end
+
+  def session_typecheck(_module, var_env, st, expr) do
+    case typecheck(var_env, expr) do
+      {:ok, some_type, new_env} -> {:ok, {:just, {some_type, st}}, new_env}
+      error -> error
+    end
+  end
 
   def session_typecheck_handler(module, {name, arity} = fn_info, clauses) do
     annotated_handlers = Module.get_attribute(module, :annotated_handlers) |> Enum.into(%{})
@@ -490,19 +698,13 @@ defmodule Maty.Typechecker.Tc do
 
           cond do
             role != st.from ->
-              error = Error.handler_role_mismatch()
-              Logger.error(error)
-              {:error, error}
+              {:error, Error.handler_role_mismatch()}
 
             branch.label != label ->
-              error = Error.message_label_mismatch()
-              Logger.error(error)
-              {:error, error}
+              {:error, Error.message_label_mismatch()}
 
             branch.payload != payload_t ->
-              error = Error.message_payload_type_mismatch()
-              Logger.error(error)
-              {:error, error}
+              {:error, Error.message_payload_type_mismatch()}
 
             true ->
               st = branch.continue_as
@@ -595,215 +797,6 @@ defmodule Maty.Typechecker.Tc do
     end)
   end
 
-  def session_typecheck(
-        _module,
-        var_env,
-        %ST.SOut{to: expected_role, branches: branches},
-        {:maty_send, _meta, [session, role, {label, payload}]}
-      )
-      when is_atom(role) and is_atom(label) do
-    case Enum.find(branches, &(&1.label == label)) do
-      branch when not is_nil(branch) ->
-        expected_payload = branch.payload
-
-        with {:ok, session_ctx_shape, _} <- typecheck(var_env, session),
-             {:s, true} <- {:s, is?(session_ctx_shape, :session_ctx)},
-             {:ok, ^expected_payload, _} <- typecheck(var_env, payload) do
-          cond do
-            expected_role != role -> {:error, Error.role_mismatch(), var_env}
-            true -> {:ok, {:just, {nil, branch.continue_as}}, var_env}
-          end
-        else
-          other ->
-            # todo more granular errors
-            Logger.error("Unexpected return from session_typecheck ST.SOut: #{inspect(other)}")
-            {:error, "something went wrong", var_env}
-        end
-
-      nil ->
-        error = Error.message_label_incompatible()
-        {:error, error, var_env}
-    end
-  end
-
-  def session_typecheck(module, var_env, st, {:case, _meta, [expr, [do: branches]]}) do
-    with {:ok, _expr_type, var_env} <- typecheck(var_env, expr) do
-      all_branches = MapSet.new(st.branches)
-      st_branches = flatten_branches(st)
-
-      handled_branch_ids =
-        for {:->, _meta, [_, branch_block]} <- branches, reduce: MapSet.new() do
-          acc ->
-            body = extract_body(branch_block)
-
-            case handle_session_branch(module, var_env, st_branches, body) do
-              {:ok, id} -> MapSet.put(acc, id)
-              {:error, _} -> acc
-            end
-        end
-
-      cond do
-        all_branches != handled_branch_ids ->
-          error = Error.unhandled_session_branches()
-          {:error, error, var_env}
-
-        true ->
-          {:ok, :nothing, var_env}
-      end
-    else
-      error -> error
-    end
-  end
-
-  def session_typecheck(
-        module,
-        var_env,
-        %ST.SName{handler: _handler},
-        {:{}, _meta, [:suspend, {fun_capture, expected_role}, state_ast]}
-      )
-      when is_atom(expected_role) do
-    st_map = Module.get_attribute(module, :annotated_handlers) |> Enum.into(%{})
-
-    case fun_capture do
-      {:&, _, [{:/, _, [{{:., _, [mod, fn_name]}, _, _}, 4]}]} ->
-        # explicit module form: &Module.fun/arity
-        with {:ok, state_shape, var_env} <- typecheck(var_env, state_ast),
-             {:m, true} <- {:m, is?(state_shape, :maty_actor_state)},
-             {:ok, st} <- Map.fetch(st_map, {fn_name, 4}) do
-          cond do
-            mod != module -> {:error, Error.handler_from_unexpected_module(), var_env}
-            st.from != expected_role -> {:error, Error.handler_role_mismatch(), var_env}
-            true -> {:ok, :nothing, var_env}
-          end
-        else
-          {:error, msg, var_env} ->
-            error = Error.session_typecheck_handler_unexpected(msg)
-            Logger.error(error)
-            {:error, Error.something_went_wrong(), var_env}
-
-          {:m, _} ->
-            {:error, "maty state not well typed", var_env}
-
-          :error ->
-            {:error, Error.function_missing_session_type()}
-        end
-
-      {:&, _, [{:/, _, [fn_name, 4]}]} ->
-        # implicit module form: &fun/arity
-        with {:ok, state_shape, var_env} <- typecheck(var_env, state_ast),
-             {:m, true} <- {:m, is?(state_shape, :maty_actor_state)},
-             {:ok, st} <- Map.fetch(st_map, {fn_name, 4}) do
-          cond do
-            st.from != expected_role -> {:error, Error.handler_role_mismatch(), var_env}
-            true -> {:ok, :nothing, var_env}
-          end
-        else
-          {:error, msg, var_env} ->
-            error = Error.session_typecheck_handler_unexpected(msg)
-            Logger.error(error)
-            {:error, Error.something_went_wrong(), var_env}
-
-          {:m, _} ->
-            {:error, "maty state not well typed", var_env}
-
-          :error ->
-            {:error, Error.function_missing_session_type()}
-        end
-    end
-  end
-
-  def session_typecheck(_module, var_env, %ST.SEnd{}, {:{}, _, [:done, :unit, state_ast]}) do
-    with {:ok, state_shape, var_env} <- typecheck(var_env, state_ast),
-         {:m, true} <- {:m, is?(state_shape, :maty_actor_state)} do
-      {:ok, :nothing, var_env}
-    else
-      {:error, error, _var_env} -> {:error, error, var_env}
-      {:m, _} -> {:error, "maty state not well typed", var_env}
-    end
-  end
-
-  def session_typecheck(module, var_env, st, {:=, _meta, [lhs, rhs]}) do
-    with {:ok, {:just, {rhs_type, new_st}}, var_env} <-
-           session_typecheck(module, var_env, st, rhs) do
-      case lhs do
-        {var, _meta, context} when is_atom(var) and (is_atom(context) or is_nil(context)) ->
-          var_env = Map.put(var_env, var, rhs_type)
-          {:ok, {:just, {rhs_type, new_st}}, var_env}
-
-        _ ->
-          {:error, Error.invalid_lhs_assignment(), var_env}
-      end
-    else
-      {:ok, :nothing} ->
-        {:ok, :nothing, var_env}
-
-      {:error, err} ->
-        {:error, err, var_env}
-
-      other ->
-        Logger.error(Error.session_typecheck_match_unexpected(other))
-    end
-  end
-
-  def session_typecheck(module, var_env, st, {name, _meta, args})
-      when is_atom(name) and is_list(args) do
-    arity = length(args)
-    func_types = Module.get_attribute(module, :type_specs) |> Enum.into(%{})
-
-    with {:ok, types} <- Map.fetch(func_types, {name, arity}) do
-      # lookup the type of the function in the module annotations
-      # we get back a list of tuples where the first element is the param types (which is itself a list)
-      # and the second element is the return type
-      # I will then check to see if the types of all the args match the types of all the params
-      # if they do, then we return the corresponding return type and leave the session unchanged
-      # if they don't all match then we move on to the next branch
-      # if no branches match then we return an error saying these args cannot be passed to this function
-      # we can also error early by checking that the args and arity match
-
-      clause_results =
-        for {param_types, return_type} <- types do
-          # the fact that I'm doing this before the cond-do expression kinda defeats the purpose
-
-          params_type_errors =
-            Enum.zip_with(param_types, args, fn p, a ->
-              case typecheck(var_env, a) do
-                {:ok, ^p, _var_env} -> true
-                _ -> false
-              end
-            end)
-            |> Enum.filter(&(not &1))
-
-          cond do
-            length(param_types) != arity -> {:error, "not enough params"}
-            length(params_type_errors) != 0 -> {:error, "mismatch between param and arg types"}
-            true -> {:ok, return_type}
-          end
-        end
-
-      return =
-        Enum.find(clause_results, {:error, Error.something_went_wrong()}, fn {status, _} ->
-          status == :ok
-        end)
-
-      case return do
-        {:ok, some_type} -> {:ok, {:just, {some_type, st}}, var_env}
-        {:error, some_error} -> {:error, some_error, var_env}
-        _ -> {:error, Error.unreachable(), var_env}
-      end
-    else
-      :error ->
-        Logger.error("var: #{inspect(name)}\n\n ctx: #{inspect(args)}\n\n#{inspect(st)}")
-        {:error, Error.function_no_type(), var_env}
-    end
-  end
-
-  def session_typecheck(_module, var_env, st, expr) do
-    case typecheck(var_env, expr) do
-      {:ok, some_type, new_env} -> {:ok, {:just, {some_type, st}}, new_env}
-      error -> error
-    end
-  end
-
   def session_typecheck_init_actor(module, fn_info, clauses) do
     type_specs = Module.get_attribute(module, :type_specs) |> Enum.into(%{})
 
@@ -813,8 +806,23 @@ defmodule Maty.Typechecker.Tc do
 
         var_env =
           Enum.zip(args, spec_args)
-          |> Enum.reduce(%{}, fn {{arg_var, _, _}, arg_typ}, acc ->
-            Map.put(acc, arg_var, arg_typ)
+          |> Enum.reduce(%{}, fn
+            {{fst, snd}, {:tuple, [fst_type, snd_type]}}, var_env ->
+              var_env
+              |> update_env(fst, fst_type)
+              |> update_env(snd, snd_type)
+
+            {{collection, items}, arg_types}, var_env when collection in [:tuple, :list] ->
+              items
+              |> Enum.zip(arg_types)
+              |> Enum.reduce(var_env, fn {var, type}, acc -> update_env(acc, var, type) end)
+
+            {{_arg_var, _, nil} = arg, arg_type}, var_env ->
+              update_env(var_env, arg, arg_type)
+
+            other, acc ->
+              Logger.error("some other shape was provided: #{inspect(other)}")
+              acc
           end)
 
         body = block |> extract_body()
@@ -827,13 +835,21 @@ defmodule Maty.Typechecker.Tc do
              {:return, ^spec_return} <- {:return, List.last(types)} do
           {:ok, spec_return}
         else
-          {:error, error, _var_env} -> {:error, error}
-          {:register, false} -> {:error, "init_actor function does not register actor in session"}
-          {:return, _other} -> {:error, Error.return_types_mismatch()}
+          {:error, error, _var_env} ->
+            {:error, error}
+
+          {:register, false} ->
+            {:error, "init_actor function does not register actor in session"}
+
+          {:return, other} ->
+            # Logger.debug(inspect(res))
+            Logger.error("expected: #{inspect(spec_return)}\n\n got #{inspect(other)}")
+
+            {:error, Error.return_types_mismatch()}
         end
       end
     else
-      {:spec, other} -> Logger.error("shits fucked: #{other}")
+      {:spec, other} -> Logger.error("spec is busted: #{other}")
     end
   end
 
@@ -857,6 +873,11 @@ defmodule Maty.Typechecker.Tc do
     end
   end
 
+  defp is_handler_return?({:|, [v1, v2]}),
+    do: (is?(v1, :done) and is?(v2, :suspend)) or (is?(v1, :suspend) and is?(v2, :done))
+
+  defp is_handler_return?(val), do: is?(val, :done) or is?(val, :suspend)
+
   defp contains_register_call?(ast) do
     {_, found} =
       Macro.prewalk(ast, false, fn
@@ -870,11 +891,15 @@ defmodule Maty.Typechecker.Tc do
     found
   end
 
-  def flatten_branches(%ST.SOut{to: role} = st) do
+  defp update_env(var_env, {var, _, _}, type) do
+    Map.update(var_env, var, type, fn _ -> type end)
+  end
+
+  defp flatten_branches(%ST.SOut{to: role} = st) do
     st.branches |> Enum.map(fn x -> %ST.SOut{to: role, branches: [x]} end)
   end
 
-  def flatten_branches(%ST.SIn{from: role} = st) do
+  defp flatten_branches(%ST.SIn{from: role} = st) do
     st.branches |> Enum.map(fn x -> %ST.SIn{from: role, branches: [x]} end)
   end
 end

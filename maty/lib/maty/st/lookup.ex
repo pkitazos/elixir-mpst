@@ -3,14 +3,23 @@ defmodule Maty.ST.Lookup do
 
   def get(key) do
     case key do
-      "buyer1&{title(binary).quote_handler}" ->
+      "buyer1&{title(binary).seller!{title(binary).quote_handler}}" ->
         %ST.SIn{
           from: :buyer1,
           branches: [
             %ST.SBranch{
               label: :title,
               payload: :binary,
-              continue_as: %ST.SName{handler: :quote_handler}
+              continue_as: %ST.SOut{
+                to: :seller,
+                branches: [
+                  %ST.SBranch{
+                    label: :title,
+                    payload: :binary,
+                    continue_as: %ST.SName{handler: :quote_handler}
+                  }
+                ]
+              }
             }
           ]
         }

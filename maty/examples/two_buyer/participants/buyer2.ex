@@ -9,7 +9,7 @@ defmodule TwoBuyer.Participants.Buyer2 do
   @st {:date_handler, "seller&{date(date).end}"}
 
   @impl true
-  @spec init_actor(any()) :: {:ok, maty_actor_state()}
+  @spec init_actor(pid()) :: {:ok, maty_actor_state()}
   def init_actor(ap_pid) do
     initial_state = %{sessions: %{}, callbacks: %{}}
 

@@ -16,7 +16,7 @@ defmodule Maty.Hook do
 
       @on_definition Maty.Hook
       @before_compile Maty.Hook
-      # @after_compile Maty.Hook
+      @after_compile Maty.Hook
     end
   end
 

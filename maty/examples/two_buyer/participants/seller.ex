@@ -35,6 +35,7 @@ defmodule TwoBuyer.Participants.Seller do
         state
       )
 
+    # ? how do I know that I've suspended with the right handler here
     {:suspend, {&__MODULE__.title_handler/4, :buyer1}, updated_state}
   end
 
