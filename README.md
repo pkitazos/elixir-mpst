@@ -60,6 +60,11 @@ Multiparty Session Typing for Elixir apps using the Maty language design
 
 
 
+## Questions
+
+- How do I cut up a recursive session type?
+
+
 ## Dev things
 
 ### How to run Scribble
