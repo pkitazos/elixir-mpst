@@ -1,0 +1,44 @@
+global protocol ChatServer ( role C , role S ) {
+    choice at C {
+        LookupRoom ( RoomName ) from C to S ;
+        choice at S {
+            RoomPort ( RoomName , Port ) from S to C ;
+        } or {
+        RoomNotFound ( RoomName ) from S to C ;
+        }
+        do ChatServer (C , S ) ;
+    } or {
+        CreateRoom ( RoomName ) from C to S ;
+        choice at S {
+            CreateRoomSuccess ( RoomName ) from S to C ;
+        } or {
+            RoomExists ( RoomName ) from S to C ;
+        }
+        do ChatServer (C , S ) ;
+    } or {
+        ListRooms () from C to S ;
+        RoomList ( StringList ) from S to C ;
+        do ChatServer (C , S ) ;
+    } or {
+        Bye ( String ) from C to S ;
+    }
+}
+
+
+global protocol ChatSessionCtoR ( role C , role R ) {
+    choice at C {
+        OutgoingChatMessage ( String ) from C to R ;
+        do ChatSessionCtoR (C , R ) ;
+    } or {
+        LeaveRoom () from C to R ;
+    }
+}
+
+global protocol ChatSessionRtoC ( role R , role C ) {
+    choice at R {
+        IncomingChatMessage ( String ) from R to C ;
+        do ChatSessionRtoC (R , C ) ;
+    } or {
+        Bye () from R to C ;
+    }
+}
