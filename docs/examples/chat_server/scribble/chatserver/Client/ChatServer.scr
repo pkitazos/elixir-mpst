@@ -1,0 +1,32 @@
+module chatserver.ChatServer_ChatServer_C;
+
+data <java> java.lang.Integer from rt.jar as RoomNumber;
+data <java> java.lang.Double from rt.jar as Port;
+data <java> java.lang.Boolean from rt.jar as StringList;
+data <java> java.lang.String from rt.jar as String;
+
+local protocol chatserver.ChatServer_ChatServer_C.ChatServer_C(self C, role S) projects chatserver.ChatServer.ChatServer {
+    choice at self {
+        LookupRoom(RoomNumber) to S;
+        choice at S {
+            RoomPort(RoomNumber, Port) from S;
+        } or {
+            RoomNotFound(RoomNumber) from S;
+        }
+        do chatserver.ChatServer_ChatServer_C.ChatServer_C(self, S);
+    } or {
+        CreateRoom(RoomNumber) to S;
+        choice at S {
+            CreateRoomSuccess(RoomNumber) from S;
+        } or {
+            RoomExists(RoomNumber) from S;
+        }
+        do chatserver.ChatServer_ChatServer_C.ChatServer_C(self, S);
+    } or {
+        ListRooms() to S;
+        RoomList(StringList) from S;
+        do chatserver.ChatServer_ChatServer_C.ChatServer_C(self, S);
+    } or {
+        Bye(String) to S;
+    }
+}
