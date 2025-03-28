@@ -1,0 +1,32 @@
+
+ShopCustomer === 
+Customer -> Shop : requestItems().
+Shop -> Customer : items([(ItemID ++ ItemName)]).
+μ loop .
+    Customer -> Shop : {
+        getItemInfo(ItemID).
+            Shop -> Customer : itemInfo(Description).loop,
+        
+        checkout(([ItemID] ++ PaymentDetails)).
+            Shop -> Customer : {
+                paymentProcessing().
+                    Shop -> PaymentProcessor :
+                        buy(PaymentDetails ++ Price).
+                    PaymentProcessor -> Shop : {
+                        ok().
+                            Shop -> Customer : ok(DeliveryDate).loop,
+                        paymentDeclined().
+                            Shop -> Customer : paymentDeclined().loop
+                    },
+
+                outOfStock().
+                    Shop -> Customer : outOfStock().loop
+            },
+    }
+
+ShopStaff ===
+μ loop.
+    Staff -> Shop : {
+        addItem((Name ++ Description ++ Price ++ Stock)).loop,
+        removeItem(ItemID).loop
+}

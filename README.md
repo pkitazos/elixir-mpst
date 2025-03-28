@@ -44,8 +44,9 @@ Multiparty Session Typing for Elixir apps using the Maty language design
 - [ ] non-variables as arguments to handlers
 
 - [x] helper functions
-- [ ] init_actor callback
+- [x] init_actor callback
 - [ ] make sure that there are no session types left over
+- [ ] recursive session types
 
 
 ### general

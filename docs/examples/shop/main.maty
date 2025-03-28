@@ -1,0 +1,70 @@
+main ===
+    custAP = newAP(Shop: ShopTy,  Customer: CustTy, PaymentProcessor: PPTy)
+    staffAP = newAP(Shop: ShopTy2, Staff: StaffTy) 
+
+    spawn shop(custAP, staffAP) initialState
+    spawn staff(staffAP) ()
+    spawn customer(custAP) ()
+
+registerForever(ap, role, callback) ===
+    rec install(_).
+        register ap role (install ())
+        callback ()
+
+shop(custAP, staffAP) ===
+    register custAP Shop
+        (registerForever(custAP, Shop, λ_.suspend itemReqHandler) ())
+    register staffAP Shop
+        (registerForever (staffAP, Shop, λ_.suspend staffReqHandler) ())
+
+
+itemReqHandler === handler Customer {
+    requestItems() |->
+        items = get()
+        Customer!itemSummary(summary(items))
+        suspend custReqHandler
+}
+
+custReqHandler === handler Customer {
+    getItemInfo(itemID) |-> 
+        items = get() 
+        Customer!itemInfo(lookupItem(itemID, items))
+        suspend custReqHandler
+    
+    checkout((itemIDs, details)) |->
+        items = get()
+        if inStock((itemIDs, items)) then
+            Customer!paymentProcessing()
+            total = cost(itemIDs, items)
+            set decreaseStock(itemIDs, items)
+            PaymentProcessor!buy((total, details))
+            suspend paymentResponseHandler(itemIDs)
+        else
+            Customer!outOfStock()
+            suspend custReqHandler
+}
+
+paymentResponseHandler(itemIDs) === handler PaymentProcessor {
+    ok() |->
+        date = deliveryDate(itemIDs)
+        Customer!ok(date)
+        suspend custReqHandler
+        
+    paymentDeclined() |->
+        Customer!paymentDeclined()
+        items = get()
+        set increaseStock(itemIDs, items);
+        suspend custReqHandler
+}
+
+staffReqHandler === handler Staff {
+    addItem((name, description, price, stock)) |->
+        items = get()
+        set add(name, description, price, stock, items)
+        suspend stockHandler
+    
+    removeItem(itemID) |->
+        items = get()
+        set remove(itemID, items)
+        suspend stockHandler
+}
