@@ -1,0 +1,12 @@
+module chatserver.ChatServer_ChatSessionRtoC_C;
+
+data <java> java.lang.String from rt.jar as String;
+
+local protocol chatserver.ChatServer_ChatSessionRtoC_C.ChatSessionRtoC_C(role R, self C) projects chatserver.ChatServer.ChatSessionRtoC {
+    choice at R {
+        IncomingChatMessage(String) from R;
+        do chatserver.ChatServer_ChatSessionRtoC_C.ChatSessionRtoC_C(R, self);
+    } or {
+        Bye() from R;
+    }
+}

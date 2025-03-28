@@ -1,0 +1,12 @@
+module chatserver.ChatServer_ChatSessionCtoR_R;
+
+data <java> java.lang.String from rt.jar as String;
+
+local protocol chatserver.ChatServer_ChatSessionCtoR_R.ChatSessionCtoR_R(role C, self R) projects chatserver.ChatServer.ChatSessionCtoR {
+    choice at C {
+        OutgoingChatMessage(String) from C;
+        do chatserver.ChatServer_ChatSessionCtoR_R.ChatSessionCtoR_R(C, self);
+    } or {
+        LeaveRoom() from C;
+    }
+}

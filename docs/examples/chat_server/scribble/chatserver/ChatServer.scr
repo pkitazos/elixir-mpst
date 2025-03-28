@@ -1,44 +1,51 @@
-global protocol ChatServer ( role C , role S ) {
+module chatserver.ChatServer;
+
+data <java> "java.lang.Integer" from "rt.jar" as RoomNumber;
+data <java> "java.lang.Double" from "rt.jar" as Port;
+data <java> "java.lang.String" from "rt.jar" as String;
+data <java> "java.lang.Boolean" from "rt.jar" as StringList;
+
+global protocol ChatServer (role C, role S) {
     choice at C {
-        LookupRoom ( RoomName ) from C to S ;
+        LookupRoom(RoomNumber) from C to S ;
         choice at S {
-            RoomPort ( RoomName , Port ) from S to C ;
+            RoomPort(RoomNumber, Port) from S to C ;
         } or {
-        RoomNotFound ( RoomName ) from S to C ;
+        RoomNotFound(RoomNumber) from S to C ;
         }
-        do ChatServer (C , S ) ;
+        do ChatServer(C , S ) ;
     } or {
-        CreateRoom ( RoomName ) from C to S ;
+        CreateRoom(RoomNumber) from C to S ;
         choice at S {
-            CreateRoomSuccess ( RoomName ) from S to C ;
+            CreateRoomSuccess(RoomNumber) from S to C ;
         } or {
-            RoomExists ( RoomName ) from S to C ;
+            RoomExists(RoomNumber) from S to C ;
         }
-        do ChatServer (C , S ) ;
+        do ChatServer(C , S) ;
     } or {
-        ListRooms () from C to S ;
-        RoomList ( StringList ) from S to C ;
-        do ChatServer (C , S ) ;
+        ListRooms() from C to S ;
+        RoomList(StringList) from S to C ;
+        do ChatServer(C , S) ;
     } or {
-        Bye ( String ) from C to S ;
+        Bye(String) from C to S ;
     }
 }
 
 
-global protocol ChatSessionCtoR ( role C , role R ) {
+global protocol ChatSessionCtoR (role C, role R) {
     choice at C {
-        OutgoingChatMessage ( String ) from C to R ;
-        do ChatSessionCtoR (C , R ) ;
+        OutgoingChatMessage(String) from C to R ;
+        do ChatSessionCtoR(C , R) ;
     } or {
-        LeaveRoom () from C to R ;
+        LeaveRoom() from C to R ;
     }
 }
 
-global protocol ChatSessionRtoC ( role R , role C ) {
+global protocol ChatSessionRtoC (role R, role C) {
     choice at R {
-        IncomingChatMessage ( String ) from R to C ;
-        do ChatSessionRtoC (R , C ) ;
+        IncomingChatMessage(String) from R to C ;
+        do ChatSessionRtoC(R, C) ;
     } or {
-        Bye () from R to C ;
+        Bye() from R to C ;
     }
 }

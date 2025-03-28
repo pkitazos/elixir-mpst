@@ -55,3 +55,19 @@ Multiparty Session Typing for Elixir apps using the Maty language design
 - [ ] polish up error reporting to use meta information
 - [ ] add doc comments to code
 - [ ] add a couple more examples
+
+
+## Dev things
+
+### How to run Scribble
+
+To check that a global protocol is correct:
+```
+scribble path/to/protocol.scr
+```
+
+
+To get a local projection of a global protocol:
+```
+scribble path/to/protocol.scr -project GlobalProtocolName LocalRoleName
+```
