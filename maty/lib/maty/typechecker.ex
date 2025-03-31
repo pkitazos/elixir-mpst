@@ -18,7 +18,16 @@ defmodule Maty.Typechecker do
     handler = Module.get_attribute(env.module, :handler)
 
     if not is_nil(handler) do
-      Preprocessor.process_handler_annotation(env.module, kind, name, length(args), handler)
+      Preprocessor.process_handler_annotation(
+        env.module,
+        kind,
+        name,
+        length(args),
+        handler,
+        line: env.line
+      )
+
+      # todo: handle these errors properly
     end
 
     Preprocessor.process_type_annotation(env, {name, args})
@@ -50,41 +59,41 @@ defmodule Maty.Typechecker do
   Called by Hook at `@after_compile`.
   """
   def handle_after_compile(env, bytecode) do
-    debug_modules = [
-      TwoBuyer.Participants.Buyer1,
-      TwoBuyer.Participants.Buyer2,
-      TwoBuyer.Participants.Seller
-    ]
+    dbgi_map = read_debug_info!(bytecode)
 
-    if env.module in debug_modules do
-      dbgi_map = read_debug_info!(bytecode)
+    module_handlers =
+      env.module
+      |> Module.get_attribute(:annotated_handlers)
+      |> Enum.map(&elem(&1, 0))
 
-      module_handlers =
-        env.module
-        |> Module.get_attribute(:annotated_handlers)
-        |> Enum.map(&elem(&1, 0))
+    all_module_definitions =
+      dbgi_map[:definitions]
+      |> Enum.filter(fn {_, _, meta, _} -> Keyword.get(meta, :context) != Maty.Actor end)
 
-      all_module_definitions =
-        dbgi_map[:definitions]
-        |> Enum.filter(fn {_, _, meta, _} -> Keyword.get(meta, :context) != Maty.Actor end)
+    errors =
+      for {fn_info, _kind, _meta, fn_clauses} <- all_module_definitions, reduce: [] do
+        acc ->
+          cond do
+            fn_info in module_handlers ->
+              res = TC.session_typecheck_handler(env.module, fn_info, fn_clauses)
+              # log_typechecking_results(fn_info, res, label: "session typechecking handler")
+              acc ++ extract_errors(res)
 
-      for {fn_info, _kind, _meta, fn_clauses} <- all_module_definitions do
-        cond do
-          fn_info in module_handlers ->
-            res = TC.session_typecheck_handler(env.module, fn_info, fn_clauses)
-            log_typechecking_results(fn_info, res, label: "session typechecking handler")
-            :ok
+            fn_info == {:init_actor, 1} ->
+              res = TC.session_typecheck_init_actor(env.module, fn_info, fn_clauses)
+              # log_typechecking_results(fn_info, res, label: "session typechecking init_actor")
+              acc ++ extract_errors(res)
 
-          fn_info == {:init_actor, 1} ->
-            res = TC.session_typecheck_init_actor(env.module, fn_info, fn_clauses)
-            log_typechecking_results(fn_info, res, label: "session typechecking init_actor")
-            :ok
+            true ->
+              res = TC.typecheck_function(env.module, fn_info, fn_clauses)
+              # log_typechecking_results(fn_info, res, label: "typechecking regular function")
+              acc ++ extract_errors(res)
+          end
+      end
 
-          true ->
-            res = TC.typecheck_function(env.module, fn_info, fn_clauses)
-            log_typechecking_results(fn_info, res, label: "typechecking regular function")
-            :ok
-        end
+    if length(errors) != 0 do
+      for error <- errors do
+        Logger.error(error)
       end
     end
   end
@@ -118,15 +127,25 @@ defmodule Maty.Typechecker do
     end
   end
 
-  defp log_typechecking_results(fn_info, res, label: label) do
-    out = fn x -> "#{label}: #{inspect(fn_info)}\n#{inspect(x)}" end
+  # defp log_typechecking_results(fn_info, res, label: label) do
+  #   out = fn x -> "#{label}: #{inspect(fn_info)}\n#{inspect(x)}" end
 
-    for clause_res <- res do
-      case clause_res do
-        {:error, error} -> out.(error) |> Logger.error()
-        {:ok, return} -> out.(return) |> Logger.debug()
-      end
-    end
+  #   for clause_res <- res do
+  #     case clause_res do
+  #       {:error, error} -> out.(error) |> Logger.error()
+  #       {:ok, return} -> out.(return) |> Logger.debug()
+  #     end
+  #   end
+  # end
+
+  defp extract_errors(res) do
+    [res]
+    |> List.flatten()
+    |> Enum.map(fn
+      {:ok, _} -> nil
+      {:error, error} -> error
+    end)
+    |> Enum.reject(&is_nil/1)
   end
 
   defp show_function_signatures(module) do

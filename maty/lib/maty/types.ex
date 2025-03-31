@@ -203,5 +203,10 @@ defmodule Maty.Types do
     def is?({:tuple, [:atom, :atom, state]}, :done), do: is?(state, :maty_actor_state)
 
     def is?(_, _), do: false
+
+    def is_handler_return?({:|, [v1, v2]}),
+      do: (is?(v1, :done) and is?(v2, :suspend)) or (is?(v1, :suspend) and is?(v2, :done))
+
+    def is_handler_return?(val), do: is?(val, :done) or is?(val, :suspend)
   end
 end

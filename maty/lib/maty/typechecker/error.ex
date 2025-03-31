@@ -1,17 +1,4 @@
 defmodule Maty.Typechecker.Error do
-  def participant_mismatch(handler, line, [expected: expected, got: got] = _opts) do
-    "Error in #{handler} message came from wrong participant (line: #{line})\n- Expected:\t#{expected}\n- Got:\t\t#{got}\n"
-  end
-
-  def malformed_message(handler, line, [tuple_size: tuple_size] = _opts) do
-    "Error in #{handler} malformed message (line: #{line})\n" <>
-      "Messages should be structured as: 2-tuples {:label, message}\nReceived #{tuple_size}-tuple\n"
-  end
-
-  def label_mismatch(handler, line, [expected: expected, got: got] = _opts) do
-    "Error in #{handler} message label incorrect (line: #{line})\n- Expected:\t#{expected}\n- Got:\t\t#{got}\n"
-  end
-
   def spec_args_not_well_typed(spec_name, args_types) do
     "Problem with @spec for #{spec_name}. Function args: \n\t#{inspect(args_types)} are not well typed"
   end
@@ -28,18 +15,16 @@ defmodule Maty.Typechecker.Error do
     "Can't apply handler \'#{handler}\' to function #{curr}, function #{prev} was already annotated with this handler"
   end
 
+  # pin
   def missing_handler(handler) do
     "No handler in this module named #{handler}"
   end
 
-  def no_private_handlers() do
-    "Handlers can't be private functions"
+  def no_private_handlers(meta) do
+    with_meta(meta, "Handlers can't be private functions")
   end
 
-  def unsupported_spec_type() do
-    "Unsupported type in @spec annotation"
-  end
-
+  # pin
   def unannotated_handler(func) do
     "Function: #{func} has not been annotated with a handler"
   end
@@ -48,16 +33,16 @@ defmodule Maty.Typechecker.Error do
     "Function: #{func} is missing a @spec annotation"
   end
 
-  def variable_not_exist do
-    "variable doesn't exist"
+  def variable_not_exist(meta, var) do
+    with_meta(meta, "variable #{var} doesn't exist")
   end
 
   def lhs_failed(msg) do
-    "lhs failed: #{msg}"
+    "typechecking lhs failed: #{msg}"
   end
 
   def rhs_failed(msg) do
-    "rhs failed: #{msg}"
+    "typechecking rhs failed: #{msg}"
   end
 
   def binary_operator_requires_numbers(op, lhs_type, rhs_type) do
@@ -80,119 +65,195 @@ defmodule Maty.Typechecker.Error do
     "Logical operator #{op} requires a boolean operand, got #{inspect(expr_type)}"
   end
 
+  # pin
   def function_not_exist(func) do
     "function #{func} doesn't exist"
   end
 
-  def at_least_one_arg_not_well_typed do
-    "at least one argument is not well typed"
+  # pin
+  def at_least_one_arg_not_well_typed(func) do
+    "#{func} arguments not well typed. At least one argument is not well typed."
   end
 
-  def arity_mismatch do
-    "arity mismatch"
+  def too_few_arguments(meta, opts) do
+    with_meta(meta, "Too few params were given to function.\n#{display_opts(opts)}")
   end
 
+  def arity_mismatch(meta, func) do
+    with_meta(meta, "Arity mismatch between #{func} spec and function definition")
+  end
+
+  # pin
   def no_spec_for_function(type_specs) do
     "no spec for this function: #{inspect(type_specs)}"
   end
 
-  def return_types_mismatch do
-    "return types don't match"
+  def return_types_mismatch(meta, opts) do
+    with_meta(meta, "Return types don't match.\n#{display_opts(opts)}")
   end
 
-  def handler_args_shape_invalid do
-    "handler args shape not looking good"
+  def handler_args_shape_invalid(meta) do
+    with_meta(
+      meta,
+      "Invalid number or shape of arguments given to handler. Handlers must have 4 arguments."
+    )
   end
 
+  # pin
   def message_format_invalid do
     "message not formatted properly"
   end
 
-  def role_type_invalid do
-    "role not typed properly"
+  def provided_handler_role_pair_mismatch(meta, opts) do
+    with_meta(
+      meta,
+      "the provided handler and role don't match. The provided handler handles messages from a different participant.\n#{display_opts(opts)}"
+    )
   end
 
-  def session_ctx_type_invalid do
-    "session_ctx not typed properly"
+  def role_type_invalid(meta, type) do
+    with_meta(meta, "@spec defines role type as #{inspect(type)}, must use :role or :atom type")
   end
 
-  def maty_actor_state_type_invalid do
-    "maty_actor_state not typed properly"
+  def session_ctx_type_invalid(meta, type) do
+    with_meta(
+      meta,
+      "@spec defines session ctx type as #{inspect(type)}, must use :session_ctx type"
+    )
   end
 
-  def handler_return_type_invalid(other) do
-    "invalid return type for handler: #{inspect(other)} is #{inspect(other)}"
+  def maty_actor_state_type_invalid(meta, type) do
+    with_meta(
+      meta,
+      "@spec defines maty actor state type as #{inspect(type)}, must use :maty_actor_state type"
+    )
   end
 
-  def payload_var_has_other_value(other) do
-    "Payload has some other value: #{inspect(other)}"
+  def handler_return_type_invalid(meta, other) do
+    with_meta(
+      meta,
+      "invalid return type for handler: #{inspect(other)} is not in [:suspend, :done]"
+    )
   end
 
-  def handler_role_mismatch do
-    "handler role mismatch"
+  def payload_var_has_other_value(meta, type) do
+    with_meta(
+      meta,
+      "Payload has unsupported shape, must be variable or tuple of variables: #{inspect(type)} won't do"
+    )
   end
 
-  def message_label_mismatch do
-    "message label mismatch"
+  def handler_role_mismatch(meta, opts) do
+    with_meta(meta, "handler role mismatch.\n#{display_opts(opts)}")
   end
 
-  def message_payload_type_mismatch do
-    "message payload type mismatch"
+  def handler_message_label_mismatch(meta, opts) do
+    with_meta(meta, "handler message label mismatch.\n#{display_opts(opts)}")
+  end
+
+  def message_payload_type_mismatch(meta, opts) do
+    with_meta(meta, "message payload type mismatch.\n#{display_opts(opts)}")
+  end
+
+  def send_role_mismatch(meta, opts) do
+    with_meta(
+      meta,
+      "recipient role mismatch. Sending to incorrect participant in session.\n#{display_opts(opts)}"
+    )
+  end
+
+  def no_branch_with_this_label(meta, got: got) do
+    with_meta(
+      meta,
+      "message label incompatible with session precondition. No continuation sends message with label: #{inspect(got)}"
+    )
   end
 
   def session_typecheck_handler_unexpected(msg) do
-    "Unexpected return from session_typecheck ST.SHandler: #{inspect(msg)}"
+    "Unexpected return from session_typecheck ST.SName: #{inspect(msg)}"
   end
 
   def something_went_wrong do
-    "something went wrong and I'm not sure what yet"
+    "Something went wrong"
   end
 
-  def function_missing_session_type do
-    "this function doesn't seem to have a session type stored"
+  def unexpected do
+    "an unexpected error occurred"
   end
 
-  def handler_from_unexpected_module do
-    "Handler function from unexpected module"
+  def function_missing_session_type(meta, func) do
+    with_meta(meta, "function #{func} doesn't seem to have a session type stored")
   end
 
-  def session_type_branches_mismatch do
-    "not enough function clauses to support the annotated session type"
+  def handler_from_unexpected_module(meta, opts) do
+    with_meta(meta, "Handler function from unexpected module.\n#{display_opts(opts)}")
   end
 
-  def role_mismatch do
-    "role mismatch"
+  def unhandled_session_branches(meta, unhandled) do
+    branch_msg =
+      if unhandled == 1 do
+        "1 branch remains unhandled"
+      else
+        "#{unhandled} branches remain unhandled"
+      end
+
+    with_meta(meta, "Handler exits without handling all session type branches. #{branch_msg}")
   end
 
-  def message_label_incompatible do
-    "message label incompatible with session precondition"
+  def unsupported_lhs_assignment(meta, shape) do
+    with_meta(meta, "Unsupported lhs in assignment, found: #{inspect(shape)}")
   end
 
-  def unhandled_session_branches do
-    "unhandled session type branches"
+  def session_typecheck_match_unexpected(meta, other) do
+    with_meta(meta, "Unexpected return from session_typecheck match operator: #{inspect(other)}")
   end
 
-  def invalid_lhs_assignment do
-    "Invalid lhs-hand side in assignment"
+  def forbidden_receive(meta, func) do
+    with_meta(
+      meta,
+      "Maty.Actor illegal communication. Function #{func} perform receive operation using `Elixir.receive` construct instead of relying on annotated handlers"
+    )
   end
 
-  def session_typecheck_match_unexpected(other) do
-    "Unexpected return from session_typecheck match operator: #{inspect(other)}"
+  def forbidden_send(meta, func) do
+    with_meta(
+      meta,
+      "Maty.Actor illegal communication. Function #{func} performs send operation using `Elixir.send/2` instead of `Maty.Actor.maty_send/3`"
+    )
+  end
+
+  def unsupported_argument_shape(meta, shape) do
+    with_meta(meta, "Some other shape was provided: #{inspect(shape)}")
+  end
+
+  def missing_registration do
+    "init_actor function does not register actor in session"
+  end
+
+  def invalid_ap_type(meta, opts) do
+    with_meta(meta, "Invalid type given to AP.\n#{display_opts(opts)}")
   end
 
   def function_no_type do
-    "function doesn't seem to have a type"
+    "Can't typecheck this function"
   end
 
   def no_matching_session_branch do
     "No matching session branch found"
   end
 
-  def multiple_matching_session_branches do
-    "Multiple matching session branches found"
-  end
-
   def unreachable do
     "This should be unreachable"
+  end
+
+  # -----------------------------------------------------------------
+
+  defp with_meta(meta, str) do
+    meta = Keyword.take(meta, [:line, :column])
+    "#{inspect(meta)} #{str}"
+  end
+
+  defp display_opts([expected: expected, got: got] = _opts) do
+    "Expected: #{inspect(expected)} \nGot: #{inspect(got)}"
   end
 end

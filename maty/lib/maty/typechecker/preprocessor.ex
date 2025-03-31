@@ -4,13 +4,13 @@ defmodule Maty.Typechecker.Preprocessor do
   alias Maty.{ST, Utils}
   require Logger
 
-  def process_handler_annotation(module, kind, name, arity, handler) do
+  def process_handler_annotation(module, kind, name, arity, handler, meta) do
     sts = Module.get_attribute(module, :st) |> Enum.into(%{})
     annotated_handlers = Module.get_attribute(module, :annotated_handlers)
 
     cond do
       kind == :defp ->
-        error = Error.no_private_handlers()
+        error = Error.no_private_handlers(meta)
         Logger.error(error)
         {:error, error}
 
@@ -70,9 +70,13 @@ defmodule Maty.Typechecker.Preprocessor do
             {name, arity},
             {typed_args, typed_return}
           )
+
+          Module.delete_attribute(env.module, :spec)
         else
           {:info, _} ->
-            error = "Spec name: #{spec_name} doesn't match function name: #{name}"
+            error =
+              "Spec info: {#{spec_name}, #{length(args_types)}} doesn't match function info: {#{name}, #{arity}}"
+
             Logger.error(error)
             Module.put_attribute(env.module, :spec_errors, {{name, arity}, error})
 
