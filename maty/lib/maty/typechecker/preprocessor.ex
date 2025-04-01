@@ -30,6 +30,12 @@ defmodule Maty.Typechecker.Preprocessor do
                 {{name, arity}, st}
               )
 
+              Module.put_attribute(
+                module,
+                :handler_defs,
+                {{name, arity}, handler}
+              )
+
             {{prev_fn_name, prev_fn_arity}, _} ->
               prev = "#{to_string(prev_fn_name)}/#{prev_fn_arity}"
               curr = "#{to_string(name)}/#{arity}"

@@ -104,6 +104,10 @@ defmodule Maty.Typechecker.Error do
     "message not formatted properly"
   end
 
+  def no_matching_function_clause(meta, func) do
+    with_meta(meta, "No function clause matches provided function info: #{func}")
+  end
+
   def provided_handler_role_pair_mismatch(meta, opts) do
     with_meta(
       meta,
@@ -181,6 +185,14 @@ defmodule Maty.Typechecker.Error do
     "an unexpected error occurred"
   end
 
+  def arg_type_mismatch(meta, opts) do
+    with_meta(meta, "Argument type mismatch.\n#{display_opts(opts)}")
+  end
+
+  def ambiguous_function_call(meta, func) do
+    with_meta(meta, "Too many function specs defined for function: #{func}")
+  end
+
   def function_missing_session_type(meta, func) do
     with_meta(meta, "function #{func} doesn't seem to have a session type stored")
   end
@@ -238,12 +250,53 @@ defmodule Maty.Typechecker.Error do
     "Can't typecheck this function"
   end
 
-  def no_matching_session_branch do
+  def invalid_function_capture(meta, fun_capture) do
+    with_meta(meta, "Unsupported function reference syntax: #{inspect(fun_capture)}")
+  end
+
+  def no_compatible_session_branch do
     "No matching session branch found"
+  end
+
+  def ambiguous_branch_match(ids) do
+    "Multiple session branches match this case branch.\nExpected 1 branch to match, instead got #{length(ids)} matches"
+  end
+
+  def type_errors_prevented_match(branch_errors) do
+    "There were type errors preventing matching.\n#{branch_errors}"
+  end
+
+  def pre_condition_cannot_send(meta, opts) do
+    with_meta(
+      meta,
+      "Session precondition does not allow sending at this point.\n#{display_opts(opts)}"
+    )
+  end
+
+  def invalid_suspension_state(meta, other) do
+    with_meta(
+      meta,
+      "Session precondition does not allow suspending at this point. Session state: \n#{other}"
+    )
+  end
+
+  def invalid_termination_state(meta, other) do
+    with_meta(
+      meta,
+      "Session precondition does not allow terminating at this point. Session state: \n#{other}"
+    )
+  end
+
+  def handler_mismatch(meta, opts) do
+    with_meta(meta, "Handler suspends with incorrect handler.\n#{display_opts(opts)}")
   end
 
   def unreachable do
     "This should be unreachable"
+  end
+
+  def invalid_session_type(error) do
+    "Invalid session type: #{inspect(error)}"
   end
 
   # -----------------------------------------------------------------

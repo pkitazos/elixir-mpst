@@ -43,15 +43,16 @@ Multiparty Session Typing for Elixir apps using the Maty language design
 - [x] branch and control flow
 - [ ] non-variables as arguments to handlers
 - [x] helper functions
-- [ ] init_actor callback
+- [x] init_actor callback
 - [ ] make sure that there are no session types left over
 - [ ] make sure only annotated functions perform communication operations
 - [ ] make sure no `receive-do` expressions or `send` calls in Maty.Actor modules
 
 
 ### general
-- [ ] clean up repo (move the unrelated sub-directories)
-- [ ] centralise errors to dedicated module
+- [x] clean up repo (move the unrelated sub-directories)
+- [x] centralise errors to dedicated module
 - [ ] polish up error reporting to use meta information
 - [ ] add doc comments to code
 - [ ] add a couple more examples
+- [ ] split generic typechecking and session typechecking into separate modules
