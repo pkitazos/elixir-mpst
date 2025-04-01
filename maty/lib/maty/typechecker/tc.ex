@@ -7,6 +7,10 @@ defmodule Maty.Typechecker.Tc do
 
   require Logger
 
+  @typedoc """
+  Represents types that are supported by the Maty typechecker.
+  These are primitive types that can be checked directly.
+  """
   @type value ::
           :any
           | :atom
@@ -20,10 +24,20 @@ defmodule Maty.Typechecker.Tc do
           | :reference
           | :unit
 
+  @typedoc """
+  Represents Elixir AST nodes that can be typechecked.
+  """
   @type ast :: Macro.t()
 
+  @typedoc """
+  Environment mapping variable names to their types.
+  Used to track types of variables during typechecking.
+  """
   @type var_env() :: %{atom() => value()}
 
+  @doc """
+  Guard that checks if a value is one of the directly supported types.
+  """
   defguardp is_supported_type(val)
             when is_atom(val) or
                    is_binary(val) or
@@ -32,7 +46,13 @@ defmodule Maty.Typechecker.Tc do
                    is_pid(val) or
                    (is_map_key(val, :__struct__) and val.__struct__ == Date)
 
-  # tcVal :: Env -> Val -> Either String Type
+  @doc """
+  Typechecks an AST node and returns its type along with potentially updated environment.
+
+  Returns:
+    - `{:ok, type, var_env}` when typechecking succeeds
+    - `{:error, error_message, var_env}` when typechecking fails
+  """
   @spec typecheck(var_env(), ast()) :: {:ok, value(), var_env()} | {:error, binary(), var_env()}
   def typecheck(var_env, :unit), do: {:ok, :unit, var_env}
   def typecheck(var_env, nil), do: {:ok, nil, var_env}
@@ -43,23 +63,30 @@ defmodule Maty.Typechecker.Tc do
   def typecheck(var_env, val) when is_pid(val), do: {:ok, :pid, var_env}
   def typecheck(var_env, val) when is_reference(val), do: {:ok, :reference, var_env}
 
-  # date literal
+  @doc "Typecheck a date literal (e.g., ~D[2021-01-01])"
   def typecheck(var_env, {:%, _, [Date, {:%{}, _, _}]}), do: {:ok, :date, var_env}
 
-  # date type
+  @doc "Typecheck a date type (e.g., Date.t())"
   def typecheck(var_env, {{:., _, [{:__aliases__, _, [:Date]}, :t]}, _, []}),
     do: {:ok, :date, var_env}
 
-  # variables
+  @doc """
+  Typecheck a variable.
+  Looks up the variable in the environment and returns its type.
+  """
   def typecheck(var_env, {var, meta, ctx})
       when is_atom(var) and (is_atom(ctx) or is_nil(ctx)) do
-    case Map.fetch(var_env, var) do
-      {:ok, type} -> {:ok, type, var_env}
+    with {:ok, type} <- Map.fetch(var_env, var) do
+      {:ok, type, var_env}
+    else
       :error -> {:error, Error.variable_not_exist(meta, var), var_env}
     end
   end
 
-  # 2-tuples
+  @doc """
+  Typecheck a 2-tuple.
+  Typechecks both elements and returns a tuple type with their types.
+  """
   def typecheck(var_env, {lhs, rhs}) do
     with {:lhs, {:ok, lhs_type, _}} <- {:lhs, typecheck(var_env, lhs)},
          {:rhs, {:ok, rhs_type, _}} <- {:rhs, typecheck(var_env, rhs)} do
@@ -70,299 +97,317 @@ defmodule Maty.Typechecker.Tc do
     end
   end
 
-  # 3-tuples or larger
+  @doc """
+  Typecheck an n-tuple (where n > 2).
+  Typechecks all elements and returns a tuple type with their types.
+  """
   def typecheck(var_env, {:{}, _, items}) when is_list(items) do
-    case typecheck(var_env, items) do
-      {:ok, {:list, types}, var_env} -> {:ok, {:tuple, types}, var_env}
-      {:error, _, _} = error -> error
+    with {:ok, {:list, types}, updated_env} <- typecheck(var_env, items) do
+      {:ok, {:tuple, types}, updated_env}
+    else
+      {:error, msg, err_env} -> {:error, msg, err_env}
     end
   end
 
-  # lists
+  @doc """
+  Typecheck a list.
+  Typechecks all elements and returns a list type with their types.
+  Provides detailed error information including the index of failing elements.
+  """
+  def typecheck(var_env, []), do: {:ok, {:list, []}, var_env}
+
   def typecheck(var_env, vals) when is_list(vals) do
-    res =
-      vals
-      |> Enum.reduce_while({[], var_env}, fn x, {acc, var_env} ->
-        case typecheck(var_env, x) do
-          {:ok, type, var_env} -> {:cont, {[type | acc], var_env}}
-          # todo: give better error messages
-          {:error, msg, _var_env} -> {:halt, {:error, msg, var_env}}
-        end
-      end)
+    vals
+    |> Enum.with_index()
+    |> Enum.reduce_while({[], var_env}, fn {element, index}, {acc, current_env} ->
+      case typecheck(current_env, element) do
+        {:ok, type, updated_env} ->
+          {:cont, {[type | acc], updated_env}}
 
-    case res do
-      {types, _} -> {:ok, {:list, Enum.reverse(types)}, var_env}
-      {:error, error, var_env} -> {:error, error, var_env}
+        {:error, msg, _err_env} ->
+          detailed_error = "Error at list index #{index}: #{msg}"
+          {:halt, {:error, detailed_error, current_env}}
+      end
+    end)
+    |> case do
+      {types, final_env} ->
+        {:ok, {:list, Enum.reverse(types)}, final_env}
+
+      {:error, error, err_env} ->
+        {:error, error, err_env}
     end
   end
 
-  # type spec or
+  @doc """
+  Typecheck a union type specification (|).
+  For example, in a type like `integer() | string()`.
+  Returns a sorted list of the union's member types.
+  """
   def typecheck(var_env, {:|, _, items}) when is_list(items) do
-    case typecheck(var_env, items) do
-      {:ok, {:list, types}, var_env} -> {:ok, {:|, Enum.sort(types)}, var_env}
+    with {:ok, {:list, types}, updated_env} <- typecheck(var_env, items) do
+      {:ok, {:|, Enum.sort(types)}, updated_env}
+    else
       {:error, _, _} = error -> error
     end
   end
 
-  # arithmetic operators
+  @doc """
+  Typecheck arithmetic operations (+, -, *, /).
+  Ensures both operands are numbers and returns a number type.
+  """
   def typecheck(var_env, {{:., _, [:erlang, op]}, _, [lhs, rhs]}) when op in [:+, :-, :*, :/] do
-    with {:ok, lhs_type, var_env} <- typecheck(var_env, lhs),
-         {:ok, rhs_type, var_env} <- typecheck(var_env, rhs) do
+    with {:ok, lhs_type, env1} <- typecheck(var_env, lhs),
+         {:ok, rhs_type, env2} <- typecheck(env1, rhs) do
       case {lhs_type, rhs_type} do
-        {:number, :number} -> {:ok, :number, var_env}
-        _ -> {:error, Error.binary_operator_requires_numbers(op, lhs_type, rhs_type), var_env}
+        {:number, :number} -> {:ok, :number, env2}
+        _ -> {:error, Error.binary_operator_requires_numbers(op, lhs_type, rhs_type), env2}
       end
     end
   end
 
-  # string concatenation operator
+  @doc """
+  Typecheck string concatenation (<>).
+  Ensures both operands are binaries and returns a binary type.
+  """
   def typecheck(var_env, {:<<>>, _, [{:"::", _, [lhs, _]}, {:"::", _, [rhs, _]}]}) do
-    with {:ok, lhs_type, var_env} <- typecheck(var_env, lhs),
-         {:ok, rhs_type, var_env} <- typecheck(var_env, rhs) do
+    with {:ok, lhs_type, env1} <- typecheck(var_env, lhs),
+         {:ok, rhs_type, env2} <- typecheck(env1, rhs) do
       case {lhs_type, rhs_type} do
-        {:binary, :binary} -> {:ok, :binary, var_env}
-        _ -> {:error, Error.binary_operator_requires_binaries(lhs_type, rhs_type), var_env}
+        {:binary, :binary} -> {:ok, :binary, env2}
+        _ -> {:error, Error.binary_operator_requires_binaries(lhs_type, rhs_type), env2}
       end
     end
   end
 
-  # comparison operators
+  @doc """
+  Typecheck comparison operations (==, !=, <, >, <=, >=).
+  For equality operations, ensures operands have the same type.
+  For ordering operations, ensures operands are numbers.
+  Returns a boolean type.
+  """
   def typecheck(var_env, {{:., _, [:erlang, op]}, _, [lhs, rhs]})
       when op in [:==, :!=, :<, :>, :<=, :>=] do
-    with {:ok, lhs_type, var_env} <- typecheck(var_env, lhs),
-         {:ok, rhs_type, var_env} <- typecheck(var_env, rhs) do
+    with {:ok, lhs_type, env1} <- typecheck(var_env, lhs),
+         {:ok, rhs_type, env2} <- typecheck(env1, rhs) do
       case op do
         # for equality comparisons, require that both operands have the same type
         op when op in [:==, :!=] ->
           if lhs_type == rhs_type do
-            {:ok, :boolean, var_env}
+            {:ok, :boolean, env2}
           else
             error = Error.comparison_operator_requires_same_type(op, lhs_type, rhs_type)
-            {:error, error, var_env}
+            {:error, error, env2}
           end
 
         # for ordering comparisons, we assume numbers are required
         _ ->
           if lhs_type == :number and rhs_type == :number do
-            {:ok, :boolean, var_env}
+            {:ok, :boolean, env2}
           else
             error = Error.comparison_operator_requires_numbers(op, lhs_type, rhs_type)
-            {:error, error, var_env}
+            {:error, error, env2}
           end
       end
     end
   end
 
-  # logical not
+  @doc """
+  Typecheck logical not operation.
+  Ensures the operand is a boolean and returns a boolean type.
+  """
   def typecheck(var_env, {{:., _, [:erlang, :not]}, _, [expr]}) do
-    with {:ok, expr_type, var_env} <- typecheck(var_env, expr) do
+    with {:ok, expr_type, updated_env} <- typecheck(var_env, expr) do
       if expr_type == :boolean do
-        {:ok, :boolean, var_env}
+        {:ok, :boolean, updated_env}
       else
         error = Error.logical_operator_requires_boolean("not", expr_type)
-        {:error, error, var_env}
+        {:error, error, updated_env}
       end
     end
   end
 
-  # match operator
-  def typecheck(var_env, {:=, _meta, [lhs, rhs]}) when lhs == rhs, do: typecheck(var_env, rhs)
-  # TODO: FIX THIS
-  def typecheck(var_env, {:=, _meta, [lhs, rhs]} = _expr) do
+  @doc """
+  Typechecks a match expression (=).
+  First typechecks the right side, then validates that the left side pattern
+  can match the resulting type, updating the environment with any new bindings.
+
+  ## Examples
+
+      x = 5              # Adds x -> :number to environment
+      {a, b} = {1, "2"}  # Adds a -> :number, b -> :binary to environment
+      [head | tail] = [1, 2, 3]  # Adds head -> :number, tail -> {:list, [:number, :number]}
+  """
+  def typecheck(var_env, {:=, meta, [lhs, rhs]}) do
     with {:ok, rhs_type, updated_env} <- typecheck(var_env, rhs) do
-      case lhs do
-        # both are atoms - unlikely but possible I suppose
-        {a, b} when is_atom(a) and is_atom(b) ->
-          with {:z, {_, [rhs_a, rhs_b]}} <- {:z, rhs_type},
-               {:a, ^a} <- {:a, rhs_a},
-               {:b, ^b} <- {:b, rhs_b} do
-            {:ok, rhs_type, updated_env}
-          else
-            {:z, other} ->
-              error = "`rhs` does not have the correct/expected shape"
-              Logger.error(error)
-              {:error, error, updated_env}
-
-            {:a, _} ->
-              error = "the type of `a` does not match the expected type of `a`"
-              Logger.error(error)
-              {:error, error, updated_env}
-
-            {:b, _} ->
-              error = "the type of `b` does not match the expected type of `b`"
-              Logger.error(error)
-              {:error, error, updated_env}
-          end
-
-        # 2-tuple {atom, some value} - tagged variable - very common
-        {a, b} when is_atom(a) ->
-          with {:z, {_, [rhs_a, rhs_b]}} <- {:z, rhs_type},
-               {:ok, a_type, updated_env} <- typecheck(updated_env, a),
-               {:a, ^a_type} <- {:a, rhs_a},
-               {:b, {var, _, nil}} when is_atom(var) <- {:b, b} do
-            # todo: check that b and rhs_b have the same type
-            updated_env = Map.update(updated_env, var, rhs_b, fn _ -> rhs_b end)
-
-            {:ok, rhs_type, updated_env}
-          else
-            {:z, other} ->
-              error = "`rhs` does not have the correct/expected type"
-              Logger.error(error)
-              {:error, error, updated_env}
-
-            {:error, error, _} ->
-              # a could not be typechecked
-              {:error, error, updated_env}
-
-            {:a, other} ->
-              error = "the type of `a` does not match the expected type of `a`"
-              Logger.error(error)
-              {:error, error, updated_env}
-
-            {:b, _} ->
-              error = "the type of `b` does not match the expected type of `b`"
-              Logger.error(error)
-              {:error, error, updated_env}
-          end
-
-        # 2-tuple where one of the things is not a list?
-        {a, b} when not (is_list(a) or is_list(b)) ->
-          Logger.debug("pin 2: #{inspect(rhs_type)}")
-          # rhs must return a tuple with two types
-          {_, [a_type, b_type]} = rhs_type
-
-          res = typecheck(var_env, b)
-
-          Logger.debug(inspect(res))
-
-          checked_a =
-            case a do
-              {var_a, _, ctx_a} when is_atom(var_a) and is_nil(ctx_a) ->
-                # just update the env
-                updated_env = Map.update(updated_env, var_a, a_type, fn _ -> a_type end)
-                {:ok, a_type, updated_env}
-
-              otherwise ->
-                # check its type
-                res_a = typecheck(var_env, a)
-
-                Logger.debug("pin 4: #{inspect(otherwise)}\n\n#{inspect(res_a)}")
-                {:error, "a types don't agree", updated_env}
-            end
-
-          checked_b =
-            case b do
-              {var_b, _, ctx_b} when is_atom(var_b) and is_nil(ctx_b) ->
-                # just update the env
-                updated_env = Map.update(updated_env, var_b, b_type, fn _ -> b_type end)
-                {:ok, b_type, updated_env}
-
-              otherwise ->
-                # check its type
-                res_b = typecheck(var_env, b)
-
-                Logger.debug("pin 5: #{inspect(otherwise)}\n\n#{inspect(res_b)}")
-                {:error, "b types don't agree", updated_env}
-            end
-
-          with {:a, {:ok, _, _}} <- {:a, checked_a},
-               {:b, {:ok, _, updated_env}} <- {:b, checked_b} do
-            {:ok, rhs, updated_env}
-          else
-            {:a, other_a} ->
-              other_a
-
-            {:b, other_b} ->
-              other_b
-          end
-
-        # n-tuple or list
-        {collection, types} when collection in [:tuple, :list] ->
-          {^collection, r_types} = rhs_type
-
-          res =
-            Enum.zip(types, r_types)
-            |> Enum.with_index()
-            |> Enum.reduce([], fn {{x, r_type}, idx}, acc ->
-              cond do
-                typecheck(updated_env, x) != r_type ->
-                  [{:error, "lhs and rhs don't match at position #{idx}"} | acc]
-
-                true ->
-                  [{:ok, r_type} | acc]
-              end
-            end)
-            |> Enum.reverse()
-
-          if Utils.deep_contains?(res, :error) do
-            {:error, "there are errors", updated_env}
-          else
-            {:ok, rhs_type, updated_env}
-          end
-
-        # single variable
-        {var, _, ctx} when is_atom(var) and is_nil(ctx) ->
-          updated_env = Map.update(updated_env, var, rhs_type, fn _ -> rhs_type end)
-          {:ok, rhs_type, updated_env}
-
-        # some other unsupported situation
-        other ->
-          Logger.error("unexpected situation: #{inspect(other)}")
-          {:error, Error.unexpected(), updated_env}
-      end
-    else
-      {:error, error, _} ->
-        Logger.error(error)
-        {:error, error, var_env}
+      typecheck_match_lhs(lhs, rhs_type, updated_env, meta)
     end
   end
 
-  def typecheck(var_env, {:%{}, _meta, pairs}) when is_list(pairs) do
-    Enum.reduce_while(pairs, {:ok, %{}, var_env}, fn {key, value}, {:ok, acc, var_env} ->
-      case typecheck(var_env, value) do
-        {:ok, v_type, var_env} ->
-          {:cont, {:ok, Map.put(acc, key, v_type), var_env}}
+  @doc """
+  Typechecks a left-hand side of a match expression against a known right-hand side type.
+  Updates the environment with new variable bindings and validates type compatibility.
 
-        {:error, msg, var_env} ->
-          {:halt, {:error, msg, var_env}}
+  Returns:
+    - `{:ok, matched_type, updated_env}` when match is valid
+    - `{:error, error_message, env}` when match can't succeed
+  """
+  @spec typecheck_match_lhs(ast(), value(), var_env(), Keyword.t()) ::
+          {:ok, value(), var_env()} | {:error, binary(), var_env()}
+
+  @doc """
+  Handles variable binding in pattern matching.
+  Adds or updates the variable in the environment with the right-hand side type.
+  """
+  defp typecheck_match_lhs({var, _, ctx}, rhs_type, var_env, _meta)
+       when is_atom(var) and (is_atom(ctx) or is_nil(ctx)) do
+    updated_env = Map.put(var_env, var, rhs_type)
+    {:ok, rhs_type, updated_env}
+  end
+
+  @doc """
+  Handles atom literals in pattern matching.
+  Ensures the right-hand side is also an atom.
+  """
+  defp typecheck_match_lhs(lhs, rhs_type, var_env, _meta) when is_atom(lhs) do
+    if rhs_type == :atom do
+      {:ok, :atom, var_env}
+    else
+      {:error, "Type mismatch: expected atom but got #{inspect(rhs_type)}", var_env}
+    end
+  end
+
+  @doc """
+  Handles 2-tuple destructuring in pattern matching.
+  Recursively typechecks each element against the corresponding type from the tuple.
+  """
+  defp typecheck_match_lhs({a, b}, {:tuple, [a_type, b_type]}, var_env, meta) do
+    with {:ok, _, var_env} <- typecheck_match_lhs(a, a_type, var_env, meta),
+         {:ok, _, var_env} <- typecheck_match_lhs(b, b_type, var_env, meta) do
+      {:ok, {:tuple, [a_type, b_type]}, var_env}
+    end
+  end
+
+  @doc """
+  Handles n-tuple destructuring in pattern matching.
+  Ensures the tuple sizes match and recursively typechecks each element.
+  """
+  defp typecheck_match_lhs({:{}, _, elements}, {:tuple, types}, var_env, meta) do
+    if length(elements) != length(types) do
+      {:error, "Tuple size mismatch in pattern match", var_env}
+    else
+      typecheck_match_elements(elements, types, var_env, meta)
+    end
+  end
+
+  @doc """
+  Handles list destructuring in pattern matching.
+  Ensures the list sizes match and recursively typechecks each element.
+  """
+  defp typecheck_match_lhs(elements, {:list, types}, var_env, meta) when is_list(elements) do
+    if length(elements) != length(types) do
+      {:error, "List size mismatch in pattern match", var_env}
+    else
+      typecheck_match_elements(elements, types, var_env, meta)
+    end
+  end
+
+  @doc """
+  Helper function that recursively typechecks elements in a list or tuple pattern match.
+  Processes each element-type pair and accumulates environment changes.
+  """
+  defp typecheck_match_elements(elements, types, var_env, meta) do
+    Enum.zip(elements, types)
+    |> Enum.reduce_while({:ok, var_env}, fn {element, type}, {:ok, env} ->
+      case typecheck_match_lhs(element, type, env, meta) do
+        {:ok, _, updated_env} -> {:cont, {:ok, updated_env}}
+        error -> {:halt, error}
       end
     end)
     |> case do
-      {:ok, type_map, var_env} -> {:ok, {:map, type_map}, var_env}
+      {:ok, updated_env} ->
+        collection_type = if is_list(elements), do: {:list, types}, else: {:tuple, types}
+        {:ok, collection_type, updated_env}
+
+      error ->
+        error
+    end
+  end
+
+  @doc """
+  Fallback for unsupported pattern types in pattern matching.
+  Returns an error with information about the unsupported pattern.
+  """
+  defp typecheck_match_lhs(lhs, rhs_type, var_env, meta) do
+    {:error, "#{inspect(meta)} Unsupported pattern in match: #{inspect(lhs)}", var_env}
+  end
+
+  @doc """
+  Typechecks a map literal or construction.
+  Typechecks each key-value pair and constructs a map type with the value types.
+
+  Note: This implementation assumes that map keys are direct literals or
+  constants and does not typecheck the keys themselves. Computed or variable
+  keys are not currently supported in typechecking.
+
+  ## Example
+
+      %{a: 1, b: "hello"}  # Returns {:map, %{a: :number, b: :binary}}
+  """
+  def typecheck(var_env, {:%{}, _meta, pairs}) when is_list(pairs) do
+    Enum.reduce_while(pairs, {:ok, %{}, var_env}, fn {key, value}, {:ok, acc, env} ->
+      case typecheck(env, value) do
+        {:ok, v_type, updated_env} ->
+          {:cont, {:ok, Map.put(acc, key, v_type), updated_env}}
+
+        {:error, msg, err_env} ->
+          {:halt, {:error, msg, err_env}}
+      end
+    end)
+    |> case do
+      {:ok, type_map, final_env} -> {:ok, {:map, type_map}, final_env}
       error -> error
     end
   end
 
-  # Special handler for register function
+  @doc """
+  Special typecheck handler for the register function in Maty.Actor.
+  Validates arguments to ensure proper actor registration:
+  1. ap_pid must be a pid
+  2. role must be an atom
+  3. callback must be a valid function
+  4. state must be a valid maty_actor_state
+
+  Returns the expected return type of register: {:ok, maty_actor_state}
+  """
   def typecheck(var_env, {:register, meta, args}) when length(args) == 4 do
     [ap_pid, role, callback, state] = args
 
-    with {:arg1, {:ok, :pid, var_env}} <- {:arg1, typecheck(var_env, ap_pid)},
-         {:arg2, {:ok, :atom, var_env}} <- {:arg2, typecheck(var_env, role)},
-         {:arg3, {:ok, _, var_env}} <- {:arg3, typecheck(var_env, callback)},
-         {:arg4, {:ok, state_shape, var_env}} <- {:arg4, typecheck(var_env, state)},
+    with {:arg1, {:ok, :pid, env1}} <- {:arg1, typecheck(var_env, ap_pid)},
+         {:arg2, {:ok, :atom, env2}} <- {:arg2, typecheck(env1, role)},
+         {:arg3, {:ok, _, env3}} <- {:arg3, typecheck(env2, callback)},
+         {:arg4, {:ok, state_shape, env4}} <- {:arg4, typecheck(env3, state)},
          {:m, true, _} <- {:m, is?(state_shape, :maty_actor_state), state_shape} do
-      {:ok, {:tuple, [:atom, Type.maty_actor_state()]}, var_env}
+      {:ok, {:tuple, [:atom, Type.maty_actor_state()]}, env4}
     else
-      {:arg1, {:ok, other_type, _}} ->
+      {:arg1, {:ok, other_type, env}} ->
         error = Error.invalid_ap_type(meta, expected: :pid, got: other_type)
-        {:error, error, var_env}
+        {:error, error, env}
 
-      {:arg1, {:error, error, _}} ->
-        {:error, error, var_env}
+      {:arg1, {:error, error, env}} ->
+        {:error, error, env}
 
-      {:arg2, {:ok, other_type, _}} ->
+      {:arg2, {:ok, other_type, env}} ->
         error = Error.role_type_invalid(meta, other_type)
-        {:error, error, var_env}
+        {:error, error, env}
 
-      {:arg2, {:error, error, _}} ->
-        {:error, error, var_env}
+      {:arg2, {:error, error, env}} ->
+        {:error, error, env}
 
-      {:arg3, {:error, error, _}} ->
-        {:error, error, var_env}
+      {:arg3, {:error, error, env}} ->
+        {:error, error, env}
 
-      {:arg4, {:error, error, _}} ->
-        {:error, error, var_env}
+      {:arg4, {:error, error, env}} ->
+        {:error, error, env}
 
       {:m, false, other_type} ->
         error = Error.maty_actor_state_type_invalid(meta, other_type)
@@ -370,20 +415,49 @@ defmodule Maty.Typechecker.Tc do
     end
   end
 
+  @doc """
+  Typechecks an anonymous function.
+
+  Note: This is a simplified implementation that assigns all functions the generic
+  :function type without analyzing their parameter or return types. A full
+  constraint-based type system for functions is outside the scope of this project.
+
+  ## Example
+
+      fn x -> x + 1 end  # Returns :function
+  """
   def typecheck(var_env, {:fn, _, [{:->, _, [_args, _expr]}]}) do
     {:ok, :function, var_env}
   end
 
+  @doc """
+  Typechecks a function capture with explicit module (e.g., &Module.func/1).
+
+  Note: As with anonymous functions, this is a simplified implementation that
+  assigns the generic :function type without analyzing parameter or return types.
+  """
   def typecheck(var_env, {:&, _, [{:/, _, [{{:., _, [_module, _function]}, _, _}, _arity]}]}) do
     {:ok, :function, var_env}
   end
 
+  @doc """
+  Typechecks a function capture without explicit module (e.g., &func/1).
+
+  Note: As with other function forms, this is a simplified implementation that
+  assigns the generic :function type without detailed analysis.
+  """
   def typecheck(var_env, {:&, _, [{:/, _, [_function, _arity]}]}) do
     {:ok, :function, var_env}
   end
 
-  # functions - or other stuff with a ctx list
-  def typecheck(var_env, {var, _meta, ctx} = expr) when is_atom(var) and is_list(ctx) do
+  @doc """
+  Typechecks a function call or another expression with a context list.
+  Attempts to look up the function name in the environment to determine its type.
+
+  If the variable exists in the environment, returns its type.
+  Otherwise, reports an error that the function doesn't exist.
+  """
+  def typecheck(var_env, {var, meta, ctx} = expr) when is_atom(var) and is_list(ctx) do
     func = "#{var}/#{length(ctx)}"
 
     case Map.fetch(var_env, var) do
@@ -396,6 +470,24 @@ defmodule Maty.Typechecker.Tc do
     end
   end
 
+  @doc """
+  Typechecks a complete function definition against its @spec annotation.
+
+  This function orchestrates the entire typechecking process for a function:
+  1. Retrieves type specifications from module attributes
+  2. Ensures the number of parameters matches the function arity
+  3. Constructs an initial environment with function parameters
+  4. Typechecks the function body
+  5. Verifies the return type matches the spec
+
+  Returns:
+    - `{:ok, return_type}` when typechecking succeeds
+    - `{:error, error_message}` when typechecking fails
+
+  Note: This implementation requires that functions have proper @spec annotations.
+  """
+  @spec typecheck_function(module(), {atom(), non_neg_integer()}, [Macro.t()]) ::
+          [{:ok, value()} | {:error, binary()}]
   def typecheck_function(module, {name, arity} = fn_info, clauses) do
     type_specs = Module.get_attribute(module, :type_specs) |> Enum.into(%{})
 
@@ -404,33 +496,167 @@ defmodule Maty.Typechecker.Tc do
 
       for {{spec_args, spec_return}, {meta, args, _guards, block}} <- defs do
         with {:spec_args, ^arity} <- {:spec_args, length(spec_args)} do
+          # Create initial environment with typed function parameters
           typed_args =
             Enum.zip(spec_args, args)
             |> Enum.reduce_while(
               {:ok, %{}},
               fn {arg_type, arg}, {_, var_env} ->
                 case arg do
+                  # Simple variable parameter: func(x)
                   {arg_var, _, nil} ->
                     {:cont, {:ok, Map.put(var_env, arg_var, arg_type)}}
 
+                  # Labeled parameter: func(name: value)
                   {label, {arg_var, _, nil}} when is_atom(label) ->
                     {:cont, {:ok, Map.put(var_env, arg_var, arg_type)}}
 
-                  # todo: handle non-variable arguments to functions
+                  # List pattern - head|tail: func([head|tail])
+                  {:|, _, [{head_var, _, nil}, {tail_var, _, nil}]}
+                  when is_list(arg_type) or arg_type == :list ->
+                    # Extract element type, assume homogeneous list
+                    elem_type =
+                      case arg_type do
+                        {:list, [type | _]} -> type
+                        # Empty list case
+                        {:list, []} -> :any
+                        # General list type
+                        :list -> :any
+                        # Fallback
+                        _ -> :any
+                      end
+
+                    {:cont,
+                     {:ok,
+                      var_env
+                      |> Map.put(head_var, elem_type)
+                      |> Map.put(tail_var, {:list, [elem_type]})}}
+
+                  # Simple list pattern with fixed elements: func([a, b, c])
+                  list when is_list(list) ->
+                    # Check if all elements are variables
+                    all_vars =
+                      Enum.all?(list, fn
+                        {var, _, nil} when is_atom(var) -> true
+                        _ -> false
+                      end)
+
+                    if all_vars do
+                      vars = Enum.map(list, fn {var, _, _} -> var end)
+
+                      # Determine element types based on arg_type
+                      element_types =
+                        case arg_type do
+                          {:list, types} when length(types) == length(list) -> types
+                          # Fallback
+                          _ -> List.duplicate(:any, length(list))
+                        end
+
+                      updated_env =
+                        Enum.zip(vars, element_types)
+                        |> Enum.reduce(var_env, fn {var, type}, env -> Map.put(env, var, type) end)
+
+                      {:cont, {:ok, updated_env}}
+                    else
+                      {:halt, {:error, "Unsupported list pattern in function parameter"}}
+                    end
+
+                  # Simple tuple pattern: func({a, b})
+                  {a, b} ->
+                    case arg_type do
+                      {:tuple, [a_type, b_type]} ->
+                        a_env =
+                          case a do
+                            {a_var, _, nil} when is_atom(a_var) -> Map.put(var_env, a_var, a_type)
+                            # Non-variable patterns aren't bound
+                            _ -> var_env
+                          end
+
+                        b_env =
+                          case b do
+                            {b_var, _, nil} when is_atom(b_var) -> Map.put(a_env, b_var, b_type)
+                            # Non-variable patterns aren't bound
+                            _ -> a_env
+                          end
+
+                        {:cont, {:ok, b_env}}
+
+                      _ ->
+                        {:halt, {:error, "Type mismatch for tuple pattern in function parameter"}}
+                    end
+
+                  # N-tuple pattern: func({a, b, c})
+                  {:{}, _, elements} ->
+                    case arg_type do
+                      {:tuple, types} when length(types) == length(elements) ->
+                        # Zip elements with their types and update environment
+                        updated_env =
+                          Enum.zip(elements, types)
+                          |> Enum.reduce(var_env, fn
+                            {{var, _, nil}, type}, env when is_atom(var) ->
+                              Map.put(env, var, type)
+
+                            _, env ->
+                              # Non-variable patterns aren't bound
+                              env
+                          end)
+
+                        {:cont, {:ok, updated_env}}
+
+                      _ ->
+                        {:halt,
+                         {:error, "Type mismatch for n-tuple pattern in function parameter"}}
+                    end
+
+                  # Map pattern: func(%{key: value})
+                  {:%{}, _, pairs} when is_list(pairs) ->
+                    case arg_type do
+                      {:map, map_types} ->
+                        # Process each pair in the map pattern
+                        updated_env =
+                          Enum.reduce_while(pairs, {:ok, var_env}, fn
+                            {key, {value_var, _, nil}}, {:ok, env} when is_atom(value_var) ->
+                              if Map.has_key?(map_types, key) do
+                                value_type = Map.get(map_types, key)
+                                {:cont, {:ok, Map.put(env, value_var, value_type)}}
+                              else
+                                {:halt,
+                                 {:error, "Map key #{inspect(key)} not found in type spec"}}
+                              end
+
+                            _, _ ->
+                              {:halt, {:error, "Unsupported map pattern in function parameter"}}
+                          end)
+
+                        case updated_env do
+                          {:ok, env} -> {:cont, {:ok, env}}
+                          error -> {:halt, error}
+                        end
+
+                      _ ->
+                        {:halt, {:error, "Type mismatch for map pattern in function parameter"}}
+                    end
+
+                  # Unsupported pattern
                   other ->
-                    {:halt, {:error, other}}
+                    {:halt, {:error, "Unsupported parameter pattern: #{inspect(other)}"}}
                 end
               end
             )
 
           case typed_args do
+            {:error, error_msg} when is_binary(error_msg) ->
+              {:error, error_msg}
+
             {:error, other} ->
               Logger.error(inspect(other))
               func = "#{name}/#{arity}"
-              {:error, Error.at_least_one_arg_not_well_typed(func)}
+              error = Error.at_least_one_arg_not_well_typed(func, spec_args)
+              {:error, error}
 
             {:ok, var_env} ->
-              body = block |> extract_body()
+              # Extract and typecheck function body
+              body = extract_body(block)
               res = typecheck(var_env, body)
 
               with {:ok, {:list, types}, _var_env} <- res,
@@ -525,7 +751,8 @@ defmodule Maty.Typechecker.Tc do
       end
     else
       _pre ->
-        {:error, "session precondition does not allow program to send at this point", var_env}
+        error = "Session precondition #{inspect(st)} does not allow sending at this point"
+        {:error, error, var_env}
     end
   end
 
@@ -645,7 +872,9 @@ defmodule Maty.Typechecker.Tc do
           end
       end
     else
-      _pre -> {:error, "precondition doesn't allow suspending at this point", var_env}
+      _pre ->
+        error = "Session precondition #{inspect(pre)} does not allow suspending at this point"
+        {:error, error, var_env}
     end
   end
 
@@ -724,7 +953,7 @@ defmodule Maty.Typechecker.Tc do
 
             length(params_type_errors) != 0 ->
               func = "#{name}/#{arity}"
-              error = Error.at_least_one_arg_not_well_typed(func)
+              error = Error.at_least_one_arg_not_well_typed(func, param_types)
               {:error, error}
 
             true ->
@@ -1024,6 +1253,7 @@ defmodule Maty.Typechecker.Tc do
     st.branches |> Enum.map(fn x -> %ST.SIn{from: role, branches: [x]} end)
   end
 
+  @spec extract_body(Macro.t()) :: [Macro.t()]
   defp extract_body({:__block__, _, block}), do: block
   defp extract_body(expr), do: [expr]
 end

@@ -71,8 +71,8 @@ defmodule Maty.Typechecker.Error do
   end
 
   # pin
-  def at_least_one_arg_not_well_typed(func) do
-    "#{func} arguments not well typed. At least one argument is not well typed."
+  def at_least_one_arg_not_well_typed(func, spec_args) do
+    "#{func} with types #{inspect(spec_args)} arguments not well typed. At least one argument is not well typed."
   end
 
   def too_few_arguments(meta, opts) do

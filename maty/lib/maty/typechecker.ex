@@ -98,6 +98,7 @@ defmodule Maty.Typechecker do
     end
   end
 
+  @spec read_debug_info!(binary()) :: map() | no_return()
   defp read_debug_info!(bytecode) do
     try do
       try do
@@ -139,13 +140,19 @@ defmodule Maty.Typechecker do
   # end
 
   defp extract_errors(res) do
-    [res]
-    |> List.flatten()
-    |> Enum.map(fn
-      {:ok, _} -> nil
-      {:error, error} -> error
-    end)
-    |> Enum.reject(&is_nil/1)
+    case res do
+      {:ok, _} ->
+        []
+
+      {:error, error} ->
+        [error]
+
+      list when is_list(list) ->
+        Enum.flat_map(list, fn
+          {:ok, _} -> []
+          {:error, error} -> [error]
+        end)
+    end
   end
 
   defp show_function_signatures(module) do

@@ -43,11 +43,8 @@ defmodule Maty.AccessPoint do
   end
 
   @spec session_ready?(%{Types.role() => :queue.queue({pid(), Types.init_token()})}) :: boolean()
-  def session_ready?(participants) do
-    not (participants
-         |> Map.to_list()
-         |> Enum.map(fn {_, q} -> :queue.is_empty(q) end)
-         |> Enum.any?())
+  def session_ready?(%{} = participants) do
+    not Enum.any?(participants, fn {_, q} -> :queue.is_empty(q) end)
   end
 
   @spec get_ready_participants!(%{Types.role() => :queue.queue({pid(), Types.init_token()})}) ::
