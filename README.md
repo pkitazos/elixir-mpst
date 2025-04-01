@@ -47,6 +47,7 @@ Multiparty Session Typing for Elixir apps using the Maty language design
 - [x] make sure that there are no session types left over
 - [x] make sure only annotated functions perform communication operations
 - [x] make sure no `receive-do` expressions or `send` calls in Maty.Actor modules
+- [ ] recursive session types
 
 
 ### general
