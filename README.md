@@ -44,9 +44,9 @@ Multiparty Session Typing for Elixir apps using the Maty language design
 - [ ] non-variables as arguments to handlers
 - [x] helper functions
 - [x] init_actor callback
-- [ ] make sure that there are no session types left over
-- [ ] make sure only annotated functions perform communication operations
-- [ ] make sure no `receive-do` expressions or `send` calls in Maty.Actor modules
+- [x] make sure that there are no session types left over
+- [x] make sure only annotated functions perform communication operations
+- [x] make sure no `receive-do` expressions or `send` calls in Maty.Actor modules
 
 
 ### general

@@ -70,6 +70,22 @@ defmodule Maty.Typechecker.Error do
     "function #{func} doesn't exist"
   end
 
+  def type_mismatch(meta, opts) do
+    with_meta(meta, "Type mismatch:\n#{display_opts(opts)}")
+  end
+
+  def tuple_size_mismatch do
+    "Tuple size mismatch in pattern match"
+  end
+
+  def list_size_mismatch do
+    "List size mismatch in pattern match"
+  end
+
+  def list_index_error(index, msg) do
+    "Error at list index #{index}: #{msg}"
+  end
+
   # pin
   def at_least_one_arg_not_well_typed(func, spec_args) do
     "#{func} with types #{inspect(spec_args)} arguments not well typed. At least one argument is not well typed."
@@ -81,6 +97,34 @@ defmodule Maty.Typechecker.Error do
 
   def arity_mismatch(meta, func) do
     with_meta(meta, "Arity mismatch between #{func} spec and function definition")
+  end
+
+  def unsupported_list_pattern do
+    "Unsupported list pattern in function parameter"
+  end
+
+  def tuple_param_type_mismatch do
+    "Type mismatch for tuple pattern in function parameter"
+  end
+
+  def n_tuple_param_type_mismatch do
+    "Type mismatch for n-tuple pattern in function parameter"
+  end
+
+  def missing_map_key(key) do
+    "Map key #{inspect(key)} not found in type spec"
+  end
+
+  def unsupported_map_pattern do
+    "Unsupported map pattern in function parameter"
+  end
+
+  def map_param_type_mismatch do
+    "Type mismatch for map pattern in function parameter"
+  end
+
+  def unsupported_param_pattern(other) do
+    "Unsupported parameter pattern: #{inspect(other)}"
   end
 
   # pin
@@ -97,6 +141,19 @@ defmodule Maty.Typechecker.Error do
       meta,
       "Invalid number or shape of arguments given to handler. Handlers must have 4 arguments."
     )
+  end
+
+  def no_raw_receive(meta) do
+    with_meta(meta, "Raw receive is not allowed in a Maty.Actor.")
+  end
+
+  def no_raw_send(meta) do
+    with_meta(meta, "Raw send(...) is not allowed in a Maty.Actor.")
+  end
+
+  def non_handler_communication({name, arity}) do
+    func = "#{name}/#{arity}"
+    "Non-handler function: #{func} attempts communication"
   end
 
   # pin
@@ -177,6 +234,10 @@ defmodule Maty.Typechecker.Error do
     "Unexpected return from session_typecheck ST.SName: #{inspect(msg)}"
   end
 
+  def session_typecheck_unexpected(other) do
+    "Unexpected return from session_typecheck: #{inspect(other)}"
+  end
+
   def something_went_wrong do
     "Something went wrong"
   end
@@ -220,6 +281,15 @@ defmodule Maty.Typechecker.Error do
     with_meta(meta, "Unexpected return from session_typecheck match operator: #{inspect(other)}")
   end
 
+  def remaining_session_type(func, st) do
+    "Handler #{func} does not properly progress to the end of its annotated session type. Remaining session type: #{inspect(st)}"
+  end
+
+  def handler_return_type_mismatch(func, expected: expected, got: got) do
+    opts = [expected: MapSet.to_list(expected), got: MapSet.to_list(got)]
+    "Handler #{func} return does not match @spec return type.\n#{display_opts(opts)}"
+  end
+
   def forbidden_receive(meta, func) do
     with_meta(
       meta,
@@ -232,6 +302,34 @@ defmodule Maty.Typechecker.Error do
       meta,
       "Maty.Actor illegal communication. Function #{func} performs send operation using `Elixir.send/2` instead of `Maty.Actor.maty_send/3`"
     )
+  end
+
+  def at_branch(id, msg) do
+    "Branch #{inspect(id)}: #{msg}"
+  end
+
+  def branch_not_fully_handled(id) do
+    "Did not fully handle branch: #{inspect(id)}"
+  end
+
+  def too_many_branch_exits(id) do
+    "Too many exits for a single branch: #{inspect(id)}"
+  end
+
+  def insufficient_function_clauses do
+    "Not enough function clauses to support the annotated session type"
+  end
+
+  def no_branches_in_suspend(st) do
+    "SName types not directly supported in case expressions: #{inspect(st)}"
+  end
+
+  def no_branches_in_end(st) do
+    "SEnd types have no branches to handle: #{inspect(st)}"
+  end
+
+  def unsupported_session_type_in_branch(st) do
+    "Unsupported session type in case expression: #{inspect(st)}"
   end
 
   def unsupported_argument_shape(meta, shape) do

@@ -65,16 +65,22 @@ defmodule Maty.Typechecker do
       env.module
       |> Module.get_attribute(:annotated_handlers)
       |> Enum.map(&elem(&1, 0))
+      |> MapSet.new()
 
     all_module_definitions =
       dbgi_map[:definitions]
-      |> Enum.filter(fn {_, _, meta, _} -> Keyword.get(meta, :context) != Maty.Actor end)
+      |> Enum.reject(fn x -> Keyword.get(elem(x, 2), :context) == Maty.Actor end)
+
+    invalid_comm_functions =
+      all_module_definitions
+      |> find_invalid_comm_functions(module_handlers)
+      |> MapSet.new()
 
     errors =
       for {fn_info, _kind, _meta, fn_clauses} <- all_module_definitions, reduce: [] do
         acc ->
           cond do
-            fn_info in module_handlers ->
+            MapSet.member?(module_handlers, fn_info) ->
               res = TC.session_typecheck_handler(env.module, fn_info, fn_clauses)
               # log_typechecking_results(fn_info, res, label: "session typechecking handler")
               acc ++ extract_errors(res)
@@ -84,6 +90,10 @@ defmodule Maty.Typechecker do
               # log_typechecking_results(fn_info, res, label: "session typechecking init_actor")
               acc ++ extract_errors(res)
 
+            MapSet.member?(invalid_comm_functions, fn_info) ->
+              err = Error.non_handler_communication(fn_info)
+              acc ++ [err]
+
             true ->
               res = TC.typecheck_function(env.module, fn_info, fn_clauses)
               # log_typechecking_results(fn_info, res, label: "typechecking regular function")
@@ -92,9 +102,11 @@ defmodule Maty.Typechecker do
       end
 
     if length(errors) != 0 do
-      for error <- errors do
-        Logger.error(error)
+      for err <- errors do
+        Logger.error(err)
       end
+    else
+      Logger.info("\n[#{env.module}] No communication errors", ansi_color: :light_green)
     end
   end
 
@@ -128,16 +140,16 @@ defmodule Maty.Typechecker do
     end
   end
 
-  # defp log_typechecking_results(fn_info, res, label: label) do
-  #   out = fn x -> "#{label}: #{inspect(fn_info)}\n#{inspect(x)}" end
+  defp log_typechecking_results(fn_info, res, label: label) do
+    out = fn x -> "#{label}: #{inspect(fn_info)}\n#{inspect(x)}" end
 
-  #   for clause_res <- res do
-  #     case clause_res do
-  #       {:error, error} -> out.(error) |> Logger.error()
-  #       {:ok, return} -> out.(return) |> Logger.debug()
-  #     end
-  #   end
-  # end
+    for clause_res <- res do
+      case clause_res do
+        {:error, error} -> out.(error) |> Logger.error()
+        {:ok, return} -> out.(return) |> Logger.debug()
+      end
+    end
+  end
 
   defp extract_errors(res) do
     case res do
@@ -152,6 +164,17 @@ defmodule Maty.Typechecker do
           {:ok, _} -> []
           {:error, error} -> [error]
         end)
+    end
+  end
+
+  defp find_invalid_comm_functions(definitions, module_handlers) do
+    for {fn_info, _, _, fn_clauses} <- definitions,
+        not MapSet.member?(module_handlers, fn_info),
+        fn_info != {:init_actor, 1},
+        clause <- fn_clauses,
+        TC.performs_communication?(clause),
+        reduce: [] do
+      acc -> [fn_info | acc]
     end
   end
 
