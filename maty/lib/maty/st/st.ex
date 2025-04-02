@@ -1,6 +1,5 @@
 defmodule Maty.ST do
-  alias Maty.ST.SRecLabel
-  @type t :: SIn.t() | SOut.t() | SEnd.t() | SName.t() | SBranch.t() | SRec.t() | SRecLabel.t()
+  @type t :: SIn.t() | SOut.t() | SEnd.t() | SName.t() | SBranch.t() | SRec.t() | SRecRef.t()
 
   defmodule SBranch do
     @moduledoc false
@@ -10,7 +9,7 @@ defmodule Maty.ST do
     @type t :: %__MODULE__{
             label: atom(),
             payload: atom(),
-            continue_as: SOut.t() | SEnd.t() | SName.t() | SRecLabel.t()
+            continue_as: SOut.t() | SEnd.t() | SName.t() | SRecRef.t()
           }
   end
 
@@ -55,21 +54,21 @@ defmodule Maty.ST do
 
   defmodule SRec do
     @moduledoc false
-    @enforce_keys [:label, :body]
-    defstruct [:label, :body, outer_recurse: false]
+    @enforce_keys [:id, :body]
+    defstruct [:id, :body, outer_recurse: false]
 
     @type t :: %__MODULE__{
-            label: atom(),
+            id: atom(),
             body: SIn.t() | SOut.t(),
             outer_recurse: boolean()
           }
   end
 
-  defmodule SRecLabel do
+  defmodule SRecRef do
     @moduledoc false
-    @enforce_keys [:label]
-    defstruct [:label]
+    @enforce_keys [:id]
+    defstruct [:id]
 
-    @type t :: %__MODULE__{label: atom()}
+    @type t :: %__MODULE__{id: atom()}
   end
 end
