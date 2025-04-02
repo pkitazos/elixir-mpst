@@ -1,5 +1,6 @@
 defmodule Maty.ST do
-  @type t :: SIn.t() | SOut.t() | SEnd.t() | SName.t() | SBranch.t()
+  alias Maty.ST.SRecLabel
+  @type t :: SIn.t() | SOut.t() | SEnd.t() | SName.t() | SBranch.t() | SRec.t() | SRecLabel.t()
 
   defmodule SBranch do
     @moduledoc false
@@ -9,7 +10,7 @@ defmodule Maty.ST do
     @type t :: %__MODULE__{
             label: atom(),
             payload: atom(),
-            continue_as: SOut.t() | SEnd.t() | SName.t()
+            continue_as: SOut.t() | SEnd.t() | SName.t() | SRecLabel.t()
           }
   end
 
@@ -20,7 +21,7 @@ defmodule Maty.ST do
 
     @type t :: %__MODULE__{
             from: atom(),
-            branches: [Branch.t()]
+            branches: [SBranch.t()]
           }
   end
 
@@ -31,7 +32,7 @@ defmodule Maty.ST do
 
     @type t :: %__MODULE__{
             to: atom(),
-            branches: [Branch.t()]
+            branches: [SBranch.t()]
           }
   end
 
@@ -57,9 +58,11 @@ defmodule Maty.ST do
     @enforce_keys [:label, :body]
     defstruct [:label, :body, outer_recurse: false]
 
-    @type session_type() :: ST.session_type()
-    @type label() :: ST.label()
-    @type t :: %__MODULE__{label: label(), body: session_type(), outer_recurse: boolean()}
+    @type t :: %__MODULE__{
+            label: atom(),
+            body: SIn.t() | SOut.t(),
+            outer_recurse: boolean()
+          }
   end
 
   defmodule SRecLabel do
@@ -67,8 +70,6 @@ defmodule Maty.ST do
     @enforce_keys [:label]
     defstruct [:label]
 
-    @type session_type() :: ST.session_type()
-    @type label() :: ST.label()
-    @type t :: %__MODULE__{label: label()}
+    @type t :: %__MODULE__{label: atom()}
   end
 end
