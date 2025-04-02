@@ -54,12 +54,12 @@ defmodule Maty.ST do
 
   defmodule SRec do
     @moduledoc false
-    @enforce_keys [:id, :body]
-    defstruct [:id, :body, outer_recurse: false]
+    @enforce_keys [:id, :continue_as]
+    defstruct [:id, :continue_as, outer_recurse: false]
 
     @type t :: %__MODULE__{
             id: atom(),
-            body: SIn.t() | SOut.t(),
+            continue_as: SIn.t() | SOut.t(),
             outer_recurse: boolean()
           }
   end
