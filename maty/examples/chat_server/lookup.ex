@@ -4,11 +4,12 @@ defmodule ChatServer.Lookup do
   def lookup(key) do
     case key do
       "client:chat_server" ->
-        %ST.SRecursive{
-          name: :chat,
+        %ST.SRec{
+          id: :chat,
           continue_as: %ST.SOut{
             to: :server,
             branches: [
+              # Branch 1: LookupRoom
               %ST.SBranch{
                 label: :lookup_room,
                 payload: :number,
@@ -18,16 +19,17 @@ defmodule ChatServer.Lookup do
                     %ST.SBranch{
                       label: :room_port,
                       payload: {:tuple, [:number, :number]},
-                      continue_as: %ST.SRecursiveRef{name: :chat}
+                      continue_as: %ST.SRecRef{id: :chat}
                     },
                     %ST.SBranch{
                       label: :room_not_found,
                       payload: :number,
-                      continue_as: %ST.SRecursiveRef{name: :chat}
+                      continue_as: %ST.SRecRef{id: :chat}
                     }
                   ]
                 }
               },
+              # Branch 2: CreateRoom
               %ST.SBranch{
                 label: :create_room,
                 payload: :number,
@@ -37,16 +39,17 @@ defmodule ChatServer.Lookup do
                     %ST.SBranch{
                       label: :create_room_success,
                       payload: :number,
-                      continue_as: %ST.SRecursiveRef{name: :chat}
+                      continue_as: %ST.SRecRef{id: :chat}
                     },
                     %ST.SBranch{
                       label: :room_exists,
                       payload: :number,
-                      continue_as: %ST.SRecursiveRef{name: :chat}
+                      continue_as: %ST.SRecRef{id: :chat}
                     }
                   ]
                 }
               },
+              # Branch 3: ListRooms
               %ST.SBranch{
                 label: :list_rooms,
                 payload: :unit,
@@ -56,11 +59,12 @@ defmodule ChatServer.Lookup do
                     %ST.SBranch{
                       label: :room_list,
                       payload: {:list, [:binary]},
-                      continue_as: %ST.SRecursiveRef{name: :chat}
+                      continue_as: %ST.SRecRef{id: :chat}
                     }
                   ]
                 }
               },
+              # Branch 4: Bye
               %ST.SBranch{
                 label: :bye,
                 payload: :binary,
@@ -71,15 +75,15 @@ defmodule ChatServer.Lookup do
         }
 
       "client:c_to_r" ->
-        %ST.SRecursive{
-          name: :loop_c,
+        %ST.SRec{
+          id: :loop_c,
           continue_as: %ST.SOut{
             to: :room,
             branches: [
               %ST.SBranch{
                 label: :outgoing_chat_message,
                 payload: :binary,
-                continue_as: %ST.SRecursiveRef{name: :loop_c}
+                continue_as: %ST.SRecRef{id: :loop_c}
               },
               %ST.SBranch{
                 label: :leave_room,
@@ -91,15 +95,15 @@ defmodule ChatServer.Lookup do
         }
 
       "client:r_to_c" ->
-        %ST.SRecursive{
-          name: :loop_r,
+        %ST.SRec{
+          id: :loop_r,
           continue_as: %ST.SIn{
             from: :room,
             branches: [
               %ST.SBranch{
                 label: :incoming_chat_message,
                 payload: :binary,
-                continue_as: %ST.SRecursiveRef{name: :loop_r}
+                continue_as: %ST.SRecRef{id: :loop_r}
               },
               %ST.SBranch{
                 label: :bye,
@@ -111,8 +115,8 @@ defmodule ChatServer.Lookup do
         }
 
       "server:chat_server" ->
-        %ST.SRecursive{
-          name: :chat,
+        %ST.SRec{
+          id: :chat,
           continue_as: %ST.SIn{
             from: :client,
             branches: [
@@ -125,12 +129,12 @@ defmodule ChatServer.Lookup do
                     %ST.SBranch{
                       label: :room_port,
                       payload: {:tuple, [:number, :number]},
-                      continue_as: %ST.SRecursiveRef{name: :chat}
+                      continue_as: %ST.SRecRef{id: :chat}
                     },
                     %ST.SBranch{
                       label: :room_not_found,
                       payload: :number,
-                      continue_as: %ST.SRecursiveRef{name: :chat}
+                      continue_as: %ST.SRecRef{id: :chat}
                     }
                   ]
                 }
@@ -144,12 +148,12 @@ defmodule ChatServer.Lookup do
                     %ST.SBranch{
                       label: :create_room_success,
                       payload: :number,
-                      continue_as: %ST.SRecursiveRef{name: :chat}
+                      continue_as: %ST.SRecRef{id: :chat}
                     },
                     %ST.SBranch{
                       label: :room_exists,
                       payload: :number,
-                      continue_as: %ST.SRecursiveRef{name: :chat}
+                      continue_as: %ST.SRecRef{id: :chat}
                     }
                   ]
                 }
@@ -163,7 +167,7 @@ defmodule ChatServer.Lookup do
                     %ST.SBranch{
                       label: :room_list,
                       payload: {:list, [:binary]},
-                      continue_as: %ST.SRecursiveRef{name: :chat}
+                      continue_as: %ST.SRecRef{id: :chat}
                     }
                   ]
                 }
@@ -178,15 +182,15 @@ defmodule ChatServer.Lookup do
         }
 
       "room:c_to_r" ->
-        %ST.SRecursive{
-          name: :look_r_recv,
+        %ST.SRec{
+          id: :look_r_recv,
           continue_as: %ST.SIn{
             from: :client,
             branches: [
               %ST.SBranch{
                 label: :outgoing_chat_message,
                 payload: :binary,
-                continue_as: %ST.SRecursiveRef{name: :look_r_recv}
+                continue_as: %ST.SRecRef{id: :look_r_recv}
               },
               %ST.SBranch{
                 label: :leave_room,
@@ -198,15 +202,15 @@ defmodule ChatServer.Lookup do
         }
 
       "room:r_to_c" ->
-        %ST.SRecursive{
-          name: :loop_r_send,
+        %ST.SRec{
+          id: :loop_r_send,
           continue_as: %ST.SOut{
             to: :client,
             branches: [
               %ST.SBRanch{
                 label: :incoming_chat_message,
                 payload: :binary,
-                continue_as: %ST.SRecursiveRef{name: :loop_r_send}
+                continue_as: %ST.SRecRef{id: :loop_r_send}
               },
               %ST.SBranch{
                 label: :bye,
