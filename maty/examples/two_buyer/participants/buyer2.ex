@@ -42,8 +42,6 @@ defmodule TwoBuyer.Participants.Buyer2 do
     {:done, :unit, state}
   end
 
-  # -----------------------------------------------------------------
-
   @spec get_address() :: binary()
   defp get_address(), do: "18 " <> "Lilybank Gardens"
 end

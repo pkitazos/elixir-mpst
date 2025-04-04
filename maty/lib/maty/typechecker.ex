@@ -140,16 +140,15 @@ defmodule Maty.Typechecker do
     end
   end
 
-  defp log_typechecking_results(fn_info, res, label: label) do
-    out = fn x -> "#{label}: #{inspect(fn_info)}\n#{inspect(x)}" end
-
-    for clause_res <- res do
-      case clause_res do
-        {:error, error} -> out.(error) |> Logger.error()
-        {:ok, return} -> out.(return) |> Logger.debug()
-      end
-    end
-  end
+  # defp log_typechecking_results(fn_info, res, label: label) do
+  #   out = fn x -> "#{label}: #{inspect(fn_info)}\n#{inspect(x)}" end
+  #   for clause_res <- res do
+  #     case clause_res do
+  #       {:error, error} -> out.(error) |> Logger.error()
+  #       {:ok, return} -> out.(return) |> Logger.debug()
+  #     end
+  #   end
+  # end
 
   defp extract_errors(res) do
     case res do

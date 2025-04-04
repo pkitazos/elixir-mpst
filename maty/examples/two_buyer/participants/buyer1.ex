@@ -27,8 +27,6 @@ defmodule TwoBuyer.Participants.Buyer1 do
     {:suspend, {&__MODULE__.quote_handler/4, :seller}, state}
   end
 
-  # ------------------------------------------------------------------
-
   @handler :quote_handler
   @spec quote_handler({:quote, number()}, role(), session_ctx(), maty_actor_state()) :: done()
   def quote_handler({:quote, amount}, :seller, session, state) do

@@ -23,8 +23,6 @@ defmodule TwoBuyer.Participants.Seller do
     {:ok, updated_state}
   end
 
-  # ------------------------------------------------------------------
-
   @spec install(session(), maty_actor_state(), pid()) :: suspend()
   def install(_session, state, ap_pid) do
     {:ok, updated_state} =
@@ -35,7 +33,6 @@ defmodule TwoBuyer.Participants.Seller do
         state
       )
 
-    # ? how do I know that I've suspended with the right handler here
     {:suspend, {&__MODULE__.title_handler/4, :buyer1}, updated_state}
   end
 
@@ -61,8 +58,6 @@ defmodule TwoBuyer.Participants.Seller do
   @handler :decision_handler
   @spec decision_handler({:quit, :unit}, role(), session_ctx(), maty_actor_state()) :: done()
   def decision_handler({:quit, :unit}, :buyer2, _session, state), do: {:done, :unit, state}
-
-  # -----------------------------------------------------------------
 
   @spec lookup_price(binary()) :: number()
   defp lookup_price(_title_str), do: 150
