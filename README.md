@@ -48,14 +48,20 @@ Multiparty Session Typing for Elixir apps using the Maty language design
 - [x] make sure only annotated functions perform communication operations
 - [x] make sure no `receive-do` expressions or `send` calls in Maty.Actor modules
 - [ ] recursive session types
-
+- [ ] branches handled by separate clauses
+- [ ] case expressions in non-handlers
+- [ ] couple more Map operations
 
 ### general
 - [x] clean up repo (move the unrelated sub-directories)
 - [x] centralise errors to dedicated module
-- [ ] polish up error reporting to use meta information
-- [ ] add doc comments to code
+- [ ] polish up error reporting to use meta information (function/module name, line/col numbers, remove datetime reporting)
+- [ ] add `@doc` and `@moduledoc` comments to code
 - [ ] add a couple more examples
+  - [ ] shop
+  - [ ] three-buyer
+  - [ ] auction
+  - [ ] chat_server
 - [ ] split generic typechecking and session typechecking into separate modules
 
 
