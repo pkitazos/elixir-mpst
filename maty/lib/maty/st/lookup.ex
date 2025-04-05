@@ -3,7 +3,8 @@ defmodule Maty.ST.Lookup do
 
   def get(key) do
     case key do
-      "buyer1&{title(binary).seller!{title(binary).quote_handler}}" ->
+      # install
+      "&buyer1:{title(binary).+seller:{title(binary).quote_handler}}" ->
         %ST.SIn{
           from: :buyer1,
           branches: [
@@ -24,7 +25,8 @@ defmodule Maty.ST.Lookup do
           ]
         }
 
-      "seller&{quote(number).buyer2!{share(number)}}" ->
+      # quote_handler
+      "&seller:{quote(number).+buyer2:{share(number).end}}" ->
         %ST.SIn{
           from: :seller,
           branches: [
@@ -45,7 +47,8 @@ defmodule Maty.ST.Lookup do
           ]
         }
 
-      "buyer1&{share(number).seller!{address(binary).date_handler, quit(unit).end}}}" ->
+      # share_handler
+      "&buyer1:{share(number).+seller:{address(binary).date_handler, quit(unit).end}}" ->
         %ST.SIn{
           from: :buyer1,
           branches: [
@@ -71,7 +74,8 @@ defmodule Maty.ST.Lookup do
           ]
         }
 
-      "seller&{date(date).end}" ->
+      # date_handler
+      "&seller:{date(date).end}" ->
         %ST.SIn{
           from: :seller,
           branches: [
@@ -83,7 +87,8 @@ defmodule Maty.ST.Lookup do
           ]
         }
 
-      "buyer1&{title(binary).buyer1!{quote(number).decision_handler}}" ->
+      # title_handler
+      "&buyer1:{title(binary).+buyer1:{quote(number).decision_handler}}" ->
         %ST.SIn{
           from: :buyer1,
           branches: [
@@ -104,7 +109,8 @@ defmodule Maty.ST.Lookup do
           ]
         }
 
-      "buyer2&{address(binary).buyer2!{date(date).end, quit(unit).end}}" ->
+      # decision_handler
+      "&buyer2:{address(binary).+buyer2:{date(date).end, quit(unit).end}}" ->
         %ST.SIn{
           from: :buyer2,
           branches: [

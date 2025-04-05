@@ -3,9 +3,9 @@ defmodule TwoBuyer.Participants.Buyer1 do
 
   @role :buyer1
 
-  @st {:install, "buyer1&{title(binary).seller!{title(binary).quote_handler}}"}
+  @st {:install, "&buyer1:{title(binary).+seller:{title(binary).quote_handler}}"}
 
-  @st {:quote_handler, "seller&{quote(number).buyer2!{share(number)}}"}
+  @st {:quote_handler, "&seller:{quote(number).+buyer2:{share(number).end}}"}
 
   @impl true
   @spec init_actor({pid(), binary()}) :: {:ok, maty_actor_state()}

@@ -120,7 +120,7 @@ defmodule ChatServer.Lookup do
           continue_as: %ST.SIn{
             from: :client,
             branches: [
-              %ST.SBRanch{
+              %ST.SBranch{
                 label: :lookup_room,
                 payload: :number,
                 continue_as: %ST.SOut{
@@ -139,7 +139,7 @@ defmodule ChatServer.Lookup do
                   ]
                 }
               },
-              %ST.SBRanch{
+              %ST.SBranch{
                 label: :create_room,
                 payload: :number,
                 continue_as: %ST.SOut{
@@ -207,7 +207,7 @@ defmodule ChatServer.Lookup do
           continue_as: %ST.SOut{
             to: :client,
             branches: [
-              %ST.SBRanch{
+              %ST.SBranch{
                 label: :incoming_chat_message,
                 payload: :binary,
                 continue_as: %ST.SRecRef{id: :loop_r_send}

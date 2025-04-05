@@ -3,9 +3,9 @@ defmodule TwoBuyer.Participants.Seller do
 
   @role :seller
 
-  @st {:title_handler, "buyer1&{title(binary).buyer1!{quote(number).decision_handler}}"}
+  @st {:title_handler, "&buyer1:{title(binary).+buyer1:{quote(number).decision_handler}}"}
 
-  @st {:decision_handler, "buyer2&{address(binary).buyer2!{date(date).end, quit(unit).end}}"}
+  @st {:decision_handler, "&buyer2:{address(binary).+buyer2:{date(date).end, quit(unit).end}}"}
 
   @impl true
   @spec init_actor(pid()) :: {:ok, maty_actor_state()}
