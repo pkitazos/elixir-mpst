@@ -112,8 +112,8 @@ defmodule Maty.Typechecker do
 
   # Function to read debug information from bytecode.
   #
-  # Adapted from: [ElixirST](https://github.com/gertab/ElixirST) by [Gerard Tabone]
-  # License: [GPL-3.0 license]
+  # Adapted from: https://github.com/gertab/ElixirST by Gerard Tabone
+  # License: GPL-3.0 license
   @spec read_debug_info!(binary()) :: map() | no_return()
   defp read_debug_info!(bytecode) do
     try do
