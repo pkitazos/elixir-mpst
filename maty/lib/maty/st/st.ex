@@ -1,23 +1,56 @@
 defmodule Maty.ST do
-  @type t :: SIn.t() | SOut.t() | SEnd.t() | SName.t() | SBranch.t() | SRec.t() | SRecRef.t()
+  @moduledoc """
+  Defines the core data structures for Session Types.
+
+  Session Types (ST) provide a formal way to describe communication protocols
+  between different roles in a distributed system. This module defines the
+  data structures that represent these session types after parsing.
+
+  The main session type constructs are:
+  - `SIn` - For receiving messages (external choice)
+  - `SOut` - For sending messages (internal choice)
+  - `SEnd` - For terminating a session
+
+  Each of these has convenience constructor functions available in this module.
+  """
 
   defmodule SBranch do
-    @moduledoc false
+    @moduledoc """
+    Represents a single branch in a choice or a single action sequence.
+
+    Each branch has a label, a payload type, and a continuation session type.
+    """
     @enforce_keys [:label, :payload, :continue_as]
     defstruct [:label, :payload, :continue_as]
 
+    @typedoc """
+    A branch containing:
+    - label: The message label as a snake_case atom
+    - payload: The payload type of the message
+    - continue_as: The continuation session type after this branch
+    """
     @type t :: %__MODULE__{
             label: atom(),
-            payload: atom(),
-            continue_as: SOut.t() | SEnd.t() | SName.t() | SRecRef.t()
+            payload: ST.payload_type(),
+            continue_as: ST.t()
           }
   end
 
   defmodule SIn do
-    @moduledoc false
+    @moduledoc """
+    Represents receiving messages (external choice).
+
+    This session type indicates that the current role is expecting to
+    receive one of several possible messages from another role.
+    """
     @enforce_keys [:from, :branches]
     defstruct [:from, :branches]
 
+    @typedoc """
+    An input session type containing:
+    - from: The role sending the message(s) as a snake_case atom
+    - branches: List of possible message branches that can be received
+    """
     @type t :: %__MODULE__{
             from: atom(),
             branches: [SBranch.t()]
@@ -25,10 +58,20 @@ defmodule Maty.ST do
   end
 
   defmodule SOut do
-    @moduledoc false
+    @moduledoc """
+    Represents sending messages (internal choice).
+
+    This session type indicates that the current role will send
+    one of several possible messages to another role.
+    """
     @enforce_keys [:to, :branches]
     defstruct [:to, :branches]
 
+    @typedoc """
+    An output session type containing:
+    - to: The role receiving the message(s) as a snake_case atom
+    - branches: List of possible message branches that can be sent
+    """
     @type t :: %__MODULE__{
             to: atom(),
             branches: [SBranch.t()]
@@ -36,39 +79,212 @@ defmodule Maty.ST do
   end
 
   defmodule SEnd do
-    @moduledoc false
+    @moduledoc """
+    Represents the termination of a session path.
+
+    This indicates that the communication on this particular path has ended.
+    """
     defstruct []
 
+    @typedoc """
+    An end session type marker (empty struct)
+    """
     @type t :: %__MODULE__{}
   end
 
   defmodule SName do
-    @moduledoc false
+    @moduledoc """
+    Represents a named handler reference in a session type.
+
+    This session type indicates that the current role will delegate
+    processing to a specific named handler function.
+    """
     @enforce_keys [:handler]
     defstruct [:handler]
 
+    @typedoc """
+    A named handler reference containing:
+    - handler: The name of the handler function as an atom
+    """
     @type t :: %__MODULE__{
             handler: atom()
           }
   end
 
-  defmodule SRec do
-    @moduledoc false
-    @enforce_keys [:id, :continue_as]
-    defstruct [:id, :continue_as, outer_recurse: false]
+  @typedoc """
+  A session type that can be:
+  - An input type (receiving messages)
+  - An output type (sending messages)
+  - A termination marker
+  - A named handler reference
+  """
+  @type t :: SIn.t() | SOut.t() | SEnd.t() | SName.t()
 
-    @type t :: %__MODULE__{
-            id: atom(),
-            continue_as: SIn.t() | SOut.t(),
-            outer_recurse: boolean()
-          }
+  @typedoc """
+  A payload type that can be:
+  - A basic type (:binary, :number, :boolean, :unit)
+  - A list of a basic type
+  - A tuple containing multiple payload types
+  """
+  @type payload_type :: atom() | {:list, [atom()]} | {:tuple, [payload_type()]}
+
+  @doc """
+  Creates a branch in a session type.
+
+  ## Parameters
+  - `label`: The message label (atom)
+  - `payload`: The payload type
+  - `continue_as`: The continuation session type
+
+  ## Example
+      iex> ST.branch(:request, :binary, %ST.SEnd{})
+      %ST.SBranch{
+        label: :request,
+        payload: :binary,
+        continue_as: %ST.SEnd{}
+      }
+  """
+  @spec branch(atom(), payload_type(), t()) :: SBranch.t()
+  def branch(label, payload, continue_as) do
+    %SBranch{
+      label: label,
+      payload: payload,
+      continue_as: continue_as
+    }
   end
 
-  defmodule SRecRef do
-    @moduledoc false
-    @enforce_keys [:id]
-    defstruct [:id]
+  @doc """
+  Creates an input session type (for receiving messages).
 
-    @type t :: %__MODULE__{id: atom()}
+  ## Parameters
+  - `from`: The role sending the message(s)
+  - `branches`: List of possible branches that can be received
+
+  ## Example
+      iex> branch = ST.branch(:ack, :unit, %ST.SEnd{})
+      iex> ST.input(:server, [branch])
+      %ST.SIn{
+        from: :server,
+        branches: [%ST.SBranch{
+          label: :ack,
+          payload: :unit,
+          continue_as: %ST.SEnd{}
+        }]
+      }
+  """
+  @spec input(atom(), [SBranch.t()]) :: SIn.t()
+  def input(from, branches) when is_list(branches) do
+    %SIn{
+      from: from,
+      branches: branches
+    }
+  end
+
+  @doc """
+  Convenience function to create an input with a single branch.
+
+  ## Parameters
+  - `from`: The role sending the message
+  - `label`: The message label
+  - `payload`: The payload type
+  - `continue_as`: The continuation session type
+
+  ## Example
+      iex> ST.input_one(:server, :ack, :unit, %ST.SEnd{})
+      %ST.SIn{
+        from: :server,
+        branches: [%ST.SBranch{
+          label: :ack,
+          payload: :unit,
+          continue_as: %ST.SEnd{}
+        }]
+      }
+  """
+  @spec input_one(atom(), atom(), payload_type(), t()) :: SIn.t()
+  def input_one(from, label, payload, continue_as) do
+    input(from, [branch(label, payload, continue_as)])
+  end
+
+  @doc """
+  Creates an output session type (for sending messages).
+
+  ## Parameters
+  - `to`: The role receiving the message(s)
+  - `branches`: List of possible branches that can be sent
+
+  ## Example
+      iex> branch = ST.branch(:request, :binary, %ST.SEnd{})
+      iex> ST.output(:client, [branch])
+      %ST.SOut{
+        to: :client,
+        branches: [%ST.SBranch{
+          label: :request,
+          payload: :binary,
+          continue_as: %ST.SEnd{}
+        }]
+      }
+  """
+  @spec output(atom(), [SBranch.t()]) :: SOut.t()
+  def output(to, branches) when is_list(branches) do
+    %SOut{
+      to: to,
+      branches: branches
+    }
+  end
+
+  @doc """
+  Convenience function to create an output with a single branch.
+
+  ## Parameters
+  - `to`: The role receiving the message
+  - `label`: The message label
+  - `payload`: The payload type
+  - `continue_as`: The continuation session type
+
+  ## Example
+      iex> ST.output_one(:client, :request, :binary, %ST.SEnd{})
+      %ST.SOut{
+        to: :client,
+        branches: [%ST.SBranch{
+          label: :request,
+          payload: :binary,
+          continue_as: %ST.SEnd{}
+        }]
+      }
+  """
+  @spec output_one(atom(), atom(), payload_type(), t()) :: SOut.t()
+  def output_one(to, label, payload, continue_as) do
+    output(to, [branch(label, payload, continue_as)])
+  end
+
+  @doc """
+  Creates an end session type.
+
+  ## Example
+      iex> ST.end_session()
+      %ST.SEnd{}
+  """
+  @spec end_session() :: SEnd.t()
+  def end_session do
+    %SEnd{}
+  end
+
+  @doc """
+  Creates a named handler reference.
+
+  ## Parameters
+  - `handler`: The handler function name (atom)
+
+  ## Example
+      iex> ST.name(:quote_handler)
+      %ST.SName{
+        handler: :quote_handler
+      }
+  """
+  @spec name(atom()) :: SName.t()
+  def name(handler) do
+    %SName{
+      handler: handler
+    }
   end
 end

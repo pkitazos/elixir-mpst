@@ -4,7 +4,7 @@ defmodule Maty.MixProject do
   def project do
     [
       app: :maty,
-      version: "0.7.1",
+      version: "0.8.0",
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
@@ -32,7 +32,8 @@ defmodule Maty.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:nimble_parsec, "~> 1.4.2"}
     ]
   end
 end

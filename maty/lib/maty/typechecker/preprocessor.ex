@@ -1,7 +1,7 @@
 defmodule Maty.Typechecker.Preprocessor do
   alias Maty.Typechecker.Tc, as: TC
-  alias Maty.Typechecker.{Error}
-  alias Maty.{ST, Utils}
+  alias Maty.Typechecker.Error
+  alias Maty.Utils
   require Logger
 
   def process_handler_annotation(module, kind, name, arity, handler, meta) do
@@ -15,9 +15,8 @@ defmodule Maty.Typechecker.Preprocessor do
         {:error, error}
 
       true ->
-        with {:ok, st_key} <- Map.fetch(sts, handler) do
-          st = ST.Lookup.get(st_key)
-
+        with {:ok, st_key} <- Map.fetch(sts, handler),
+             {:ok, st} <- Maty.Parser.parse(st_key) do
           case Enum.find(annotated_handlers, fn {_, v} -> v == st end) do
             {{^name, ^arity}, ^st} ->
               :ok
@@ -48,6 +47,11 @@ defmodule Maty.Typechecker.Preprocessor do
         else
           :error ->
             error = Error.missing_handler(handler)
+            Logger.error(error)
+            {:error, error}
+
+          {:error, _} ->
+            error = Error.invalid_session_type_annotation(handler)
             Logger.error(error)
             {:error, error}
         end

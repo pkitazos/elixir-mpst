@@ -1,4 +1,8 @@
 defmodule Maty.Typechecker.Error do
+  def invalid_session_type_annotation(handler) do
+    "Problem with @st annotation for #{inspect(handler)}. Can't parse Session Type string"
+  end
+
   def spec_args_not_well_typed(spec_name, args_types) do
     "Problem with @spec for #{spec_name}. Function args: \n\t#{inspect(args_types)} are not well typed"
   end
