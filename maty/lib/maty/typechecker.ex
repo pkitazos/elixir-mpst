@@ -11,6 +11,8 @@ defmodule Maty.Typechecker do
 
   require Logger
 
+  @debug [:before, :log_res]
+
   @doc """
   Called by Hook when a function definition is encountered (`@on_definition`).
   """
@@ -33,13 +35,11 @@ defmodule Maty.Typechecker do
     Preprocessor.process_type_annotation(env, {name, args})
   end
 
-  @debug_before false
-
   @doc """
   Called by Hook at `@before_compile`.
   """
   def handle_before_compile(env) do
-    if @debug_before do
+    if Enum.member?(@debug, :before) do
       show_function_signatures(env.module)
     end
 
@@ -82,12 +82,20 @@ defmodule Maty.Typechecker do
           cond do
             MapSet.member?(module_handlers, fn_info) ->
               res = TC.session_typecheck_handler(env.module, fn_info, fn_clauses)
-              # log_typechecking_results(fn_info, res, label: "session typechecking handler")
+
+              if Enum.member?(@debug, :log_res) do
+                log_typechecking_results(fn_info, res, label: "session typechecking handler")
+              end
+
               acc ++ extract_errors(res)
 
             fn_info == {:init_actor, 1} ->
               res = TC.session_typecheck_init_actor(env.module, fn_info, fn_clauses)
-              # log_typechecking_results(fn_info, res, label: "session typechecking init_actor")
+
+              if Enum.member?(@debug, :log_res) do
+                log_typechecking_results(fn_info, res, label: "session typechecking init_actor")
+              end
+
               acc ++ extract_errors(res)
 
             MapSet.member?(invalid_comm_functions, fn_info) ->
@@ -96,7 +104,11 @@ defmodule Maty.Typechecker do
 
             true ->
               res = TC.typecheck_function(env.module, fn_info, fn_clauses)
-              # log_typechecking_results(fn_info, res, label: "typechecking regular function")
+
+              if Enum.member?(@debug, :log_res) do
+                log_typechecking_results(fn_info, res, label: "typechecking regular function")
+              end
+
               acc ++ extract_errors(res)
           end
       end
@@ -144,15 +156,16 @@ defmodule Maty.Typechecker do
     end
   end
 
-  # defp log_typechecking_results(fn_info, res, label: label) do
-  #   out = fn x -> "#{label}: #{inspect(fn_info)}\n#{inspect(x)}" end
-  #   for clause_res <- res do
-  #     case clause_res do
-  #       {:error, error} -> out.(error) |> Logger.error()
-  #       {:ok, return} -> out.(return) |> Logger.debug()
-  #     end
-  #   end
-  # end
+  defp log_typechecking_results(fn_info, res, label: label) do
+    out = fn x -> "#{label}: #{inspect(fn_info)}\n#{inspect(x)}" end
+
+    for clause_res <- res do
+      case clause_res do
+        {:error, error} -> out.(error) |> Logger.error()
+        {:ok, return} -> out.(return) |> Logger.debug()
+      end
+    end
+  end
 
   defp extract_errors(res) do
     case res do
