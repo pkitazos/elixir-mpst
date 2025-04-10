@@ -1,6 +1,6 @@
 ## Module Well-Formedness
 
-$$
+```math
 \frac{
   \begin{array}{l}
   % 1. Build Handler Env from annotations (check for duplicates)
@@ -17,7 +17,7 @@ $$
   \vdash M \text{ ok}
 }
 \quad (\text{WF-Module})
-$$
+```
 
 
 1. **`Δ = BuildHandlerEnv(K~)`:** Constructs the handler environment `Δ` from all `@st` annotations. Fails if duplicate handler labels `h` are defined.
