@@ -1,3 +1,7 @@
+---
+tags:
+  - v1
+---
 # Elixir-Maty Type System
 
 This document outlines the typing rules adapted from the Maty framework which are used in by our typechecker implementation.

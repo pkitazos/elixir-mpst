@@ -41,16 +41,14 @@ Multiparty Session Typing for Elixir apps using the Maty language design
 ### things to typecheck
 - [x] binary operators
 - [x] branch and control flow
-- [ ] non-variables as arguments to handlers
 - [x] helper functions
 - [x] init_actor callback
 - [x] make sure that there are no session types left over
 - [x] make sure only annotated functions perform communication operations
 - [x] make sure no `receive-do` expressions or `send` calls in Maty.Actor modules
-- [ ] recursive session types
 - [ ] branches handled by separate clauses
 - [ ] case expressions in non-handlers
-- [ ] couple more Map operations
+- [ ] more map operations
 
 ### general
 - [x] clean up repo (move the unrelated sub-directories)
@@ -62,13 +60,16 @@ Multiparty Session Typing for Elixir apps using the Maty language design
   - [ ] three-buyer
   - [ ] auction
   - [ ] chat_server
+  - [ ] some broken examples
 - [ ] split generic typechecking and session typechecking into separate modules
 
 
 
 ## Questions
 
-- How do I cut up a recursive session type?
+- How do I cut up a recursive session type? 
+
+tl;dr - unfold once and inline
 
 
 ## Dev things

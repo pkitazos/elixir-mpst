@@ -3,3 +3,4 @@
 *.t.*
 .DS_Store
 docs/notes
+.obsidian

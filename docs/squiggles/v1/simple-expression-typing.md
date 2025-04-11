@@ -1,3 +1,8 @@
+---
+tags:
+  - v1
+---
+
 ## Binary Operators (`◇`)
 **Session-Neutral / Pure**
 ```math

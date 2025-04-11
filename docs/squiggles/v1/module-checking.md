@@ -1,3 +1,8 @@
+---
+tags:
+  - v1
+---
+
 ## Module Well-Formedness
 
 ```math

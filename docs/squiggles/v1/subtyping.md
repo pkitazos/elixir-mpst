@@ -1,3 +1,8 @@
+---
+tags:
+  - v1
+---
+
 ## Subtyping Relation
 ```math
 \Large A <: B
