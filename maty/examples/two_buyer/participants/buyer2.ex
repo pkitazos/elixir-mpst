@@ -3,8 +3,7 @@ defmodule TwoBuyer.Participants.Buyer2 do
 
   @role :buyer2
 
-  @st {:share_handler,
-       "&buyer1:{share(number).+seller:{address(binary).date_handler, quit(unit).end}}"}
+  @st {:share_handler, "&buyer1:{share(number).+seller:{address(binary).date_handler, quit(unit).end}}"}
 
   @st {:date_handler, "&seller:{date(date).end}"}
 
