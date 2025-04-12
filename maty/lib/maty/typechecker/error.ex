@@ -86,8 +86,8 @@ defmodule Maty.Typechecker.Error do
     "List size mismatch in pattern match"
   end
 
-  def list_index_error(index, msg) do
-    "Error at list index #{index}: #{msg}"
+  def list_index_error(meta, index, msg) do
+    with_meta(meta, "Expression at index #{index} returned error: #{msg}")
   end
 
   # pin
@@ -160,9 +160,11 @@ defmodule Maty.Typechecker.Error do
     "Non-handler function: #{func} attempts communication"
   end
 
-  # pin
-  def message_format_invalid do
-    "message not formatted properly"
+  def message_format_invalid(meta, got: shape) do
+    with_meta(
+      meta,
+      "Handler messages can only be tagged 2-tuples. Instead got: #{inspect(shape)}"
+    )
   end
 
   def no_matching_function_clause(meta, func) do

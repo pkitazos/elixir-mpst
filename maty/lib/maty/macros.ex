@@ -17,7 +17,8 @@ defmodule Maty.Macros do
 
   defmacro __using__(_opts) do
     quote do
-      import Maty.Macros, only: [handler: 5]
+      import Maty.Macros, only: [handler: 5, init_handler: 4]
+      require Maty.MatyDSL
       alias Maty.MatyDSL, as: MatyDSL
     end
   end
@@ -46,7 +47,7 @@ defmodule Maty.Macros do
     # the pattern should be a 2-tuple with an atom tag as the first element
     case pattern do
       {tag, _payload} when is_atom(tag) ->
-        # Process the pattern to extract the cleaned pattern and type specification
+        # process the pattern to extract the cleaned pattern and type specification
         {clean_pattern, type_spec} = process_pattern(pattern)
 
         quote do
@@ -64,10 +65,13 @@ defmodule Maty.Macros do
                 unquote(state_var)
               ) do
             try do
+              var!(session_ctx) = session_ctx
+
+              # use the session_ctx variable so the LSP won't yell at me
+              _ = var!(session_ctx)
               unquote(body)
             catch
-              {:suspend, next_handler, new_state} ->
-                {:suspend, {next_handler, unquote(role)}, new_state}
+              {:suspend, next_handler, new_state} -> {:suspend, next_handler, new_state}
             end
           end
         end
@@ -78,6 +82,40 @@ defmodule Maty.Macros do
         raise ArgumentError, "Expected a tagged tuple pattern like {:tag, payload}"
     end
   end
+
+  defmacro init_handler(handler_name, pattern, state_var, do: body) do
+    {clean_pattern, type_spec} = process_init_pattern(pattern)
+
+    quote do
+      @init_handler unquote(handler_name)
+      @spec unquote(handler_name)(
+              unquote(type_spec),
+              session_ctx(),
+              maty_actor_state()
+            ) :: suspend()
+      def unquote(handler_name)(
+            unquote(clean_pattern),
+            session_ctx,
+            unquote(state_var)
+          ) do
+        try do
+          var!(session_ctx) = session_ctx
+
+          # use the session_ctx variable so the LSP won't yell at me
+          _ = var!(session_ctx)
+          unquote(body)
+        catch
+          {:suspend, next_handler, new_state} -> {:suspend, next_handler, new_state}
+        end
+      end
+    end
+  end
+
+  defguardp is_supported_type(val)
+            when is_atom(val) or
+                   is_binary(val) or
+                   is_boolean(val) or
+                   is_number(val)
 
   # Process the pattern to strip type annotations and build a type spec
   defp process_pattern({tag, payload}) when is_atom(tag) do
@@ -162,6 +200,28 @@ defmodule Maty.Macros do
   defp process_var_with_type(other) do
     # This would be an error case in a stricter implementation
     {other, quote(do: any())}
+  end
+
+  # New helper for init_handler patterns
+  defp process_init_pattern({:"::", _, [var, type]}) do
+    # Direct type annotation case: title :: binary()
+    {var, type}
+  end
+
+  defp process_init_pattern({var, meta, ctx})
+       when is_atom(var) and (is_atom(ctx) or is_nil(ctx)) do
+    # Simple variable without type annotation: title
+    {{var, meta, ctx}, quote(do: any())}
+  end
+
+  # Other cases can be handled similarly to process_payload
+  defp process_init_pattern(literal) when is_supported_type(literal) do
+    {literal, infer_type_from_literal(literal)}
+  end
+
+  defp process_init_pattern(other) do
+    # For more complex patterns, we could delegate to process_payload
+    process_payload(other)
   end
 
   # Helper to infer a type from a literal value

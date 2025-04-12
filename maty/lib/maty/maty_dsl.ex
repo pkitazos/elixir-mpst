@@ -13,8 +13,7 @@ defmodule Maty.MatyDSL do
   """
   defmacro send(recipient, message) do
     quote do
-      # pin - normally I would have to generate this variable name on the fly to avoid namespace collisions
-      maty_send(session_ctx, unquote(recipient), unquote(message))
+      maty_send(var!(session_ctx), unquote(recipient), unquote(message))
     end
   end
 
@@ -50,6 +49,14 @@ defmodule Maty.MatyDSL do
   defmacro done(state) do
     quote do
       {:done, :ok, unquote(state)}
+    end
+  end
+
+  defmacro init_callback(handler_name, args) do
+    quote do
+      fn session_ctx, state ->
+        unquote(handler_name)(unquote(args), session_ctx, state)
+      end
     end
   end
 end

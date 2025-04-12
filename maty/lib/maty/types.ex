@@ -25,7 +25,7 @@ defmodule Maty.Types do
           participants: %{role() => :queue.queue({pid(), init_token()})}
         }
 
-  @type suspend :: {:suspend, {function(), role()}, maty_actor_state()}
+  @type suspend :: {:suspend, atom(), maty_actor_state()}
   @type done :: {:done, :unit, maty_actor_state()}
 
   @maty_types [
@@ -44,8 +44,8 @@ defmodule Maty.Types do
   end
 
   def map do
-    session_id = :reference
-    init_token = :reference
+    session_id = :ref
+    init_token = :ref
     role = :atom
 
     session =
@@ -86,7 +86,7 @@ defmodule Maty.Types do
     :function,
     :number,
     :pid,
-    :reference,
+    :ref,
     :string,
     :no_return,
     nil
@@ -101,8 +101,8 @@ defmodule Maty.Types do
   end
 
   defmodule T do
-    def session_id, do: :reference
-    def init_token, do: :reference
+    def session_id, do: :ref
+    def init_token, do: :ref
     def role, do: :atom
 
     def session,
@@ -115,7 +115,7 @@ defmodule Maty.Types do
            local_state: :any
          }}
 
-    def session_ctx, do: {T.session(), T.role()}
+    def session_ctx, do: {:tuple, [T.session(), T.role()]}
 
     def maty_actor_state,
       do:
@@ -125,14 +125,14 @@ defmodule Maty.Types do
            callbacks: {:map, %{T.init_token() => {:tuple, [T.role(), :function]}}}
          }}
 
-    def suspend, do: {:tuple, [:atom, {:tuple, [:function, T.role()]}, T.maty_actor_state()]}
+    def suspend, do: {:tuple, [:atom, :atom, T.maty_actor_state()]}
 
     def done, do: {:tuple, [:atom, :atom, T.maty_actor_state()]}
 
     # ------------------------------------------------------------------
 
-    def is?(:reference, :session_id), do: true
-    def is?(:reference, :init_token), do: true
+    def is?(:ref, :session_id), do: true
+    def is?(:ref, :init_token), do: true
 
     def is?(:atom, :role), do: true
 
@@ -169,7 +169,11 @@ defmodule Maty.Types do
       end
     end
 
+    # standardise what 2-tuple types look like
     def is?({session, role}, :session_ctx), do: is?(session, :session) and is?(role, :role)
+
+    def is?({:tuple, [session, role]}, :session_ctx),
+      do: is?(session, :session) and is?(role, :role)
 
     def is?({:map, map}, :maty_actor_state) do
       has_all_keys? = Map.has_key?(map, :sessions) and Map.has_key?(map, :callbacks)
@@ -197,7 +201,7 @@ defmodule Maty.Types do
       end
     end
 
-    def is?({:tuple, [:atom, {:tuple, [:function, :atom]}, state]}, :suspend),
+    def is?({:tuple, [:atom, :atom, state]}, :suspend),
       do: is?(state, :maty_actor_state)
 
     def is?({:tuple, [:atom, :atom, state]}, :done), do: is?(state, :maty_actor_state)

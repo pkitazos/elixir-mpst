@@ -5,7 +5,7 @@ defmodule Maty.Typechecker.Preprocessor do
   require Logger
 
   def process_handler_annotation(module, kind, name, arity, handler, meta) do
-    sts = Module.get_attribute(module, :st) |> Enum.into(%{})
+    sts = Utils.ModAttr.get_map(module, :st)
     annotated_handlers = Module.get_attribute(module, :annotated_handlers)
 
     cond do
@@ -21,7 +21,6 @@ defmodule Maty.Typechecker.Preprocessor do
             {{^name, ^arity}, ^st} ->
               :ok
 
-            # todo: also store the handler label
             nil ->
               Module.put_attribute(
                 module,
@@ -32,7 +31,7 @@ defmodule Maty.Typechecker.Preprocessor do
               Module.put_attribute(
                 module,
                 :handler_defs,
-                {{name, arity}, handler}
+                {handler, {name, arity}}
               )
 
             {{prev_fn_name, prev_fn_arity}, _} ->

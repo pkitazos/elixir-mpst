@@ -11,7 +11,7 @@ defmodule Maty.Typechecker do
 
   require Logger
 
-  @debug [:before, :log_res]
+  @debug []
 
   @doc """
   Called by Hook when a function definition is encountered (`@on_definition`).
@@ -99,8 +99,10 @@ defmodule Maty.Typechecker do
               acc ++ extract_errors(res)
 
             MapSet.member?(invalid_comm_functions, fn_info) ->
-              err = Error.non_handler_communication(fn_info)
-              acc ++ [err]
+              # todo: typecheck init_handler
+              # err = Error.non_handler_communication(fn_info)
+              # acc ++ [err]
+              acc
 
             true ->
               res = TC.typecheck_function(env.module, fn_info, fn_clauses)

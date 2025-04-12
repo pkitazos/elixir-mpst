@@ -13,7 +13,13 @@ defmodule Maty.Utils do
     data == key
   end
 
+  def to_func({name, arity}), do: "#{name}/#{arity}"
+
   defmodule ModAttr do
+    def get_map(module, key) do
+      Module.get_attribute(module, key) |> Enum.into(%{})
+    end
+
     def append_to_key(env, attr, key, val) do
       updated_attr =
         Module.get_attribute(env.module, attr)

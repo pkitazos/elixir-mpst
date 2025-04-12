@@ -14,21 +14,20 @@ defmodule Maty.HandlerExpansionTest do
     test_cases = [
       {"Simple handler",
        quote do
-         handler :simple_handler, :sender, {:message, content :: binary()}, state do
-           IO.puts("Received message: #{content}")
+         handler :quote_handler, :seller, {:quote, amount :: number()}, state do
+           share_amount = amount / 2
+           MatyDSL.send(:buyer2, {:share, share_amount})
            MatyDSL.done(state)
          end
        end,
        quote do
-         @spec simple_handler(:sender, {:message, binary()}, session_ctx(), maty_actor_state()) ::
-                 suspend() | done()
-         def simple_handler(:sender, {:message, content}, session_ctx, state) do
-           try do
-             IO.puts("Received message: #{content}")
-             MatyDSL.done(state)
-           catch
-             {:suspend, next_handler, new_state} -> {:suspend, {next_handler, :sender}, new_state}
-           end
+         @spec quote_handler({:quote, number()}, role(), session_ctx(), maty_actor_state()) ::
+                 done()
+         def quote_handler({:quote, amount}, :seller, session, state) do
+           share_amount = amount / 2
+
+           maty_send(session, :buyer2, {:share, share_amount})
+           {:done, :unit, state}
          end
        end}
       # {"Tuple payload",
