@@ -4,59 +4,36 @@ defmodule Maty.Typechecker.Preprocessor do
   alias Maty.Utils
   require Logger
 
-  def process_handler_annotation(module, kind, name, arity, handler, meta) do
-    sts = Utils.ModAttr.get_map(module, :st)
-    annotated_handlers = Module.get_attribute(module, :annotated_handlers)
-
-    cond do
-      kind == :defp ->
-        error = Error.no_private_handlers(meta)
+  def process_handler_annotation(
+        module: module,
+        function: {name, arity},
+        handler_label: handler_label,
+        session_types: session_types,
+        store: handler_store,
+        kind: handler_kind,
+        meta: meta
+      ) do
+    with {:ok, session_type} <- Map.fetch(session_types, handler_label),
+         {:ok, st} <- Maty.Parser.parse(session_type) do
+      Utils.Env.add_at_key(
+        module,
+        handler_store,
+        handler_label,
+        %{function: {name, arity}, st: st}
+      )
+    else
+      :error ->
+        error = Error.missing_handler(handler_label, meta)
         Logger.error(error)
         {:error, error}
 
-      true ->
-        with {:ok, st_key} <- Map.fetch(sts, handler),
-             {:ok, st} <- Maty.Parser.parse(st_key) do
-          case Enum.find(annotated_handlers, fn {_, v} -> v == st end) do
-            {{^name, ^arity}, ^st} ->
-              :ok
-
-            nil ->
-              Module.put_attribute(
-                module,
-                :annotated_handlers,
-                {{name, arity}, st}
-              )
-
-              Module.put_attribute(
-                module,
-                :handler_defs,
-                {handler, {name, arity}}
-              )
-
-            {{prev_fn_name, prev_fn_arity}, _} ->
-              prev = "#{to_string(prev_fn_name)}/#{prev_fn_arity}"
-              curr = "#{to_string(name)}/#{arity}"
-
-              error = Error.handler_already_taken(handler, prev, curr)
-
-              Logger.error(error)
-              {:error, error}
-          end
-        else
-          :error ->
-            error = Error.missing_handler(handler)
-            Logger.error(error)
-            {:error, error}
-
-          {:error, _} ->
-            error = Error.invalid_session_type_annotation(handler)
-            Logger.error(error)
-            {:error, error}
-        end
+      {:error, _} ->
+        error = Error.invalid_session_type_annotation(handler_label)
+        Logger.error(error)
+        {:error, error}
     end
 
-    Module.delete_attribute(module, :handler)
+    Module.delete_attribute(module, handler_kind)
   end
 
   def process_type_annotation(env, {name, args}) do
@@ -73,8 +50,8 @@ defmodule Maty.Typechecker.Preprocessor do
         with {:info, {^name, ^arity}} <- {:info, {spec_name, length(args_types)}},
              {:args, {:ok, {:list, typed_args}, _}} <- {:args, TC.typecheck(var_env, args_types)},
              {:return, {:ok, typed_return, _}} <- {:return, TC.typecheck(var_env, return_type)} do
-          Utils.ModAttr.append_to_key(
-            env,
+          Utils.Env.prepend_to_key(
+            env.module,
             :type_specs,
             {name, arity},
             {typed_args, typed_return}

@@ -16,48 +16,45 @@ defmodule TwoBuyer.Participants.Seller do
       register(
         ap_pid,
         @role,
-        &install(&1, &2, ap_pid),
+        MatyDSL.init_callback(:install, ap_pid),
         initial_state
       )
 
     {:ok, updated_state}
   end
 
-  @spec install(session(), maty_actor_state(), pid()) :: suspend()
-  def install(_session, state, ap_pid) do
+
+  init_handler :install, ap_pid :: pid(), state do
     {:ok, updated_state} =
       register(
         ap_pid,
         @role,
-        &install(&1, &2, ap_pid),
+        MatyDSL.init_callback(:install, ap_pid),
         state
       )
 
-    {:suspend, {&__MODULE__.title_handler/4, :buyer1}, updated_state}
+    MatyDSL.suspend(:title_handler, updated_state)
   end
 
-  @handler :title_handler
-  @spec title_handler({:title, binary()}, role(), session_ctx(), maty_actor_state()) :: suspend()
-  def title_handler({:title, title}, :buyer1, session, state) do
+  handler :title_handler, :buyer1, {:title, title :: binary()}, state do
     amount = lookup_price(title)
 
-    maty_send(session, :buyer1, {:quote, amount})
-    {:suspend, {&__MODULE__.decision_handler/4, :buyer2}, state}
+    MatyDSL.send(:buyer1, {:quote, amount})
+    MatyDSL.suspend(:decision_handler, state)
   end
 
-  @handler :decision_handler
-  @spec decision_handler({:address, binary()}, role(), session_ctx(), maty_actor_state()) ::
-          done()
-  def decision_handler({:address, addr}, :buyer2, session, state) do
+
+  handler :decision_handler, :buyer2, {:address, addr :: binary()}, state do
     date = shipping_date(addr)
 
-    maty_send(session, :buyer2, {:date, date})
-    {:done, :unit, state}
+    MatyDSL.send(:buyer2, {:date, date})
+    MatyDSL.done(state)
   end
 
-  @handler :decision_handler
-  @spec decision_handler({:quit, :unit}, role(), session_ctx(), maty_actor_state()) :: done()
-  def decision_handler({:quit, :unit}, :buyer2, _session, state), do: {:done, :unit, state}
+  handler :decision_handler, :buyer2, {:quit, :unit }, state do
+    MatyDSL.done(state)
+  end
+
 
   @spec lookup_price(binary()) :: number()
   defp lookup_price(_title_str), do: 150

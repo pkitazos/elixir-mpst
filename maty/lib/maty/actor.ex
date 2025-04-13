@@ -1,11 +1,13 @@
 defmodule Maty.Actor do
-  alias Maty.Types
+  alias Maty.{Types, Utils}
 
   @callback init_actor(args :: any()) :: {:ok, Types.maty_actor_state()}
 
   defmacro __using__(_opts) do
     quote do
       use Maty.Hook
+      use Maty.Macros
+
       @behaviour Maty.Actor
 
       @type role :: Maty.Types.role()
@@ -50,6 +52,7 @@ defmodule Maty.Actor do
   defp init_and_run(module, args) do
     {:ok, actor_state} = module.init_actor(args)
 
+    # could also pass in the module environments into the loop function here
     loop(module, actor_state)
   end
 
@@ -61,15 +64,23 @@ defmodule Maty.Actor do
         # from  -> recipient role
         session = actor_state.sessions[session_id]
 
-        {handler, expected_role} = session.handlers[to]
+        handler_label = session.handlers[to]
+
+        # allow handlers to suspend with a label
+        # then we grab the correct function reference from the module handler environment
+        handler_info = Utils.Env.get_map(module, :delta) |> Map.fetch!(handler_label)
+        {handler, expected_role} = handler_info.function
 
         if from == expected_role do
           {action, next, intermediate_state} = handler.(msg, from, {session, to}, actor_state)
 
           updated_actor_state =
             case action do
-              :suspend -> put_in(intermediate_state, [:sessions, session.id, :handlers, to], next)
-              :done -> update_in(intermediate_state, [:sessions], &Map.delete(&1, session.id))
+              :suspend ->
+                put_in(intermediate_state, [:sessions, session.id, :handlers, to], next)
+
+              :done ->
+                update_in(intermediate_state, [:sessions], &Map.delete(&1, session.id))
             end
 
           loop(module, updated_actor_state)

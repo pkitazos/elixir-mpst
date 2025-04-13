@@ -15,31 +15,33 @@ defmodule TwoBuyer.Participants.Buyer2 do
     register(
       ap_pid,
       @role,
-      fn _, state -> {:suspend, {&__MODULE__.share_handler/4, :buyer1}, state} end,
+      MatyDSL.init_callback(:install, :nil),
       initial_state
     )
   end
 
-  @handler :share_handler
-  @spec share_handler({:share, number()}, role(), session_ctx(), maty_actor_state()) ::
-          suspend() | done()
-  def share_handler({:share, amount}, :buyer1, session, state) do
+  init_handler :install, _, state do
+    MatyDSL.suspend(:share_handler, state)
+  end
+
+
+  handler :share_handler, :buyer1, {:share, amount :: number()}, state do
     if amount > 100 do
-      maty_send(session, :seller, {:quit, :unit})
-      {:done, :unit, state}
+      MatyDSL.send(:seller, {:quit, :unit})
+      MatyDSL.done(state)
     else
       address = get_address()
 
-      maty_send(session, :seller, {:address, address})
-      {:suspend, {&__MODULE__.date_handler/4, :seller}, state}
+      MatyDSL.send(:seller, {:address, address})
+      MatyDSL.suspend(:date_handler, state)
     end
   end
 
-  @handler :date_handler
-  @spec date_handler({:date, Date.t()}, role(), session_ctx(), maty_actor_state()) :: done()
-  def date_handler({:date, _date}, :seller, _session, state) do
-    {:done, :unit, state}
+
+  handler :date_handler, :seller, {:date, _date :: Date.t()}, state do
+    MatyDSL.done(state)
   end
+
 
   @spec get_address() :: binary()
   defp get_address(), do: "18 " <> "Lilybank Gardens"

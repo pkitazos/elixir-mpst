@@ -14,37 +14,53 @@ defmodule Maty.Utils do
   end
 
   def to_func({name, arity}), do: "#{name}/#{arity}"
+  def to_func(name: name, arity: arity), do: "#{name}/#{arity}"
 
-  defmodule ModAttr do
-    def get_map(module, key) do
-      Module.get_attribute(module, key) |> Enum.into(%{})
+  defmodule Env do
+    def setup(module, attribute) do
+      Module.register_attribute(module, attribute, accumulate: true, persist: true)
     end
 
-    def append_to_key(env, attr, key, val) do
-      updated_attr =
-        Module.get_attribute(env.module, attr)
-        |> Enum.into(%{})
+    def get(module, attribute) do
+      Module.get_attribute(module, attribute)
+    end
+
+    def get_map(module, attribute) do
+      Module.get_attribute(module, attribute) |> Enum.into(%{})
+    end
+
+    def add_at_key(module, attribute, key, val) do
+      updated_entries =
+        get_map(module, attribute)
+        |> Map.update(key, val, fn _ -> val end)
+        |> Map.to_list()
+
+      rewrite(module, attribute, updated_entries)
+    end
+
+    def prepend_to_key(module, attribute, key, val) do
+      updated_entries =
+        get_map(module, attribute)
         |> Map.update(key, [val], fn vals -> [val | vals] end)
         |> Map.to_list()
 
-      Module.delete_attribute(env.module, attr)
-
-      for entry <- updated_attr do
-        Module.put_attribute(env.module, attr, entry)
-      end
+      rewrite(module, attribute, updated_entries)
     end
 
-    def remove_from_key(env, attr, key, val) do
-      updated_attr =
-        Module.get_attribute(env.module, attr)
-        |> Enum.into(%{})
+    def remove_from_key(module, attribute, key, val) do
+      updated_entries =
+        get_map(module, attribute)
         |> Map.update(key, [], &Enum.filter(&1, fn x -> x != val end))
         |> Map.to_list()
 
-      Module.delete_attribute(env.module, attr)
+      rewrite(module, attribute, updated_entries)
+    end
 
-      for entry <- updated_attr do
-        Module.put_attribute(env.module, attr, entry)
+    defp rewrite(module, attribute, entries) do
+      Module.delete_attribute(module, attribute)
+
+      for entry <- entries do
+        Module.put_attribute(module, attribute, entry)
       end
     end
   end

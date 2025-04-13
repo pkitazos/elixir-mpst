@@ -1,5 +1,5 @@
 defmodule Maty.Typechecker.Tc do
-  alias Maty.ST
+  alias Maty.{ST, Utils}
   alias Maty.Typechecker.Error
 
   alias Maty.Types.T, as: Type
@@ -124,6 +124,9 @@ defmodule Maty.Typechecker.Tc do
           Logger.info(inspect(element), ansi_color: :yellow)
 
           error = Error.list_index_error(meta, index, msg)
+
+          {:try, _, [[do: {:__block__, _, block}, catch: _]]} = element
+
           {:halt, {:error, error, current_env}}
       end
     end)
@@ -348,7 +351,7 @@ defmodule Maty.Typechecker.Tc do
   # Otherwise, reports an error that the function doesn't exist.
   def typecheck(var_env, {var, meta, args}) when is_atom(var) and is_list(args) do
     arity = length(args)
-    func = "#{var}/#{arity}"
+    func = Utils.to_func(name: var, arity: arity)
 
     case Map.fetch(var_env, var) do
       {:ok, type} ->
@@ -503,7 +506,7 @@ defmodule Maty.Typechecker.Tc do
   """
   @spec typecheck_function(module(), {atom(), non_neg_integer()}, [Macro.t()]) ::
           [{:ok, value()} | {:error, binary()}]
-  def typecheck_function(module, {name, arity} = fn_info, clauses) do
+  def typecheck_function(module, {_name, arity} = fn_info, clauses) do
     type_specs = Module.get_attribute(module, :type_specs) |> Enum.into(%{})
 
     with {:spec, {:ok, fn_types}} <- {:spec, Map.fetch(type_specs, fn_info)} do
@@ -519,7 +522,7 @@ defmodule Maty.Typechecker.Tc do
               fn {arg_type, arg}, {_, var_env} ->
                 case arg do
                   # Simple variable parameter: func(x)
-                  {arg_var, _, nil} ->
+                  {arg_var, _, ctx} when ctx in [nil, Maty.Macros] ->
                     {:cont, {:ok, Map.put(var_env, arg_var, arg_type)}}
 
                   # Labeled parameter: func(name: value)
@@ -661,7 +664,7 @@ defmodule Maty.Typechecker.Tc do
               {:error, error_msg}
 
             {:error, _other} ->
-              func = "#{name}/#{arity}"
+              func = Utils.to_func(fn_info)
               error = Error.at_least_one_arg_not_well_typed(func, spec_args)
               {:error, error}
 
@@ -684,7 +687,7 @@ defmodule Maty.Typechecker.Tc do
           end
         else
           {:spec_args, _} ->
-            func = "#{name}/#{arity}"
+            func = Utils.to_func(fn_info)
             error = Error.arity_mismatch(meta, func)
             {:error, error}
         end
@@ -959,16 +962,15 @@ defmodule Maty.Typechecker.Tc do
   @spec session_typecheck_handler(module, {atom(), integer()}, ast()) ::
           {:error, binary()}
           | {:ok, :unit}
-  def session_typecheck_handler(module, {name, arity} = fn_info, clauses) do
-    annotated_handlers = Module.get_attribute(module, :annotated_handlers) |> Enum.into(%{})
-    type_specs = Module.get_attribute(module, :type_specs) |> Enum.into(%{})
+  def session_typecheck_handler(module, handler, clauses) do
+    delta = Utils.Env.get_map(module, :delta)
+    type_specs = Utils.Env.get_map(module, :type_specs)
 
-    func = "#{name}/#{arity}"
-
-    with {:handler, {:ok, st}} <- {:handler, Map.fetch(annotated_handlers, fn_info)},
-         {:spec, {:ok, fn_types}} <- {:spec, Map.fetch(type_specs, fn_info)},
+    with {:ok, %{function: fn_info, st: st}} <- Map.fetch(delta, handler),
+         {:ok, fn_types} <- Map.fetch(type_specs, fn_info),
          variants = length(fn_types),
          {:branches, ^variants} <- {:branches, length(st.branches)} do
+      func = Utils.to_func(fn_info)
       defs = Enum.zip([Enum.reverse(fn_types), clauses, st.branches])
 
       for {{spec_args, _spec_return}, {meta, args, _guards, block}, branch} <- defs do
@@ -1031,8 +1033,6 @@ defmodule Maty.Typechecker.Tc do
               {:error, error}
 
             true ->
-              Logger.info("checking handler: #{name}")
-
               st = branch.continue_as
               body = extract_handler_body(block)
 
@@ -1055,15 +1055,6 @@ defmodule Maty.Typechecker.Tc do
         end
       end
     else
-      {:handler, :error} ->
-        error = Error.unannotated_handler(func)
-        Logger.error("[#{module}] Unannotated handler #{error}")
-        {:error, error}
-
-      {:spec, :error} ->
-        error = Error.missing_spec_annotation(func)
-        {:error, error}
-
       {:branches, _} ->
         error = Error.insufficient_function_clauses()
         Logger.error("[#{module}] Incomplete Session Type branch coverage #{error}")
@@ -1079,8 +1070,6 @@ defmodule Maty.Typechecker.Tc do
   def session_typecheck_block(module, var_env, st, expressions) when is_list(expressions) do
     Enum.reduce_while(expressions, {:ok, {:just, st}, var_env}, fn
       expr, {:ok, {:just, current_st}, current_env} ->
-        Logger.info("checking expression:\n#{inspect(expr)}", ansi_color: :blue)
-
         case session_typecheck(module, current_env, current_st, expr) do
           {:ok, {:just, new_st}, new_env} ->
             {:cont, {:ok, {:just, new_st}, new_env}}
@@ -1289,9 +1278,16 @@ defmodule Maty.Typechecker.Tc do
   defp extract_body({:__block__, _, block}), do: block
   defp extract_body(expr), do: [expr]
 
-  defp extract_handler_body(
-         {:try, _, [[do: {:__block__, _, [_, _, {:__block__, _, block}]}, catch: _]]}
-       ) do
-    block
+  defp extract_handler_body(block) do
+    case block do
+      {:try, _, [[do: {:__block__, _, [_, _, {:__block__, _, body}]}, catch: _]]} ->
+        body
+
+      {:try, _, [[do: {:__block__, _, [_, _, {:case, _, [_, _]} = case_expr]}, catch: _]]} ->
+        [case_expr]
+
+      {:try, _, [[do: {:__block__, _, body}, catch: _]]} ->
+        body
+    end
   end
 end

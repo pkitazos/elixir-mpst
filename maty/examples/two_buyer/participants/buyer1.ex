@@ -3,8 +3,7 @@ defmodule TwoBuyer.Participants.Buyer1 do
 
   @role :buyer1
 
-  @st {:install, "&buyer1:{title(binary).+seller:{title(binary).quote_handler}}"}
-
+  @st {:install, "+seller:{title(binary).quote_handler}"}
   @st {:quote_handler, "&seller:{quote(number).+buyer2:{share(number).end}}"}
 
   @impl true
@@ -15,24 +14,21 @@ defmodule TwoBuyer.Participants.Buyer1 do
     register(
       ap_pid,
       @role,
-      &install({:title, title}, @role, &1, &2),
+      MatyDSL.init_callback(:install, title),
       initial_state
     )
   end
 
-  @handler :install
-  @spec install({:title, binary()}, role(), session_ctx(), maty_actor_state()) :: suspend()
-  def install({:title, title}, @role, session, state) do
-    maty_send(session, :seller, {:title, title})
-    {:suspend, {&__MODULE__.quote_handler/4, :seller}, state}
+  init_handler :install, {title :: binary()}, state do
+    MatyDSL.send(:seller, {:title, title})
+    MatyDSL.suspend(:quote_handler, state)
   end
 
-  @handler :quote_handler
-  @spec quote_handler({:quote, number()}, role(), session_ctx(), maty_actor_state()) :: done()
-  def quote_handler({:quote, amount}, :seller, session, state) do
+
+  handler :quote_handler, :seller, {:quote, amount :: number()}, state do
     share_amount = amount / 2
-
-    maty_send(session, :buyer2, {:share, share_amount})
-    {:done, :unit, state}
+    MatyDSL.send(:buyer2, {:share, share_amount})
+    MatyDSL.done(state)
   end
+
 end

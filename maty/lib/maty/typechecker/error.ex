@@ -1,4 +1,6 @@
 defmodule Maty.Typechecker.Error do
+  alias Maty.Utils
+
   def invalid_session_type_annotation(handler) do
     "Problem with @st annotation for #{inspect(handler)}. Can't parse Session Type string"
   end
@@ -19,9 +21,11 @@ defmodule Maty.Typechecker.Error do
     "Can't apply handler \'#{handler}\' to function #{curr}, function #{prev} was already annotated with this handler"
   end
 
-  # pin
-  def missing_handler(handler) do
-    "No handler in this module named #{handler}"
+  def missing_handler(handler, meta) do
+    with_meta(
+      meta,
+      "Handler #{handler} uses label not available in this module's @st annotations"
+    )
   end
 
   def no_private_handlers(meta) do
@@ -155,9 +159,8 @@ defmodule Maty.Typechecker.Error do
     with_meta(meta, "Raw send(...) is not allowed in a Maty.Actor.")
   end
 
-  def non_handler_communication({name, arity}) do
-    func = "#{name}/#{arity}"
-    "Non-handler function: #{func} attempts communication"
+  def non_handler_communication(fn_info) do
+    "Non-handler function: #{Utils.to_func(fn_info)} attempts communication"
   end
 
   def message_format_invalid(meta, got: shape) do

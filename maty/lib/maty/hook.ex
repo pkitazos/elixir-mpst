@@ -1,19 +1,21 @@
 defmodule Maty.Hook do
-  alias Maty.Typechecker
+  alias Maty.{Typechecker, Utils}
 
   defmacro __using__(_) do
     quote do
       import Maty.Hook
 
-      Module.register_attribute(__MODULE__, :st, accumulate: true, persist: true)
+      # ephemeral annotations
       Module.register_attribute(__MODULE__, :init_handler, accumulate: false, persist: false)
       Module.register_attribute(__MODULE__, :handler, accumulate: false, persist: false)
       Module.register_attribute(__MODULE__, :spec, accumulate: false, persist: false)
 
-      Module.register_attribute(__MODULE__, :annotated_handlers, accumulate: true, persist: true)
-      Module.register_attribute(__MODULE__, :handler_defs, accumulate: true, persist: true)
-      Module.register_attribute(__MODULE__, :type_specs, accumulate: true, persist: true)
-      Module.register_attribute(__MODULE__, :spec_errors, accumulate: true, persist: true)
+      # attribute stores
+      Utils.Env.setup(__MODULE__, :st)
+      Utils.Env.setup(__MODULE__, :delta)
+      Utils.Env.setup(__MODULE__, :annotated_init_handlers)
+      Utils.Env.setup(__MODULE__, :type_specs)
+      Utils.Env.setup(__MODULE__, :spec_errors)
 
       @compile :debug_info
 

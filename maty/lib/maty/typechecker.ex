@@ -16,21 +16,38 @@ defmodule Maty.Typechecker do
   @doc """
   Called by Hook when a function definition is encountered (`@on_definition`).
   """
-  def handle_on_definition(env, kind, name, args, _guards, _body) do
+  def handle_on_definition(env, _kind, name, args, _guards, _body) do
+    arity = length(args)
+
+    session_types = Maty.Utils.Env.get_map(env.module, :st)
     handler = Module.get_attribute(env.module, :handler)
+    init_handler = Module.get_attribute(env.module, :init_handler)
 
     if not is_nil(handler) do
-      Preprocessor.process_handler_annotation(
-        env.module,
-        kind,
-        name,
-        length(args),
-        handler,
-        line: env.line
-      )
+      Logger.info("H: #{handler}\nS: #{inspect(session_types)}", ansi_color: :light_magenta)
 
-      # todo: handle these errors properly
+      Preprocessor.process_handler_annotation(
+        module: env.module,
+        function: {name, arity},
+        handler_label: handler,
+        session_types: session_types,
+        store: :delta,
+        kind: :handler,
+        meta: [line: env.line]
+      )
     end
+
+    # if not is_nil(init_handler) do
+    #   Preprocessor.process_handler_annotation(
+    #     module: env.module,
+    #     function: {name, arity},
+    #     handler_label: init_handler,
+    #     session_types: session_types,
+    #     store: :annotated_init_handler,
+    #     kind: :init_handler,
+    #     meta: [line: env.line]
+    #   )
+    # end
 
     Preprocessor.process_type_annotation(env, {name, args})
   end
@@ -60,11 +77,11 @@ defmodule Maty.Typechecker do
   """
   def handle_after_compile(env, bytecode) do
     dbgi_map = read_debug_info!(bytecode)
+    delta = Module.get_attribute(env.module, :delta)
 
     module_handlers =
-      env.module
-      |> Module.get_attribute(:annotated_handlers)
-      |> Enum.map(&elem(&1, 0))
+      delta
+      |> Enum.map(fn {_, x} -> x.function end)
       |> MapSet.new()
 
     all_module_definitions =
@@ -81,7 +98,13 @@ defmodule Maty.Typechecker do
         acc ->
           cond do
             MapSet.member?(module_handlers, fn_info) ->
-              res = TC.session_typecheck_handler(env.module, fn_info, fn_clauses)
+              handler =
+                delta
+                |> Enum.find_value(fn {handler, map} ->
+                  if map.function == fn_info, do: handler
+                end)
+
+              res = TC.session_typecheck_handler(env.module, handler, fn_clauses)
 
               if Enum.member?(@debug, :log_res) do
                 log_typechecking_results(fn_info, res, label: "session typechecking handler")
