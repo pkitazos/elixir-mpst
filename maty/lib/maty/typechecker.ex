@@ -21,11 +21,8 @@ defmodule Maty.Typechecker do
 
     session_types = Maty.Utils.Env.get_map(env.module, :st)
     handler = Module.get_attribute(env.module, :handler)
-    init_handler = Module.get_attribute(env.module, :init_handler)
 
     if not is_nil(handler) do
-      Logger.info("H: #{handler}\nS: #{inspect(session_types)}", ansi_color: :light_magenta)
-
       Preprocessor.process_handler_annotation(
         module: env.module,
         function: {name, arity},
@@ -37,19 +34,21 @@ defmodule Maty.Typechecker do
       )
     end
 
-    # if not is_nil(init_handler) do
-    #   Preprocessor.process_handler_annotation(
-    #     module: env.module,
-    #     function: {name, arity},
-    #     handler_label: init_handler,
-    #     session_types: session_types,
-    #     store: :annotated_init_handler,
-    #     kind: :init_handler,
-    #     meta: [line: env.line]
-    #   )
-    # end
+    init_handler = Module.get_attribute(env.module, :init_handler)
 
-    Preprocessor.process_type_annotation(env, {name, args})
+    if not is_nil(init_handler) do
+      Preprocessor.process_init_handler_annotation(
+        module: env.module,
+        function: {name, arity},
+        handler_label: init_handler,
+        session_types: session_types,
+        store: :annotated_init_handlers,
+        kind: :init_handler,
+        meta: [line: env.line]
+      )
+    end
+
+    Preprocessor.process_type_annotation(module: env.module, function: {name, args})
   end
 
   @doc """

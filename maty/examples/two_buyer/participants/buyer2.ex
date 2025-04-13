@@ -20,6 +20,7 @@ defmodule TwoBuyer.Participants.Buyer2 do
     )
   end
 
+  @no_comm true
   init_handler :install, _, state do
     MatyDSL.suspend(:share_handler, state)
   end

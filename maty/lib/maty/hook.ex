@@ -8,6 +8,7 @@ defmodule Maty.Hook do
       # ephemeral annotations
       Module.register_attribute(__MODULE__, :init_handler, accumulate: false, persist: false)
       Module.register_attribute(__MODULE__, :handler, accumulate: false, persist: false)
+      Module.register_attribute(__MODULE__, :no_comm, accumulate: false, persist: false)
       Module.register_attribute(__MODULE__, :spec, accumulate: false, persist: false)
 
       # attribute stores

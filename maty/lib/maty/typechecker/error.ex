@@ -28,13 +28,13 @@ defmodule Maty.Typechecker.Error do
     )
   end
 
-  def no_private_handlers(meta) do
-    with_meta(meta, "Handlers can't be private functions")
-  end
-
-  # pin
-  def unannotated_handler(func) do
-    "Function: #{func} has not been annotated with a handler"
+  def function_spec_info_mismatch(
+        spec_name: spec_name,
+        spec_arity: spec_arity,
+        fn_name: fn_name,
+        fn_arity: fn_arity
+      ) do
+    "Spec info: {#{spec_name}, #{spec_arity}} doesn't match function info: {#{fn_name}, #{fn_arity}}"
   end
 
   def missing_spec_annotation(func) do
