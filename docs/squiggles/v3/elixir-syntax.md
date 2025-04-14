@@ -1,59 +1,52 @@
 ---
 tags:
-  - v2
+  - v3
 ---
 # Elixir Syntax
 
 $$
 \begin{align}
-&\text{Variables} &x \\
-&\text{Functions} &f_n \\
-&\text{Handler} &h &::= \text{atom}\\
+&\text{Variable} &x \\
+&\text{Function} &f_n \\
+&\text{Role} &\text{q},\ \text{r} \\
+&\text{Label} &l \\
+&\text{Handler} &h \\
 \\
-% should be 0 or 1 InitHandlers, not any number
-&\text{Module} &M &::= \texttt{defmodule} \ m \  \texttt{do} \ \widetilde{I} \ \widetilde{K} \ \widetilde{H} \ \widetilde{F} \ \texttt{end}\\
+&\text{Module} &M &::= \texttt{defmodule} \ m \  \texttt{do} \  \widetilde{K} \ \widetilde{I} \ \widetilde{H} \ \widetilde{F} \ \texttt{end}\\
 &\text{Session Annotation} &K &::= \texttt{@st} \ \{h, S\} \\
-&\text{InitHandler} &I &::= \texttt{@init\_handler} \ h \ F \\
-&\text{Handler} &H &::= \texttt{@handler} \ h \ F \\
-&\text{Function} &F &::= \texttt{@spec} \ f(\widetilde{A}) :: B \ \texttt{def} \ f \  \texttt{do} \ t \ \texttt{end}\\
+&\text{InitHandler} &I &::= \texttt{init\_handler } h,\ \{ p_1 :: A_{1},\ \dots,\ p_n :: A_{n}\},\ p_{\sigma} \texttt{ do } e \texttt{ end} \\
+&\text{Handler} &H &::= \texttt{handler } h,\ \text{q},\ \{ l, p_{\text{msg}} :: A_{\text{msg}}\},\ p_{\sigma} \texttt{ do } e \texttt{ end} \\
+&\text{Function} &F &::= \texttt{@spec} \ f(\widetilde{A}) :: B \ \texttt{def} \ f(p_1,\ \dots,\ p_n) \  \texttt{do} \ e \ \texttt{end}\\
 \\
 &\text{Basic Values} &b &::= \text{atom} \mid \text{nil} \mid \text{boolean} \mid \text{number} \mid \text{binary} \mid \text{date} \mid \text{PID} \mid \text{Ref} \mid [] \\
 &\text{Values} &v &::= b \mid [v_1 \mid v_2] \mid \{v_1, \ \dots, \ v_n\} \mid \texttt{\%}\{ (v_i \ \texttt{=>} \ v_i)_{i \in I} \} \\
 \\
-&\text{Identifiers} &w &::= b \mid x \\
-&\text{Patterns} &p &::= v \mid x \\
+&\text{Patterns} &p &::= v \\
+&&&\mid x \mid \_ \\
+&&&\mid [p_{1} \mid p_{2}] \mid [] \\
+&&&\mid \{ p_{1}, \dots, p_{n} \} \mid \{\} \\
+&&&\mid \%\{k_{i} \Rightarrow p_{i}, \dots \} \\
 \\
-&\text{Expressions} &e &::= p \\ &&&\mid w_1 \ \diamond \ w_2 \mid \texttt{not} \ w \\
-&&&\mid x=e_1;e_2 \\
-&&&\mid f(w_1, \ \dots, \ w_n) \\
+&\text{Expressions} &e &::= v \\
+&&&\mid x \\
+&&&\mid e_1 \ \diamond \ e_2 \mid \texttt{not} \ e \\
+&&&\mid p=e_1;\ e_2 \\
+&&&\mid f(e_1, \ \dots, \ e_n) \\
 &&&\mid \texttt{case} \ e \ \texttt{do} \ (p_i \rightarrow e_i)_{i \in I} \ \texttt{end} \\
-&&&\mid \texttt{maty\_send}(\text{SessionCtx},\text{Role},\{\text{atom}, v\}) \\
-&&&\mid \texttt{maty\_suspend} \ h \\
-&&&\mid \texttt{maty\_end} \ \text{ActorState}(A) \\
+&&&\mid [] \mid \ \%\{\} \mid [e_{1} \mid e_{2}] \mid \{ e_{1}, \dots, e_{n} \} \mid \%\{k_{i} \Rightarrow e_{i}   \} \\
+&&&\mid \texttt{maty\_send}(\text{q},\ \{l, e\}) \\
+&&&\mid \texttt{maty\_suspend}(h, e_{\sigma}) \\
+&&&\mid \texttt{maty\_done}(e_{\sigma}) \\
 \\
 &\text{Binary Operators} &\diamond &::=  \texttt{<} \mid \texttt{>} \mid \texttt{<=}  \mid \texttt{>=} \mid \texttt{==} \mid \texttt{!=} \mid \texttt{+} \mid \texttt{-} \mid \texttt{*} \mid \texttt{/} \mid \texttt{<>} \mid \texttt{and} \mid  \texttt{or}
 \end{align}
 $$
 
->[!question]
-> 1. I think $w$, $v$ and $b$ are confusing me a little, in terms of what can go where. 
-> 	- $b$ is just literal values + the empty list
-> 	- $v$ is literal values + empty list + tuples, lists, and maps
-> 	- $w$ is literal values + variables (so does that mean I can't have variables in tuples, lists, maps?)
-> 	- $p$ is literal values +  empty list + tuples, lists, and maps + variables (so everything except still I can't have variables in tuples, lists, maps)
-> 	Obviously that's too restrictive I should be able to built up a tuple, list, map using variables. But I'm not sure what I need to change to allow that.
-> 
-> 2. Not sure if the `maty_*` definitions are correct.
-> 	- Is that how I should specify that the `maty_send` function takes some session context, role and that messages have atoms for labels?
-> 	- Same question for the `maty_end` function, do I specify the return type there? or do I just say that it's an identifier $w$?
-> 
-> 3. Is the way I'm defining Basic Values (above) and Basic Types (below) wrong? It seems like I'm ending up with a lot of duplication and I think it's because I'm a little unclear about what the distinction is.
-
-
 ## Types
+
 $$
 \begin{align}
-& &\text{Maybe}(A) &::= A \mid \bot_{T} \\
+&\text{Optional Types} &T &::= A \mid \bot_{T} \\
 &\text{Base Types} &C &::= \text{Atom} \mid \text{Nil} \mid \text{Bool} \mid \text{Number} \mid \text{Binary} \mid \text{Date} \mid \text{PID} \mid \text{Ref} \mid \text{Date} \\
 &\text{Types} &A, B &::= C \\ 
 &&&\mid \text{List}[A] \mid \text{Tuple}[A_1, \dots, A_n] \mid \text{Map}[C, A] \\
@@ -63,28 +56,24 @@ $$
 \end{align}
 $$
 
-> [!question] 
-> I couldn't think of what other symbol to use, is it okay to use $\text{Maybe}(A)$ like that?
-
 ## Session Types
+
 $$
 \begin{align}
-\text{Maybe}(S) &::= S \mid \bot_{S} \\
+Q &::= S \mid \bot_{S} \\
 \\
 S &::= S^{\text{end}} \mid S^! \mid S^? \mid h \\
 
 S^{\text{end}} &::= \text{end} &&(\text{Protocol finished successfully}) \\
-
 S^! &::= \oplus p:\{l_i(A_i).S_i\}_{i \in I} &&(\text{Internal Choice: Send } l_j(A_j) \text{ to } p\text{, continue as } S_j) \\
-
 S^? &::= \& p:\{l_i(A_i).S_i\}_{i \in I} &&(\text{External Choice: Expect } l_j(A_j) \text{ from } p\text{, continue as } S_j) \\
-
 S^{h} &::= h &&(\text{Continue protocol at handler } h\text{'s session type}) \\
 \end{align}
 $$
 
 >[!question]
->What do I need to include along with $h$ here to make it clear that it's a label which is used to lookup a session type in $\Delta$
+>- What do I need to include along with $h$ here to make it clear that it's a label which is used to lookup a session type in $\Delta$
+>- I don't know that my choice of $T$ and $Q$ are the best here, what would you recommend I change these to? I considered using $\text{Maybe}(A)$ and $\text{Maybe}(S)$ but thought that might be too verbose?
 
 
 ## Join Operator (`⊔`) for Branch Outcomes
@@ -101,16 +90,16 @@ $$
 **For Types**
 $$
 \begin{align}
-	T \sqcup T &= T \\
-	\bot \sqcup T &= T \\
-	T \sqcup \bot &= T \\
+	A \sqcup A &= A \\
+	\bot \sqcup A &= A \\
+	A \sqcup \bot &= A \\
 	\bot \sqcup \bot &= \bot \\
 \end{align}
 $$
 
 **For Session Type - Type Pairs**
 $$
-(S_a, \ T_a) \ \bigsqcup \ (S_b, \ T_b) = (S_a \sqcup S_b, \ T_a \sqcup T_b)
+(Q_a, \ T_a) \ \bigsqcup \ (Q_b, \ T_b) = (Q_a \sqcup Q_b, \ T_a \sqcup T_b)
 $$
 
 ---
@@ -118,12 +107,29 @@ $$
 
 # Environments
 
+### Variable Binding Environment
+
 $$
 \begin{align} \\
 \Gamma &= \cdot \mid \Gamma, x:A \\
-\\
-\Delta &= \{ \ h \mapsto S \mid \texttt{@handler } h \ F \in \widetilde{H} \ \} \\ \\
+\end{align}
+$$
+
+### Module Function Type Environment
+
+$$
+\begin{align}
 \Psi &= \{ \ f_{n} \mapsto f(A_{i}, \dots, A_{n}) \to B \mid \texttt{@spec} \ f(A_{i}, \dots,A_{n}) :: B \ \texttt{def} \ f \  \texttt{do} \ t \ \texttt{end} \in \widetilde{F} \ \}
+\end{align}
+$$
+
+### Module Handler Environment
+
+$$
+\begin{align}
+&\Delta_H &&= \quad \{ h \mapsto S \mid \texttt{handler } h \ \dots \text{ end} \in \widetilde{H},\ \texttt{@st } \{ h_{K},\ S \} \in \widetilde{K},\ h=h_{K} \} \\
+&\Delta_I &&= \quad \{ h \mapsto S \mid \texttt{init\_handler } h \ \dots \text{ end} \in \widetilde{I},\ \texttt{@st } \{ h_{K},\ S \} \in \widetilde{K},\ h=h_{K} \} \\
+&\Delta &&= \quad \Delta_H \cup \Delta_I
 \end{align}
 $$
 
@@ -177,12 +183,6 @@ $$
 
 $$
 \Large \Psi; \ \Delta; \ \Gamma  \mid S_1 \rhd e : A \lhd S_2
-$$
-$$
-\Large
-\begin{align}
-
-\end{align}
 $$
 
 $$
@@ -242,15 +242,15 @@ $$
 &\frac{
     \Gamma \vdash e : \text{ActorState}(A) \\
 }{
-    \Psi;\ \Delta;\ \Gamma \mid S \rhd \texttt{maty\_{end}} \ e : \text{ActorState}(A) \lhd S^{\text{end}} \\
-} \quad &(\text{T-End})
+    \Psi;\ \Delta;\ \Gamma \mid S \rhd \texttt{maty\_{done}} \ e : \text{ActorState}(A) \lhd S^{\text{end}} \\
+} \quad &(\text{T-Done})
 \end{align}
 $$
 
 
 ## Well-Formedness
 
-**Everything inlined**
+### Function Definitions
 
 $$
 \begin{align}
@@ -260,79 +260,51 @@ $$
   \forall i \neq j . \quad \text{dom}(\Gamma_i) \cap \text{dom}(\Gamma_j) = \emptyset \\
   \Gamma_{args} = \bigcup_{i=1..n} \Gamma_i \\
   \Psi, \Gamma_{args} \vdash e : B' \\
-  B' <: B
+  B' = B
   \end{array}
 }{
   \Psi \vdash (\texttt{@spec } f(A_1, \dots, A_n) :: B \texttt{ def } f(p_1, \dots, p_n) \texttt{ do } e \texttt{ end}) \text{ ok}
 }
 \quad &(\text{WF-Func})
-\\ \\
-&\frac{
-  \begin{array}{l}
+\end{align}
+$$
+
+### Handler Macros
+
+$$
+\frac{
+ \begin{array}{l}
+    \Delta(h) = S \\
+    \vdash p : A_{\text{msg}} \implies \Gamma_{msg} \\
+    \vdash p_{\sigma} : \text{ActorState}(B) \implies \Gamma_{\sigma} \\ \\
+    \text{dom}(\Gamma_{\text{msg}}) \cap \text{dom}(\Gamma_{\sigma}) = \emptyset \\
+    \Gamma_{args} = \Gamma_{\text{msg}} \cup \Gamma_{\sigma} \\ \\
+    \Delta;\ \Psi, \Gamma_{args} \mid S \rhd e : B' \lhd S' \\
+(B' = \text{ActorState}(C) \land S' = S^{\text{end}}) \lor (B' = \bot \land S' = \bot) \\
+ \end{array}
+}{
+    \Delta; \Psi \vdash ( \texttt{handler } h,\ \text{q},\ \{ l, p_{\text{msg}} :: A_{\text{msg}}\},\ p_{\sigma} \texttt{ do } e \texttt{ end}) \text{ ok}
+}
+\quad (\text{WF-Handler})
+$$
+
+$$
+\frac{
+ \begin{array}{l}
     \Delta(h) = S \\
     \forall i \in 1..n \quad \left( \vdash p_i : A_i \implies \Gamma_i \right) \\
     \forall i \neq j . \quad \text{dom}(\Gamma_i) \cap \text{dom}(\Gamma_j) = \emptyset \\
-    \Gamma_{args} = \bigcup_{i=1..n} \Gamma_i \\
-    \Delta; \Psi, \Gamma_{args} | S \rhd e : B' \lhd S' \\
-    B' <: B \\
-    S' <: S^{\text{end}} \\
-  \end{array}
+    \Gamma_{p} = \bigcup_{i=1..n} \Gamma_i \\ \\
+    \vdash p_{\sigma} : \text{ActorState}(B) \implies \Gamma_{\sigma} \\
+    \text{dom}(\Gamma_{p}) \cap \text{dom}(\Gamma_{\sigma}) = \emptyset \\
+    \Gamma_{args} = \Gamma_{p} \cup \Gamma_{\sigma} \\ \\
+    \Delta;\ \Psi, \Gamma_{args} \mid S \rhd e : B' \lhd S' \\
+    B' = \bot \land S' = \bot \\
+ \end{array}
 }{
-  \Delta; \Psi \vdash ( \texttt{@handler } h \texttt{ @spec } f(A_1, \dots, A_n) :: B \texttt{ def } f(p_1, \dots, p_n) \texttt{ do } e \texttt{ end}) \text{ ok}
+    \Delta; \Psi \vdash ( \texttt{init\_handler } h,\ \{ p_1 :: A_{1}, \dots, p_n :: A_{n}\},\ p_{\sigma} \texttt{ do } e \texttt{ end}) \text{ ok}
 }
-&(\text{WF-Handler})
-\end{align}
+\quad (\text{WF-InitHandler})
 $$
 
-> [!note]
-> I can remove subtyping and just require that the types match exactly if that makes my life a lot harder in the implementation.
 
-
-
-**With BindParams helper**
-
-$$
-\begin{align}
-&\frac{
-  \begin{array}{l}
-    \text{BindParams}((p_1, \dots, p_n), (A_1, \dots, A_n)) \implies \Gamma_{args} \\
-    \Psi, \Gamma_{args} \vdash e : B' \\
-    B' <: B
-  \end{array}
-}{
-    \Psi \vdash (\texttt{@spec } f(A_1, \dots, A_n) :: B \texttt{ def } f(p_1, \dots, p_n) \texttt{ do } e \texttt{ end}) \text{ ok}
-}
-&(\text{WF-Func})
-\\ \\
-&\frac{
-  \begin{array}{l}
-    \Delta(h) = S \\
-    \text{BindParams}((p_1, \dots, p_n), (A_1, \dots, A_n)) \implies \Gamma_{args} \\
-    \Delta; \Psi, \Gamma_{args} | S \rhd e : B' \lhd S' \\
-    B' <: B \\
-    S' <: S^{\text{end}} \\
-  \end{array}
-}{
-    \Delta; \Psi \vdash ( \texttt{@handler} \ h \ \ \texttt{@spec } f(A_1, \dots, A_n) :: B \texttt{ def } f(p_1, \dots, p_n) \texttt{ do } e \texttt{ end}) \text{ ok}
-}
-&(\text{WF-Handler})
-\end{align}
-$$
-
-$$
-\begin{align}
-&\frac{
-    p=[] \quad A=[] \\
-}{
-    \text{BindParams}(p, A) \implies \cdot
-} &(\text{Params-0})
-\\ \\
-&\frac{
-    \vdash p : A \implies \Gamma_p \quad
-    \text{BindParams}(p_{rest}, A_{rest}) \implies \Gamma_{rest} \quad
-    \text{dom}(\Gamma_p) \cap \text{dom}(\Gamma_{rest}) = \emptyset
-}{
-    \text{BindParams}([p \mid p_{rest}], [A \mid A_{rest}]) \implies (\Gamma_p \cup \Gamma_{rest})
-} &(\text{Params-N})
-\end{align}
-$$

@@ -3,4 +3,5 @@
 *.t.*
 .DS_Store
 docs/notes
+docs/squiggles/**/*.pdf
 .obsidian
