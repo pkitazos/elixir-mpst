@@ -158,6 +158,7 @@ defmodule Maty.Parser.Core do
     :session_type_inner,
     choice([
       end_type,
+      name_type,
       parsec(:input),
       parsec(:output)
     ])
