@@ -8,14 +8,13 @@ defmodule Maty.Hook do
       # ephemeral annotations
       Module.register_attribute(__MODULE__, :init_handler, accumulate: false, persist: false)
       Module.register_attribute(__MODULE__, :handler, accumulate: false, persist: false)
-      Module.register_attribute(__MODULE__, :no_comm, accumulate: false, persist: false)
       Module.register_attribute(__MODULE__, :spec, accumulate: false, persist: false)
 
       # attribute stores
       Utils.Env.setup(__MODULE__, :st)
-      Utils.Env.setup(__MODULE__, :delta)
-      Utils.Env.setup(__MODULE__, :annotated_init_handlers)
-      Utils.Env.setup(__MODULE__, :type_specs)
+      Utils.Env.setup(__MODULE__, :delta_M)
+      Utils.Env.setup(__MODULE__, :delta_I)
+      Utils.Env.setup(__MODULE__, :psi)
       Utils.Env.setup(__MODULE__, :spec_errors)
 
       @compile :debug_info

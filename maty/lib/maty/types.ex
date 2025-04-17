@@ -11,14 +11,15 @@ defmodule Maty.Types do
           id: session_id(),
           handlers: %{role() => {function(), role()}},
           participants: %{role() => pid()},
-          local_state: any()
+          local_state: map()
         }
 
   @type session_ctx :: {session(), role()}
 
   @type maty_actor_state :: %{
           sessions: %{session_id() => session()},
-          callbacks: %{init_token() => {role(), function()}}
+          callbacks: %{init_token() => {role(), function()}},
+          global_state: map()
         }
 
   @type access_point_state :: %{

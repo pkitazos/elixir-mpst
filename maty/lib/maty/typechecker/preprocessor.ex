@@ -36,37 +36,6 @@ defmodule Maty.Typechecker.Preprocessor do
     Module.delete_attribute(module, handler_kind)
   end
 
-  def process_init_handler_annotation(
-        module: module,
-        function: {name, arity},
-        handler_label: handler_label,
-        session_types: session_types,
-        store: handler_store,
-        kind: handler_kind,
-        meta: meta
-      ) do
-    no_comm = Module.get_attribute(module, :no_comm)
-
-    if not is_nil(no_comm) and no_comm do
-      Utils.Env.add_at_key(
-        module,
-        handler_store,
-        handler_label,
-        %{function: {name, arity}, st: nil}
-      )
-    else
-      process_handler_annotation(
-        module: module,
-        function: {name, arity},
-        handler_label: handler_label,
-        session_types: session_types,
-        store: handler_store,
-        kind: handler_kind,
-        meta: meta
-      )
-    end
-  end
-
   def process_type_annotation(module: module, function: {name, args}) do
     var_env =
       Maty.Types.payload_types()
@@ -83,7 +52,7 @@ defmodule Maty.Typechecker.Preprocessor do
              {:return, {:ok, typed_return, _}} <- {:return, TC.typecheck(var_env, return_type)} do
           Utils.Env.prepend_to_key(
             module,
-            :type_specs,
+            :psi,
             {name, arity},
             {typed_args, typed_return}
           )

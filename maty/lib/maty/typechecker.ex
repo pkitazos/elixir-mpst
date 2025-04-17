@@ -28,7 +28,7 @@ defmodule Maty.Typechecker do
         function: {name, arity},
         handler_label: handler,
         session_types: session_types,
-        store: :delta,
+        store: :delta_M,
         kind: :handler,
         meta: [line: env.line]
       )
@@ -37,12 +37,12 @@ defmodule Maty.Typechecker do
     init_handler = Module.get_attribute(env.module, :init_handler)
 
     if not is_nil(init_handler) do
-      Preprocessor.process_init_handler_annotation(
+      Preprocessor.process_handler_annotation(
         module: env.module,
         function: {name, arity},
         handler_label: init_handler,
         session_types: session_types,
-        store: :annotated_init_handlers,
+        store: :delta_I,
         kind: :init_handler,
         meta: [line: env.line]
       )
@@ -76,12 +76,21 @@ defmodule Maty.Typechecker do
   """
   def handle_after_compile(env, bytecode) do
     dbgi_map = read_debug_info!(bytecode)
-    delta = Module.get_attribute(env.module, :delta)
 
-    module_handlers =
-      delta
+    delta_M = Module.get_attribute(env.module, :delta_M)
+    delta_I = Module.get_attribute(env.module, :delta_I)
+
+    module_init_handlers =
+      Module.get_attribute(env.module, :delta_I)
       |> Enum.map(fn {_, x} -> x.function end)
       |> MapSet.new()
+
+    module_handlers =
+      delta_M
+      |> Enum.map(fn {_, x} -> x.function end)
+      |> MapSet.new()
+
+    all_handlers = MapSet.union(module_handlers, module_init_handlers)
 
     all_module_definitions =
       dbgi_map[:definitions]
@@ -89,7 +98,7 @@ defmodule Maty.Typechecker do
 
     invalid_comm_functions =
       all_module_definitions
-      |> find_invalid_comm_functions(module_handlers)
+      |> find_invalid_comm_functions(all_handlers)
       |> MapSet.new()
 
     errors =
@@ -98,7 +107,7 @@ defmodule Maty.Typechecker do
           cond do
             MapSet.member?(module_handlers, fn_info) ->
               handler =
-                delta
+                delta_M
                 |> Enum.find_value(fn {handler, map} ->
                   if map.function == fn_info, do: handler
                 end)
@@ -120,11 +129,24 @@ defmodule Maty.Typechecker do
 
               acc ++ extract_errors(res)
 
+            MapSet.member?(module_init_handlers, fn_info) ->
+              handler_M =
+                delta_I
+                |> Enum.find_value(fn {handler, map} ->
+                  if map.function == fn_info, do: handler
+                end)
+
+              res = TC.session_typecheck_init_handler(env.module, handler_M, fn_clauses)
+
+              if Enum.member?(@debug, :log_res) do
+                log_typechecking_results(fn_info, res, label: "session typechecking handler")
+              end
+
+              acc ++ extract_errors(res)
+
             MapSet.member?(invalid_comm_functions, fn_info) ->
-              # todo: typecheck init_handler
-              # err = Error.non_handler_communication(fn_info)
-              # acc ++ [err]
-              acc
+              err = Error.non_handler_communication(fn_info)
+              acc ++ [err]
 
             true ->
               res = TC.typecheck_function(env.module, fn_info, fn_clauses)
@@ -207,9 +229,9 @@ defmodule Maty.Typechecker do
     end
   end
 
-  defp find_invalid_comm_functions(definitions, module_handlers) do
+  defp find_invalid_comm_functions(definitions, handlers) do
     for {fn_info, _, _, fn_clauses} <- definitions,
-        not MapSet.member?(module_handlers, fn_info),
+        not MapSet.member?(handlers, fn_info),
         fn_info != {:init_actor, 1},
         clause <- fn_clauses,
         TC.performs_communication?(clause),
@@ -219,7 +241,7 @@ defmodule Maty.Typechecker do
   end
 
   defp show_function_signatures(module) do
-    attr = Module.get_attribute(module, :type_specs)
+    attr = Module.get_attribute(module, :psi)
 
     module_header =
       "\n-------------------- #{inspect(module)} -------------------"
