@@ -17,28 +17,25 @@ defmodule Maty.AccessPoint do
       {:register, role, pid, init_token} ->
         new_participants = Map.update!(participants, role, &:queue.in({pid, init_token}, &1))
 
-        cond do
-          session_ready?(new_participants) ->
-            session_id = make_ref()
-
-            {ready_participants, updated_participants} =
-              get_ready_participants!(new_participants)
-
-            session_participants =
-              ready_participants
-              |> Enum.map(fn {pid, role, _} -> {role, pid} end)
-              |> Enum.into(%{})
-
-            ready_participants
-            |> Enum.map(fn {pid, _, token} ->
-              send(pid, {:init_session, session_id, session_participants, token})
-            end)
-
-            loop(%{state | participants: updated_participants})
-
-          true ->
-            loop(%{state | participants: new_participants})
+        if not session_ready?(new_participants) do
+          loop(%{state | participants: new_participants})
         end
+
+        session_id = make_ref()
+
+        {ready_participants, updated_participants} = get_ready_participants!(new_participants)
+
+        session_participants =
+          ready_participants
+          |> Enum.map(fn {pid, role, _} -> {role, pid} end)
+          |> Enum.into(%{})
+
+        ready_participants
+        |> Enum.map(fn {pid, _, token} ->
+          send(pid, {:init_session, session_id, session_participants, token})
+        end)
+
+        loop(%{state | participants: updated_participants})
     end
   end
 
