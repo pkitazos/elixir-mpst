@@ -125,7 +125,7 @@ defmodule Maty.Typechecker.Tc do
 
           error = Error.list_index_error(meta, index, msg)
 
-          {:try, _, [[do: {:__block__, _, block}, catch: _]]} = element
+          {:try, _, [[do: {:__block__, _, _block}, catch: _]]} = element
 
           {:halt, {:error, error, current_env}}
       end
@@ -507,7 +507,7 @@ defmodule Maty.Typechecker.Tc do
   @spec typecheck_function(module(), {atom(), non_neg_integer()}, [Macro.t()]) ::
           [{:ok, value()} | {:error, binary()}]
   def typecheck_function(module, {_name, arity} = fn_info, clauses) do
-    type_specs = Module.get_attribute(module, :type_specs) |> Enum.into(%{})
+    type_specs = Module.get_attribute(module, :psi) |> Enum.into(%{})
 
     with {:spec, {:ok, fn_types}} <- {:spec, Map.fetch(type_specs, fn_info)} do
       defs = fn_types |> Enum.reverse() |> Enum.zip(clauses)
@@ -822,6 +822,9 @@ defmodule Maty.Typechecker.Tc do
   # Makes sure that this only happens when the session precondition states communication must end
   #
   # returns {:error, binary(), var_env()} | {:ok, MapSet.t(:done), var_env()}
+
+  # {{:., _, [:erlang, :throw]}, _, [{:done, state_ast}]}
+
   def session_typecheck(_module, var_env, pre, {:{}, meta, [:done, :ok, state_ast]}) do
     with {:pre, %ST.SEnd{}} <- {:pre, pre},
          {:ok, state_shape, var_env} <- typecheck(var_env, state_ast),
@@ -855,7 +858,7 @@ defmodule Maty.Typechecker.Tc do
   #
   # returns {:error, binary(), var_env()} | {:ok, {:just, ST.t()}, var_env()}
   def session_typecheck(module, var_env, st, expr) do
-    type_specs = Module.get_attribute(module, :type_specs) |> Enum.into(%{})
+    type_specs = Module.get_attribute(module, :psi) |> Enum.into(%{})
     updated_var_env = Map.merge(var_env, type_specs)
 
     case typecheck(updated_var_env, expr) do
@@ -963,8 +966,8 @@ defmodule Maty.Typechecker.Tc do
           {:error, binary()}
           | {:ok, :unit}
   def session_typecheck_handler(module, handler, clauses) do
-    delta = Utils.Env.get_map(module, :delta)
-    type_specs = Utils.Env.get_map(module, :type_specs)
+    delta = Utils.Env.get_map(module, :delta_M)
+    type_specs = Utils.Env.get_map(module, :psi)
 
     with {:ok, %{function: fn_info, st: st}} <- Map.fetch(delta, handler),
          {:ok, fn_types} <- Map.fetch(type_specs, fn_info),
@@ -1083,12 +1086,33 @@ defmodule Maty.Typechecker.Tc do
     end)
   end
 
+  def session_typecheck_init_handler(module, handler, _clauses) do
+    delta = Utils.Env.get_map(module, :delta_I)
+    type_specs = Utils.Env.get_map(module, :psi)
+
+    with {:ok, %{function: fn_info, st: st}} when not is_nil(st) <- Map.fetch(delta, handler),
+         {:ok, _fn_types} <- Map.fetch(type_specs, fn_info) do
+      # check that the init_handler only ever sends and suspends
+      # ensure sufficient branch coverage
+      # todo: needs to be implemented
+      :under_construction
+    else
+      other ->
+        Logger.error("hmm: #{inspect(other)}")
+
+        hello = Map.fetch(delta, handler)
+        Logger.debug("#{handler}\n\nDELTA: #{inspect(delta)}\n\nhello: #{inspect(hello)}")
+        # Map.fetch(type_specs, fn_info)
+        {:error, "Under construction"}
+    end
+  end
+
   # Special function for ensuring the init_actor callback is typed properly
   @spec session_typecheck_init_actor(module(), {atom(), integer()}, ast()) ::
           {:error, binary()}
           | {:ok, term()}
   def session_typecheck_init_actor(module, fn_info, clauses) do
-    type_specs = Module.get_attribute(module, :type_specs) |> Enum.into(%{})
+    type_specs = Module.get_attribute(module, :psi) |> Enum.into(%{})
 
     with {:spec, {:ok, fn_types}} <- {:spec, Map.fetch(type_specs, fn_info)} do
       for {{spec_args, spec_return}, clause} <- Enum.zip(fn_types, clauses) do
