@@ -1,62 +1,66 @@
 defmodule Maty.MatyDSL do
-  @doc """
-  Sends a message to another participant in the session.
+  alias Maty.MatyDSL
+  alias Maty.Types
 
-  ## Parameters
+  @spec register(pid(), Types.role(), function(), Types.maty_actor_state()) ::
+          {atom(), Types.maty_actor_state()}
+  def register(ap_pid, role, callback, state) do
+    init_token = make_ref()
+    Kernel.send(ap_pid, {:register, role, self(), init_token})
 
-  * `recipient` - The role to send the message to
-  * `message` - The message to send (typically a tagged tuple)
+    updated_state = put_in(state, [:callbacks, init_token], {role, callback})
+    {:ok, updated_state}
+  end
 
-  ## Examples
+  # todo: could possibly make this redundant
+  @spec internal_send({Types.session(), Types.role()}, Types.role(), {atom(), any()}) :: atom()
+  def internal_send({session, from}, to, msg) do
+    Kernel.send(session.participants[to], {:maty_message, session.id, to, from, msg})
+    :ok
+  end
 
-      Maty.send(:buyer1, {:quote, amount})
-  """
   defmacro send(recipient, message) do
     quote do
-      maty_send(var!(session_ctx), unquote(recipient), unquote(message))
+      MatyDSL.internal_send(var!(session_ctx), unquote(recipient), unquote(message))
     end
   end
 
-  @doc """
-  Suspends the current handler and transfers control to another handler.
-
-  ## Parameters
-
-  * `next_handler` - The handler function to transfer control to
-  * `state` - The current state
-
-  ## Examples
-
-      Maty.suspend(:decision_handler, state)
-  """
   defmacro suspend(next_handler, state) do
     quote do
       throw({:suspend, unquote(next_handler), unquote(state)})
     end
   end
 
-  @doc """
-  Ends the current session.
-
-  ## Parameters
-
-  * `state` - The current state
-
-  ## Examples
-
-      Maty.end(state)
-  """
   defmacro done(state) do
     quote do
-      {:done, :ok, unquote(state)}
+      throw({:done, unquote(state)})
     end
   end
 
+  # todo: consider renaming or changing api for consistency
   defmacro init_callback(handler_name, args) do
     quote do
       fn session_ctx, state ->
         unquote(handler_name)(unquote(args), session_ctx, state)
       end
+    end
+  end
+
+  defmodule Maty.MatyDSL.State do
+    defstruct [:sessions, :callbacks]
+
+    def new do
+      %State{sessions: %{}, callbacks: %{}}
+    end
+
+    def set(state, _something) do
+      # todo: add something to session state
+      state
+    end
+
+    def get(state) do
+      # todo: get this session state
+      nil
     end
   end
 end

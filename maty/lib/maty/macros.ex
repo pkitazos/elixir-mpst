@@ -23,25 +23,6 @@ defmodule Maty.Macros do
     end
   end
 
-  @doc """
-  Defines a handler function with proper type annotations and pattern matching.
-
-  ## Parameters
-
-  * `handler_name` - The name of the handler function to define
-  * `role` - The role that this handler receives messages from
-  * `pattern` - The message pattern to match, with type annotations
-  * `state_var` - The name to use for the state variable
-  * `do_block` - The body of the handler function
-
-  ## Examples
-
-      handler :title_handler, :buyer1, {:title, title :: binary()}, state do
-        amount = lookup_price(title)
-        Maty.send(:buyer1, {:quote, amount})
-        Maty.suspend(:decision_handler, state)
-      end
-  """
   defmacro handler(handler_name, role, pattern, state_var, do: body) do
     # first verify we have a proper tagged tuple pattern
     # the pattern should be a 2-tuple with an atom tag as the first element
@@ -55,14 +36,15 @@ defmodule Maty.Macros do
           @spec unquote(handler_name)(
                   unquote(role),
                   unquote(type_spec),
-                  session_ctx(),
-                  maty_actor_state()
+                  # make sure to update these guys
+                  maty_actor_state(),
+                  session_ctx()
                 ) :: suspend() | done()
           def unquote(handler_name)(
                 unquote(role),
                 unquote(clean_pattern),
-                session_ctx,
-                unquote(state_var)
+                unquote(state_var),
+                session_ctx
               ) do
             try do
               var!(session_ctx) = session_ctx
@@ -72,6 +54,7 @@ defmodule Maty.Macros do
               unquote(body)
             catch
               {:suspend, next_handler, new_state} -> {:suspend, next_handler, new_state}
+              {:done, new_state} -> {:done, new_state}
             end
           end
         end
@@ -90,13 +73,14 @@ defmodule Maty.Macros do
       @init_handler unquote(handler_name)
       @spec unquote(handler_name)(
               unquote(type_spec),
-              session_ctx(),
-              maty_actor_state()
+              # make sure to update these guys
+              maty_actor_state(),
+              session_ctx()
             ) :: suspend()
       def unquote(handler_name)(
             unquote(clean_pattern),
-            session_ctx,
-            unquote(state_var)
+            unquote(state_var),
+            session_ctx
           ) do
         try do
           var!(session_ctx) = session_ctx
