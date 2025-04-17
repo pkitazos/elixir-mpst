@@ -3,17 +3,16 @@ defmodule TwoBuyer.Participants.Seller do
 
   @role :seller
 
+  @st {:install, "title_handler"}
   @st {:title_handler, "&buyer1:{title(binary).+buyer1:{quote(number).decision_handler}}"}
-
   @st {:decision_handler, "&buyer2:{address(binary).+buyer2:{date(date).end, quit(unit).end}}"}
 
   @impl true
-  @spec init_actor(pid()) :: {:ok, maty_actor_state()}
-  def init_actor(ap_pid) do
-    initial_state = %{sessions: %{}, callbacks: %{}}
+  @spec init_actor(pid(), actor_state()) :: {:ok, actor_state()}
+  def init_actor(ap_pid, initial_state) do
 
     {:ok, updated_state} =
-      register(
+      MatyDSL.register(
         ap_pid,
         @role,
         MatyDSL.init_callback(:install, ap_pid),
@@ -26,7 +25,7 @@ defmodule TwoBuyer.Participants.Seller do
 
   init_handler :install, ap_pid :: pid(), state do
     {:ok, updated_state} =
-      register(
+      MatyDSL.register(
         ap_pid,
         @role,
         MatyDSL.init_callback(:install, ap_pid),

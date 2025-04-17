@@ -7,17 +7,16 @@ defmodule TwoBuyer.Participants.Buyer1 do
   @st {:quote_handler, "&seller:{quote(number).+buyer2:{share(number).end}}"}
 
   @impl true
-  @spec init_actor({pid(), binary()}) :: {:ok, maty_actor_state()}
-  def init_actor({ap_pid, title}) do
-    initial_state = %{sessions: %{}, callbacks: %{}}
-
-    register(
+  @spec init_actor({pid(), binary()}, actor_state()) :: {:ok, actor_state()}
+  def init_actor({ap_pid, title}, initial_state) do
+    MatyDSL.register(
       ap_pid,
       @role,
       MatyDSL.init_callback(:install, title),
       initial_state
     )
   end
+
 
   init_handler :install, {title :: binary()}, state do
     MatyDSL.send(:seller, {:title, title})

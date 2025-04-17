@@ -3,24 +3,23 @@ defmodule TwoBuyer.Participants.Buyer2 do
 
   @role :buyer2
 
+  @st {:install, "share_handler"}
   @st {:share_handler, "&buyer1:{share(number).+seller:{address(binary).date_handler, quit(unit).end}}"}
-
   @st {:date_handler, "&seller:{date(date).end}"}
 
   @impl true
-  @spec init_actor(pid()) :: {:ok, maty_actor_state()}
-  def init_actor(ap_pid) do
-    initial_state = %{sessions: %{}, callbacks: %{}}
+  @spec on_link(pid(), actor_state()) :: {:ok, actor_state()}
+  def on_link(ap_pid, initial_state) do
 
-    register(
+    MatyDSL.register(
       ap_pid,
       @role,
-      MatyDSL.init_callback(:install, :nil),
+      MatyDSL.init_callback(:install, nil),
       initial_state
     )
   end
 
-  @no_comm true
+
   init_handler :install, _, state do
     MatyDSL.suspend(:share_handler, state)
   end
