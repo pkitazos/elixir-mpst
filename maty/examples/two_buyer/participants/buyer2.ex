@@ -4,30 +4,32 @@ defmodule TwoBuyer.Participants.Buyer2 do
   @role :buyer2
 
   @st {:install, "share_handler"}
-  @st {:share_handler, "&buyer1:{share(number).+seller:{address(binary).date_handler, quit(unit).end}}"}
+  @st {:share_handler, "&buyer1:{share(number).+seller:{address(binary).date_handler, quit(nil).end}}"}
   @st {:date_handler, "&seller:{date(date).end}"}
 
+
+
   @impl true
-  @spec on_link(pid(), actor_state()) :: {:ok, actor_state()}
+  @spec on_link(pid(), maty_actor_state()) :: {:ok, maty_actor_state()}
   def on_link(ap_pid, initial_state) do
 
     MatyDSL.register(
       ap_pid,
       @role,
-      MatyDSL.init_callback(:install, nil),
+      [callback: :install, args: []],
       initial_state
     )
   end
 
 
-  init_handler :install, _, state do
+  init_handler :install, nil, state do
     MatyDSL.suspend(:share_handler, state)
   end
 
 
   handler :share_handler, :buyer1, {:share, amount :: number()}, state do
     if amount > 100 do
-      MatyDSL.send(:seller, {:quit, :unit})
+      MatyDSL.send(:seller, {:quit, nil})
       MatyDSL.done(state)
     else
       address = get_address()

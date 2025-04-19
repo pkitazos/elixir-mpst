@@ -1,6 +1,6 @@
 defmodule Maty.ParserTest do
   alias Maty.ST
-  use ExUnit.Case
+  use Exnil.Case
 
   # Test the public API functions from Maty.Parser
   describe "Maty.Parser.parse" do
@@ -15,11 +15,11 @@ defmodule Maty.ParserTest do
                 branches: [
                   %ST.SBranch{
                     label: :ack,
-                    payload: :unit,
+                    payload: nil,
                     continue_as: %ST.SEnd{}
                   }
                 ]
-              }} = Maty.Parser.parse("&Server:{ Ack(unit).end }")
+              }} = Maty.Parser.parse("&Server:{ Ack(nil).end }")
     end
 
     test "parses input type with multiple branches" do
@@ -29,7 +29,7 @@ defmodule Maty.ParserTest do
                 branches: [
                   %ST.SBranch{
                     label: :ack,
-                    payload: :unit,
+                    payload: nil,
                     continue_as: %ST.SEnd{}
                   },
                   %ST.SBranch{
@@ -38,7 +38,7 @@ defmodule Maty.ParserTest do
                     continue_as: %ST.SEnd{}
                   }
                 ]
-              }} = Maty.Parser.parse("&Server:{ Error(string).end, Ack(unit).end }")
+              }} = Maty.Parser.parse("&Server:{ Error(string).end, Ack(nil).end }")
     end
 
     test "parses output type with single branch" do
@@ -114,7 +114,7 @@ defmodule Maty.ParserTest do
         Request(string).&Server:{
           Error(string).end,
           Success((number, string[])).+Client:{
-            Acknowledge(unit).end
+            Acknowledge(nil).end
           }
         }
       }
@@ -138,7 +138,7 @@ defmodule Maty.ParserTest do
                             branches: [
                               %ST.SBranch{
                                 label: :acknowledge,
-                                payload: :unit,
+                                payload: nil,
                                 continue_as: %ST.SEnd{}
                               }
                             ]
@@ -161,16 +161,16 @@ defmodule Maty.ParserTest do
       chat_protocol = """
       +Client:{
         Message(string).&Server:{
-          Received(unit).+Client:{
-            Continue(unit).&Server:{
-              Ready(unit).+Client:{
+          Received(nil).+Client:{
+            Continue(nil).&Server:{
+              Ready(nil).+Client:{
                 Message(string).&Server:{
-                  Received(unit).end
+                  Received(nil).end
                 }
               },
-              Busy(unit).end
+              Busy(nil).end
             },
-            Quit(unit).end
+            Quit(nil).end
           }
         }
       }
@@ -276,7 +276,7 @@ defmodule Maty.ParserTest do
     test "handles complex protocol with named handlers" do
       # Test a protocol that includes both end and named handlers
       protocol =
-        "+Client:{ Login(string).&Server:{ Success(unit).process_login, Error(string).end } }"
+        "+Client:{ Login(string).&Server:{ Success(nil).process_login, Error(string).end } }"
 
       {:ok, parsed} = Maty.Parser.parse(protocol)
 
@@ -301,11 +301,11 @@ defmodule Maty.ParserTest do
                branches: [
                  %ST.SBranch{
                    label: :ack,
-                   payload: :unit,
+                   payload: nil,
                    continue_as: %ST.SEnd{}
                  }
                ]
-             } = Maty.Parser.parse!("&Server:{ Ack(unit).end }")
+             } = Maty.Parser.parse!("&Server:{ Ack(nil).end }")
     end
 
     test "raises exception on failure" do
@@ -318,7 +318,7 @@ defmodule Maty.ParserTest do
     test "parses basic types" do
       assert {:ok, :binary} = Maty.Parser.parse_type("string")
       assert {:ok, :number} = Maty.Parser.parse_type("number")
-      assert {:ok, :unit} = Maty.Parser.parse_type("unit")
+      assert {:ok, nil} = Maty.Parser.parse_type("nil")
       assert {:ok, :boolean} = Maty.Parser.parse_type("boolean")
     end
 
@@ -334,15 +334,15 @@ defmodule Maty.ParserTest do
       assert {:ok, {:tuple, [:binary, {:list, [:boolean]}]}} =
                Maty.Parser.parse_type("(string, boolean[])")
 
-      assert {:ok, {:tuple, [:unit]}} = Maty.Parser.parse_type("(unit)")
+      assert {:ok, {:tuple, [nil]}} = Maty.Parser.parse_type("(nil)")
     end
 
     test "parses nested tuple types" do
       assert {:ok, {:tuple, [:binary, {:tuple, [:number, :boolean]}]}} =
                Maty.Parser.parse_type("(string, (number, boolean))")
 
-      assert {:ok, {:tuple, [:binary, {:tuple, [:number, {:tuple, [:boolean, :unit]}]}]}} =
-               Maty.Parser.parse_type("(string, (number, (boolean, unit)))")
+      assert {:ok, {:tuple, [:binary, {:tuple, [:number, {:tuple, [:boolean, nil]}]}]}} =
+               Maty.Parser.parse_type("(string, (number, (boolean, nil)))")
     end
 
     test "parses tuples with mixed types" do
@@ -381,8 +381,8 @@ defmodule Maty.ParserTest do
     test "parses ping-pong protocol" do
       ping_pong = """
       +Ping:{
-        Ping(unit).&Pong:{
-          Pong(unit).end
+        Ping(nil).&Pong:{
+          Pong(nil).end
         }
       }
       """
@@ -393,13 +393,13 @@ defmodule Maty.ParserTest do
                 branches: [
                   %ST.SBranch{
                     label: :ping,
-                    payload: :unit,
+                    payload: nil,
                     continue_as: %ST.SIn{
                       from: :pong,
                       branches: [
                         %ST.SBranch{
                           label: :pong,
-                          payload: :unit,
+                          payload: nil,
                           continue_as: %ST.SEnd{}
                         }
                       ]
@@ -413,7 +413,7 @@ defmodule Maty.ParserTest do
       auth_protocol = """
       +Client:{
         Login((string, string)).&Server:{
-          Success(unit).+Client:{
+          Success(nil).+Client:{
             Request(string).&Server:{
               Response(string).end
             }
@@ -436,12 +436,12 @@ defmodule Maty.ParserTest do
       transfer_protocol = """
       +Sender:{
         Begin(string).&Receiver:{
-          Ready(unit).+Sender:{
+          Ready(nil).+Sender:{
             Data(string[]).&Receiver:{
-              Ack(unit).+Sender:{
-                Complete(unit).end,
+              Ack(nil).+Sender:{
+                Complete(nil).end,
                 More(string[]).&Receiver:{
-                  Ack(unit).end
+                  Ack(nil).end
                 }
               }
             }
@@ -466,7 +466,7 @@ defmodule Maty.ParserTest do
 
     test "parses input type" do
       assert {:ok, [%ST.SIn{}], _, _, _, _} =
-               Maty.Parser.Core.parse_session_type("&Server:{ Ack(unit).end }")
+               Maty.Parser.Core.parse_session_type("&Server:{ Ack(nil).end }")
     end
 
     test "parses output type" do
@@ -530,12 +530,12 @@ defmodule Maty.ParserTest do
                   branches: [
                     %ST.SBranch{
                       label: :ack,
-                      payload: :unit,
+                      payload: nil,
                       continue_as: %ST.SEnd{}
                     }
                   ]
                 }
-              ], "", _, _, _} = Maty.Parser.Core.parse_input("&Server:{ Ack(unit).end }")
+              ], "", _, _, _} = Maty.Parser.Core.parse_input("&Server:{ Ack(nil).end }")
     end
 
     test "parses an input with multiple branches" do
@@ -546,7 +546,7 @@ defmodule Maty.ParserTest do
                   branches: [
                     %ST.SBranch{
                       label: :ack,
-                      payload: :unit,
+                      payload: nil,
                       continue_as: %ST.SEnd{}
                     },
                     %ST.SBranch{
@@ -557,7 +557,7 @@ defmodule Maty.ParserTest do
                   ]
                 }
               ], "", _, _,
-              _} = Maty.Parser.Core.parse_input("&Server:{ Error(string).end, Ack(unit).end }")
+              _} = Maty.Parser.Core.parse_input("&Server:{ Error(string).end, Ack(nil).end }")
     end
   end
 
@@ -600,7 +600,7 @@ defmodule Maty.ParserTest do
     test "parses basic types" do
       assert {:ok, [:binary], "", _, _, _} = Maty.Parser.Core.payload_type("string")
       assert {:ok, [:number], "", _, _, _} = Maty.Parser.Core.payload_type("number")
-      assert {:ok, [:unit], "", _, _, _} = Maty.Parser.Core.payload_type("unit")
+      assert {:ok, [nil], "", _, _, _} = Maty.Parser.Core.payload_type("nil")
       assert {:ok, [:boolean], "", _, _, _} = Maty.Parser.Core.payload_type("boolean")
     end
 
@@ -630,8 +630,8 @@ defmodule Maty.ParserTest do
     end
 
     test "recognises single element tuples" do
-      assert {:ok, [{:tuple, [:unit]}], "", _, _, _} =
-               Maty.Parser.Core.parse_tuple("(unit)")
+      assert {:ok, [{:tuple, [nil]}], "", _, _, _} =
+               Maty.Parser.Core.parse_tuple("(nil)")
     end
 
     test "recognises nested tuples" do

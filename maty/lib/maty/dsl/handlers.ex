@@ -1,12 +1,9 @@
-defmodule Maty.Macros do
+defmodule Maty.DSL.Handlers do
   @type role :: Maty.Types.role()
   @type session_id :: Maty.Types.session_id()
   @type init_token :: Maty.Types.init_token()
-  @type session :: Maty.Types.session()
   @type session_ctx :: Maty.Types.session_ctx()
   @type maty_actor_state :: Maty.Types.maty_actor_state()
-  @type suspend :: Maty.Types.suspend()
-  @type done :: Maty.Types.done()
 
   @moduledoc """
   Provides user-friendly macros for the Maty framework.
@@ -14,14 +11,6 @@ defmodule Maty.Macros do
   These macros simplify the process of writing session-typed actors by providing
   a more declarative syntax for handlers and communication operations.
   """
-
-  defmacro __using__(_opts) do
-    quote do
-      import Maty.Macros, only: [handler: 5, init_handler: 4]
-      require Maty.MatyDSL
-      alias Maty.MatyDSL, as: MatyDSL
-    end
-  end
 
   defmacro handler(handler_name, role, pattern, state_var, do: body) do
     # first verify we have a proper tagged tuple pattern
@@ -39,7 +28,7 @@ defmodule Maty.Macros do
                   # make sure to update these guys
                   maty_actor_state(),
                   session_ctx()
-                ) :: suspend() | done()
+                ) :: no_return()
           def unquote(handler_name)(
                 unquote(role),
                 unquote(clean_pattern),
@@ -76,7 +65,7 @@ defmodule Maty.Macros do
               # make sure to update these guys
               maty_actor_state(),
               session_ctx()
-            ) :: suspend()
+            ) :: no_return()
       def unquote(handler_name)(
             unquote(clean_pattern),
             unquote(state_var),

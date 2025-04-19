@@ -7,7 +7,7 @@ defmodule Maty.Parser.Core do
   than directly using the functions in this module.
 
   The parser handles:
-  - Basic payload types (string, number, boolean, unit)
+  - Basic payload types (string, number, boolean, nil)
   - Complex payload types (lists, tuples)
   - Session type constructs (input, output, end)
   - Branch definitions with continuations
@@ -29,7 +29,7 @@ defmodule Maty.Parser.Core do
   string_type = string("string") |> replace(:binary)
   number_type = string("number") |> replace(:number)
   date_type = string("date") |> replace(:date)
-  unit_type = string("unit") |> replace(:unit)
+  unit_type = string("nil") |> replace(nil)
   boolean_type = string("boolean") |> replace(:boolean)
 
   # Basic payload type - matches one of the basic types

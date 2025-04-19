@@ -346,7 +346,7 @@ defmodule Maty.Typechecker.Error do
   end
 
   def missing_registration do
-    "init_actor function does not register actor in session"
+    "on_link function does not register actor in session"
   end
 
   def invalid_ap_type(meta, opts) do
@@ -406,6 +406,75 @@ defmodule Maty.Typechecker.Error do
     "Invalid session type: #{inspect(error)}"
   end
 
+  # -----------------------------------------------------------------
+  def conflicting_pattern_bindings(_1), do: "conflicting_pattern_bindings"
+  def internal_error(a), do: "Internal Error: #{a}"
+
+  def unknown_type_constructor(a) do
+    "Unknown type constructor or type atom not found in type_env: #{a}"
+  end
+
+  def spec_return_not_well_typed(spec_name, return_ast, msg) do
+    "@spec return #{inspect(return_ast)} for #{inspect(spec_name)} is not well typed: #{inspect(msg)}"
+  end
+
+  def spec_args_not_well_typed(spec_name, args_asts_list, msg) do
+    "@spec args #{inspect(args_asts_list)} for #{inspect(spec_name)} are not well typed: #{inspect(msg)}"
+  end
+
+  def unsupported_type_constructor(a) do
+    "Unsupported type specification AST structure: #{inspect(a)}"
+  end
+
+  def parse_error_at(failed_index, spec_name, msg) do
+    "Error parsing argument ##{failed_index + 1} in spec #{spec_name}: #{msg}"
+  end
+
+  def unexpected_error(func_id, other) do
+    "Unexpected error during spec processing for #{func_id}: #{inspect(other)}"
+  end
+
+  def internal_error(a, b), do: "Internal Error: #{inspect(a)} - #{inspect(b)}"
+  def list_elements_incompatible(_a, _b), do: "list_elements_incompatible"
+  def complex_map_key(_a, _b), do: "complex_map_key"
+  def invalid_map_key_type(_a, _b), do: "invalid_map_key_type"
+  def pattern_map_key_not_found(_a, _b), do: "pattern_map_key_not_found"
+  def pattern_map_key_not_atom(_a, _b), do: "pattern_map_key_not_atom"
+
+  def pattern_type_mismatch(_a, opts),
+    do: "pattern type mismatch: #{inspect(opts)}"
+
+  # "pattern_type_mismatch:\n\tpattern: #{inspect(pattern)}\n\texpected: #{inspect(expected)}\n\tgot: #{inspect(got)}"
+
+  def return_type_mismatch(_a, _b), do: "return_type_mismatch"
+  def handler_msg_pattern_invalid(_a, _b), do: "handler_msg_pattern_invalid"
+  def handler_role_not_atom(_a, _b), do: "handler_role_not_atom"
+  def handler_state_var_not_atom(_a, _b), do: "handler_state_var_not_atom"
+  def register_arg_type_mismatch(_a, _b), do: "register_arg_type_mismatch"
+  def register_unknown_handler(_a, _b), do: "register_unknown_handler"
+  def invalid_registration_info_structure(_a, _b), do: "invalid_registration_info_structure"
+  def invalid_maty_state_type(_a, _b), do: "invalid_maty_state_type"
+  def send_invalid_state(_a, opts), do: "send_invalid_state: #{display_opts(opts)}"
+  def function_not_exist(_a, func), do: "function_not_exist: #{func}"
+  def case_scrutinee_altered_state(_a, _b), do: "case_scrutinee_altered_state"
+  def case_branches_incompatible_types(_a, _b), do: "case_branches_incompatible_types"
+  def case_branches_incompatible_states(_a, _b), do: "case_branches_incompatible_states"
+  def send_message_not_tuple(_a, _b), do: "send_message_not_tuple"
+  def send_invalid_label(_a, _b), do: "send_invalid_label"
+  def send_payload_mismatch(_a, _b), do: "send_payload_mismatch"
+  def suspend_invalid_handler_type(_a, _b), do: "suspend_invalid_handler_type"
+
+  def pattern_arity_mismatch(_a, _b, _c), do: "pattern_arity_mismatch"
+  def function_altered_state(_a, _b, _c), do: "function_altered_state"
+  def arity_mismatch(_a, _b, _c), do: "arity_mismatch"
+  def handler_session_type_not_sin(_a, _b, _c), do: "handler_session_type_not_sin"
+  def no_matching_function_clause(_a, _b, _c), do: "no_matching_function_clause"
+  def logical_operator_requires_boolean(_a, _b, _c), do: "logical_operator_requires_boolean"
+  def invalid_maty_state_type(_a, _b, _c), do: "invalid_maty_state_type"
+
+  def handler_body_wrong_termination(_a, _b, _c, _d), do: "handler_body_wrong_termination"
+  def logical_operator_type_mismatch(_a, _b, _c, _d), do: "logical_operator_type_mismatch"
+  def binary_operator_type_mismatch(_a, _b, _c, _d), do: "binary_operator_type_mismatch"
   # -----------------------------------------------------------------
 
   defp with_meta(meta, str) do

@@ -22,7 +22,6 @@ defmodule Maty.Typechecker.Tc do
           | :no_return
           | :pid
           | :ref
-          | :unit
 
   @typedoc """
   Represents Elixir AST nodes that can be typechecked.
@@ -51,8 +50,8 @@ defmodule Maty.Typechecker.Tc do
     - `{:ok, type, var_env}` when typechecking succeeds
     - `{:error, error_message, var_env}` when typechecking fails
   """
+  @deprecated "Use TCV2.tc_expr instead"
   @spec typecheck(var_env(), ast()) :: {:ok, value(), var_env()} | {:error, binary(), var_env()}
-  def typecheck(var_env, :unit), do: {:ok, :unit, var_env}
   def typecheck(var_env, nil), do: {:ok, nil, var_env}
   def typecheck(var_env, val) when is_boolean(val), do: {:ok, :boolean, var_env}
   def typecheck(var_env, val) when is_atom(val), do: {:ok, :atom, var_env}
@@ -60,6 +59,8 @@ defmodule Maty.Typechecker.Tc do
   def typecheck(var_env, val) when is_number(val), do: {:ok, :number, var_env}
   def typecheck(var_env, val) when is_pid(val), do: {:ok, :pid, var_env}
   def typecheck(var_env, val) when is_reference(val), do: {:ok, :ref, var_env}
+  def typecheck(var_env, {:no_return, _meta, []}), do: {:ok, :no_return, var_env}
+  def typecheck(var_env, {:any, _meta, []}), do: {:ok, :any, var_env}
 
   # Typecheck a date literal (e.g., ~D[2021-01-01])
   def typecheck(var_env, {:%, _, [Date, {:%{}, _, _}]}), do: {:ok, :date, var_env}
@@ -964,7 +965,7 @@ defmodule Maty.Typechecker.Tc do
   """
   @spec session_typecheck_handler(module, {atom(), integer()}, ast()) ::
           {:error, binary()}
-          | {:ok, :unit}
+          | {:ok, nil}
   def session_typecheck_handler(module, handler, clauses) do
     delta = Utils.Env.get_map(module, :delta_M)
     type_specs = Utils.Env.get_map(module, :psi)
@@ -1045,7 +1046,7 @@ defmodule Maty.Typechecker.Tc do
                   {:error, error}
 
                 {:ok, _exits, _var_env} ->
-                  {:ok, :unit}
+                  {:ok, nil}
 
                 {:error, error, _var_env} ->
                   {:error, error}

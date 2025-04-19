@@ -5,17 +5,17 @@ defmodule TwoBuyer.Participants.Seller do
 
   @st {:install, "title_handler"}
   @st {:title_handler, "&buyer1:{title(binary).+buyer1:{quote(number).decision_handler}}"}
-  @st {:decision_handler, "&buyer2:{address(binary).+buyer2:{date(date).end, quit(unit).end}}"}
+  @st {:decision_handler, "&buyer2:{address(binary).+buyer2:{date(date).end},quit(nil).end}"}
 
   @impl true
-  @spec init_actor(pid(), actor_state()) :: {:ok, actor_state()}
-  def init_actor(ap_pid, initial_state) do
+  @spec on_link(pid(), maty_actor_state()) :: {:ok, maty_actor_state()}
+  def on_link(ap_pid, initial_state) do
 
     {:ok, updated_state} =
       MatyDSL.register(
         ap_pid,
         @role,
-        MatyDSL.init_callback(:install, ap_pid),
+        [callback: :install, args: ap_pid],
         initial_state
       )
 
@@ -28,7 +28,7 @@ defmodule TwoBuyer.Participants.Seller do
       MatyDSL.register(
         ap_pid,
         @role,
-        MatyDSL.init_callback(:install, ap_pid),
+        [callback: :install, args: ap_pid],
         state
       )
 
@@ -45,12 +45,11 @@ defmodule TwoBuyer.Participants.Seller do
 
   handler :decision_handler, :buyer2, {:address, addr :: binary()}, state do
     date = shipping_date(addr)
-
     MatyDSL.send(:buyer2, {:date, date})
     MatyDSL.done(state)
   end
 
-  handler :decision_handler, :buyer2, {:quit, :unit }, state do
+  handler :decision_handler, :buyer2, {:quit, nil }, state do
     MatyDSL.done(state)
   end
 

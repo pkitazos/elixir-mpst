@@ -26,9 +26,6 @@ defmodule Maty.Types do
           participants: %{role() => :queue.queue({pid(), init_token()})}
         }
 
-  @type suspend :: {:suspend, atom(), maty_actor_state()}
-  @type done :: {:done, :unit, maty_actor_state()}
-
   @maty_types [
     :session_id,
     :init_token,
@@ -71,25 +68,19 @@ defmodule Maty.Types do
       role: role,
       session: session,
       session_ctx: {session, role},
-      maty_actor_state: maty_actor_state,
-      suspend: {:tuple, [:atom, {:tuple, [:function, role]}, maty_actor_state]},
-      done: {:tuple, [:atom, :atom, maty_actor_state]}
+      maty_actor_state: maty_actor_state
     }
   end
 
   # List of accepted types in session types
   @supported_payload_types [
-    :any,
     :atom,
     :binary,
     :boolean,
     :date,
-    :function,
     :number,
     :pid,
     :ref,
-    :string,
-    :no_return,
     nil
   ]
 
@@ -102,6 +93,22 @@ defmodule Maty.Types do
   end
 
   defmodule T do
+    @typedoc """
+    Represents types that are supported by the Maty typechecker.
+    These are primitive types that can be checked directly.
+    """
+    @type t ::
+            :any
+            | :atom
+            | :binary
+            | :boolean
+            | :date
+            | nil
+            | :number
+            | :no_return
+            | :pid
+            | :ref
+
     def session_id, do: :ref
     def init_token, do: :ref
     def role, do: :atom
@@ -125,10 +132,6 @@ defmodule Maty.Types do
            sessions: {:map, %{T.session_id() => T.session()}},
            callbacks: {:map, %{T.init_token() => {:tuple, [T.role(), :function]}}}
          }}
-
-    def suspend, do: {:tuple, [:atom, :atom, T.maty_actor_state()]}
-
-    def done, do: {:tuple, [:atom, :atom, T.maty_actor_state()]}
 
     # ------------------------------------------------------------------
 
@@ -208,10 +211,5 @@ defmodule Maty.Types do
     def is?({:tuple, [:atom, :atom, state]}, :done), do: is?(state, :maty_actor_state)
 
     def is?(_, _), do: false
-
-    def is_handler_return?({:|, [v1, v2]}),
-      do: (is?(v1, :done) and is?(v2, :suspend)) or (is?(v1, :suspend) and is?(v2, :done))
-
-    def is_handler_return?(val), do: is?(val, :done) or is?(val, :suspend)
   end
 end

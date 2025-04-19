@@ -2,13 +2,13 @@ defmodule Maty.Actor do
   alias Maty.{Types, Utils}
 
   # potentially make this a macro as well, can call it something like on_link or on_spawn or on_start
-  @callback init_actor(args :: any(), initial_state :: Types.maty_actor_state()) ::
+  @callback on_link(args :: any(), initial_state :: Types.maty_actor_state()) ::
               {:ok, Types.maty_actor_state()}
 
   defmacro __using__(_opts) do
     quote do
       use Maty.Hook
-      use Maty.Macros
+      use Maty.DSL
       @behaviour Maty.Actor
 
       @type actor_state :: Types.maty_actor_state()
@@ -28,9 +28,9 @@ defmodule Maty.Actor do
 
   @spec init_and_run(module(), any()) :: no_return()
   defp init_and_run(module, args) do
-    initial_state = %MatyDSL.State{sessions: %{}, callbacks: %{}}
+    initial_state = %Maty.DSL.State{sessions: %{}, callbacks: %{}}
 
-    {:ok, actor_state} = module.init_actor(args, initial_state)
+    {:ok, actor_state} = module.on_link(args, initial_state)
 
     loop(module, actor_state)
   end
@@ -53,13 +53,14 @@ defmodule Maty.Actor do
         # we currently only check the role, but should also check the session type associated with this handler
         # to see if there is a branch which expects a message with this label as one of the branches
         if from == expected_role do
-          case apply(module, handler, [msg, from, actor_state, {session, to}]) do
-            {:suspend, next, intermediate_state} ->
-              put_in(intermediate_state, [:sessions, session.id, :handlers, to], next)
+          updated_actor_state =
+            case apply(module, handler, [msg, from, actor_state, {session, to}]) do
+              {:suspend, next, intermediate_state} ->
+                put_in(intermediate_state, [:sessions, session.id, :handlers, to], next)
 
-            {:done, intermediate_state} ->
-              update_in(intermediate_state, [:sessions], &Map.delete(&1, session.id))
-          end
+              {:done, intermediate_state} ->
+                update_in(intermediate_state, [:sessions], &Map.delete(&1, session.id))
+            end
 
           loop(module, updated_actor_state)
         else
@@ -90,7 +91,7 @@ defmodule Maty.Actor do
 
       # discard malformed messages
       _ ->
-        loop(module, updated_actor_state)
+        loop(module, actor_state)
     end
   end
 end

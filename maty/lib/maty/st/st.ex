@@ -122,7 +122,7 @@ defmodule Maty.ST do
 
   @typedoc """
   A payload type that can be:
-  - A basic type (:binary, :number, :boolean, :unit)
+  - A basic type (:binary, :number, :boolean, nil)
   - A list of a basic type
   - A tuple containing multiple payload types
   """
@@ -161,13 +161,13 @@ defmodule Maty.ST do
   - `branches`: List of possible branches that can be received
 
   ## Example
-      iex> branch = ST.branch(:ack, :unit, %ST.SEnd{})
+      iex> branch = ST.branch(:ack, nil, %ST.SEnd{})
       iex> ST.input(:server, [branch])
       %ST.SIn{
         from: :server,
         branches: [%ST.SBranch{
           label: :ack,
-          payload: :unit,
+          payload: nil,
           continue_as: %ST.SEnd{}
         }]
       }
@@ -190,12 +190,12 @@ defmodule Maty.ST do
   - `continue_as`: The continuation session type
 
   ## Example
-      iex> ST.input_one(:server, :ack, :unit, %ST.SEnd{})
+      iex> ST.input_one(:server, :ack, nil, %ST.SEnd{})
       %ST.SIn{
         from: :server,
         branches: [%ST.SBranch{
           label: :ack,
-          payload: :unit,
+          payload: nil,
           continue_as: %ST.SEnd{}
         }]
       }

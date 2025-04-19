@@ -20,9 +20,9 @@ defmodule Maty.Parser do
   ### Payload Types
 
   The following payload types are supported:
-  - Basic types: `string`, `number`, `boolean`, `unit`
+  - Basic types: `string`, `number`, `boolean`, `nil`
   - List types: `type[]` (e.g., `string[]`, `number[]`)
-  - Tuple types: `(type1, type2, ...)` (e.g., `(string, number)`, `(boolean[], unit)`)
+  - Tuple types: `(type1, type2, ...)` (e.g., `(string, number)`, `(boolean[], nil)`)
 
   ### Example Session Type
 
@@ -85,13 +85,13 @@ defmodule Maty.Parser do
 
   ## Examples
 
-      iex> ST.Parser.parse("&Server:{ Ack(unit).end }")
+      iex> ST.Parser.parse("&Server:{ Ack(nil).end }")
       {:ok, %ST.SIn{
         from: :server,
         branches: [
           %ST.SBranch{
             label: :ack,
-            payload: :unit,
+            payload: :nil,
             continue_as: %ST.SEnd{}
           }
         ]

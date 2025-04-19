@@ -6,8 +6,11 @@ defmodule Maty.Typechecker do
   - Delegates detailed checks to submodules
   """
 
-  alias Maty.Typechecker.Tc, as: TC
-  alias Maty.Typechecker.{Preprocessor, Error}
+  alias Maty.Utils
+  alias Maty.Typechecker.Delta
+  alias Maty.Typechecker.TCV2
+  alias Maty.Typechecker.Error
+  alias Maty.Typechecker.Preprocessor
 
   require Logger
 
@@ -55,6 +58,8 @@ defmodule Maty.Typechecker do
   Called by Hook at `@before_compile`.
   """
   def handle_before_compile(env) do
+    # todo: potentially reverse the type_specs here
+
     if Enum.member?(@debug, :before) do
       show_function_signatures(env.module)
     end
@@ -75,103 +80,172 @@ defmodule Maty.Typechecker do
   Called by Hook at `@after_compile`.
   """
   def handle_after_compile(env, bytecode) do
-    dbgi_map = read_debug_info!(bytecode)
+    all_module_definitions = fetch_module_definitions!(bytecode)
 
     delta_M = Module.get_attribute(env.module, :delta_M)
+    delta_m = Utils.Env.get_map(env.module, :delta_M)
+
     delta_I = Module.get_attribute(env.module, :delta_I)
+    _delta_i = Utils.Env.get_map(env.module, :delta_I)
 
-    module_init_handlers =
-      Module.get_attribute(env.module, :delta_I)
-      |> Enum.map(fn {_, x} -> x.function end)
-      |> MapSet.new()
+    psi = Utils.Env.get_map(env.module, :psi)
 
-    module_handlers =
-      delta_M
-      |> Enum.map(fn {_, x} -> x.function end)
-      |> MapSet.new()
+    module_init_handlers = Delta.key_set(delta_I)
+    module_handlers = Delta.key_set(delta_M)
 
-    all_handlers = MapSet.union(module_handlers, module_init_handlers)
-
-    all_module_definitions =
-      dbgi_map[:definitions]
-      |> Enum.reject(fn x -> Keyword.get(elem(x, 2), :context) == Maty.Actor end)
-
-    invalid_comm_functions =
-      all_module_definitions
-      |> find_invalid_comm_functions(all_handlers)
-      |> MapSet.new()
-
-    errors =
-      for {fn_info, _kind, _meta, fn_clauses} <- all_module_definitions, reduce: [] do
+    _errors =
+      for {func_id, _kind, _meta, func_clauses} <- all_module_definitions, reduce: [] do
         acc ->
           cond do
-            MapSet.member?(module_handlers, fn_info) ->
-              handler =
-                delta_M
-                |> Enum.find_value(fn {handler, map} ->
-                  if map.function == fn_info, do: handler
-                end)
+            MapSet.member?(module_handlers, func_id) ->
+              {handler_name, 4} = func_id
 
-              res = TC.session_typecheck_handler(env.module, handler, fn_clauses)
+              # Logger.info(inspect(func_clauses))
+              # throw(:def_only)
 
-              if Enum.member?(@debug, :log_res) do
-                log_typechecking_results(fn_info, res, label: "session typechecking handler")
+              # share =
+              #   TCV2.tc_expr(
+              #     env.module,
+              #     %{:amount => :number},
+              #     %Maty.ST.SEnd{},
+              #     {{:., [line: 31, column: 27], [:erlang, :/]}, [line: 31, column: 27],
+              #      [{:amount, [version: 0, line: 31, column: 20], nil}, 2]}
+              #   )
+
+              # Logger.info(inspect(share))
+
+              # throw(:naur)
+
+              handler_M = delta_m[handler_name]
+              type_signatures = psi[func_id] |> Enum.reverse()
+
+              # myDEBUG(:init, Utils.to_func(func_id))
+              # Logger.debug("boo: #{inspect(func_clauses)}", ansi_color: :yellow)
+
+              # Logger.info("#{inspect(handler_M)}: #{inspect(type_signatures)}", ansi_color: :light_blue)
+
+              for {clause, type_signature} <- Enum.zip(func_clauses, type_signatures) do
+                # Logger.info(
+                #   "\n#{}
+                #   # \n#{}
+                #   \n#{inspect(handler_M)}
+                #   \n#{}",
+                #   ansi_color: :light_blue
+                # )
+
+                res =
+                  TCV2.check_wf_message_handler_clause(
+                    env.module,
+                    handler_name,
+                    clause,
+                    handler_M.st,
+                    type_signature
+                  )
+
+                # res = clause
+
+                Logger.info("[#{inspect(handler_M.function)}]: #{inspect(res)}",
+                  ansi_color: :light_blue
+                )
+
+                # throw(:oops)
               end
 
-              acc ++ extract_errors(res)
+              # throw(:oops)
 
-            fn_info == {:init_actor, 1} ->
-              res = TC.session_typecheck_init_actor(env.module, fn_info, fn_clauses)
+              # res = TC.session_typecheck_handler(env.module, handler, func_clauses)
 
-              if Enum.member?(@debug, :log_res) do
-                log_typechecking_results(fn_info, res, label: "session typechecking init_actor")
-              end
+              # if Enum.member?(@debug, :log_res) do
+              #   log_typechecking_results(func_id, res, label: "session typechecking handler")
+              # end
 
-              acc ++ extract_errors(res)
+              # acc ++ extract_errors(res)
+              acc
 
-            MapSet.member?(module_init_handlers, fn_info) ->
-              handler_M =
+            func_id == {:on_link, 2} ->
+              # res = TC.session_typecheck_init_actor(env.module, func_id, func_clauses)
+
+              # if Enum.member?(@debug, :log_res) do
+              #   log_typechecking_results(func_id, res, label: "session typechecking on_link")
+              # end
+
+              # acc ++ extract_errors(res)
+              acc
+
+            MapSet.member?(module_init_handlers, func_id) ->
+              _handler_I =
                 delta_I
                 |> Enum.find_value(fn {handler, map} ->
-                  if map.function == fn_info, do: handler
+                  if map.function == func_id, do: handler
                 end)
 
-              res = TC.session_typecheck_init_handler(env.module, handler_M, fn_clauses)
+              # myDEBUG(:init, Utils.to_func(func_id))
+              # Logger.debug("boo: #{inspect(func_clauses)}", ansi_color: :yellow)
+              # hello4 = psi[func_id]
 
-              if Enum.member?(@debug, :log_res) do
-                log_typechecking_results(fn_info, res, label: "session typechecking handler")
-              end
+              # Logger.info("#{inspect(handler_I)}: #{inspect(hello4)}", ansi_color: :light_blue)
 
-              acc ++ extract_errors(res)
+              # todo: typecheck each clause by itself
+              # [
+              #   {_meta, [args_ast, state_var_ast, session_ctx], [],
+              #    {:try, _, [[do: {:__block__, _, [_, _, {:__block__, _, block}]}, catch: _]]}}
+              # ]
+              # for clause <- func_clauses do
+              #   TCV2.check_wf_init_handler_clause(
+              #     env.module,
+              #     handler_label,
+              #     clause,
+              #     # # %{function: {name, arity}, st: session_type}
+              #     delta_i_entry,
+              #     # # List of {[arg_types], return_type} for the function
+              #     psi_entry
+              #   )
+              # end
 
-            MapSet.member?(invalid_comm_functions, fn_info) ->
-              err = Error.non_handler_communication(fn_info)
-              acc ++ [err]
+              # res = TC.session_typecheck_init_handler(env.module, handler_M, func_clauses)
+
+              # if Enum.member?(@debug, :log_res) do
+              #   log_typechecking_results(func_id, res, label: "session typechecking handler")
+              # end
+
+              # acc ++ extract_errors(res)
+              acc
 
             true ->
-              res = TC.typecheck_function(env.module, fn_info, fn_clauses)
+              _well_formed = TCV2.check_wf_function(env.module, func_id, func_clauses)
 
-              if Enum.member?(@debug, :log_res) do
-                log_typechecking_results(fn_info, res, label: "typechecking regular function")
-              end
+              # Logger.debug("[#{Maty.Utils.to_func(func_id)}] WF-Func: #{inspect(well_formed)}")
 
-              acc ++ extract_errors(res)
+              # res = TC.typecheck_function(env.module, func_id, func_clauses)
+
+              # if Enum.member?(@debug, :log_res) do
+              #   log_typechecking_results(func_id, res, label: "typechecking regular function")
+              # end
+
+              # acc ++ extract_errors(res)
+              acc
           end
       end
 
-    if length(errors) != 0 do
-      for err <- errors do
-        Logger.error(err)
-      end
-    else
-      Logger.info("\n[#{env.module}] No communication errors", ansi_color: :light_green)
-    end
+    # if length(errors) != 0 do
+    #   for err <- errors do
+    #     Logger.error(err)
+    #   end
+    # else
+    #   Logger.info("\n[#{env.module}] No communication errors", ansi_color: :light_green)
+    # end
   end
 
-  # Function to read debug information from bytecode.
-  #
-  # Adapted from: https://github.com/gertab/ElixirST by Gerard Tabone
-  # License: GPL-3.0 license
+  def fetch_module_definitions!(bytecode) do
+    read_debug_info!(bytecode)
+    |> Map.fetch!(:definitions)
+    |> Enum.reject(fn x -> Keyword.get(elem(x, 2), :context) == Maty.Actor end)
+  end
+
+  # # Function to read debug information from bytecode.
+  # #
+  # # Adapted from: https://github.com/gertab/ElixirST by Gerard Tabone
+  # # License: GPL-3.0 license
   @spec read_debug_info!(binary()) :: map() | no_return()
   defp read_debug_info!(bytecode) do
     try do
@@ -202,43 +276,32 @@ defmodule Maty.Typechecker do
     end
   end
 
-  defp log_typechecking_results(fn_info, res, label: label) do
-    out = fn x -> "#{label}: #{inspect(fn_info)}\n#{inspect(x)}" end
+  # defp log_typechecking_results(func_id, res, label: label) do
+  #   out = fn x -> "#{label}: #{inspect(func_id)}\n#{inspect(x)}" end
 
-    for clause_res <- res do
-      case clause_res do
-        {:error, error} -> out.(error) |> Logger.error()
-        {:ok, return} -> out.(return) |> Logger.debug()
-      end
-    end
-  end
+  #   for clause_res <- res do
+  #     case clause_res do
+  #       {:error, error} -> out.(error) |> Logger.error()
+  #       {:ok, return} -> out.(return) |> Logger.debug()
+  #     end
+  #   end
+  # end
 
-  defp extract_errors(res) do
-    case res do
-      {:ok, _} ->
-        []
+  # defp extract_errors(res) do
+  #   case res do
+  #     {:ok, _} ->
+  #       []
 
-      {:error, error} ->
-        [error]
+  #     {:error, error} ->
+  #       [error]
 
-      list when is_list(list) ->
-        Enum.flat_map(list, fn
-          {:ok, _} -> []
-          {:error, error} -> [error]
-        end)
-    end
-  end
-
-  defp find_invalid_comm_functions(definitions, handlers) do
-    for {fn_info, _, _, fn_clauses} <- definitions,
-        not MapSet.member?(handlers, fn_info),
-        fn_info != {:init_actor, 1},
-        clause <- fn_clauses,
-        TC.performs_communication?(clause),
-        reduce: [] do
-      acc -> [fn_info | acc]
-    end
-  end
+  #     list when is_list(list) ->
+  #       Enum.flat_map(list, fn
+  #         {:ok, _} -> []
+  #         {:error, error} -> [error]
+  #       end)
+  #   end
+  # end
 
   defp show_function_signatures(module) do
     attr = Module.get_attribute(module, :psi)
@@ -253,4 +316,6 @@ defmodule Maty.Typechecker do
 
     IO.puts(module_header <> "\n" <> display <> "\n")
   end
+
+  def myDEBUG(num, extra \\ ""), do: Logger.debug("[#{num}] #{extra}", ansi_color: :light_blue)
 end

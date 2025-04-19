@@ -16,8 +16,8 @@ defmodule Maty.HandlerExpansionTest do
        quote do
          handler :quote_handler, :seller, {:quote, amount :: number()}, state do
            share_amount = amount / 2
-           MatyDSL.send(:buyer2, {:share, share_amount})
-           MatyDSL.done(state)
+           Maty.DSL.send(:buyer2, {:share, share_amount})
+           Maty.DSL.done(state)
          end
        end,
        quote do
@@ -27,7 +27,7 @@ defmodule Maty.HandlerExpansionTest do
            share_amount = amount / 2
 
            maty_send(session, :buyer2, {:share, share_amount})
-           {:done, :unit, state}
+           {:done, nil, state}
          end
        end}
       # {"Tuple payload",
@@ -37,8 +37,8 @@ defmodule Maty.HandlerExpansionTest do
       #            {:pair, {first :: number(), second :: binary()}},
       #            state do
       #      IO.puts("Received pair: #{first}, #{second}")
-      #      MatyDSL.send(:receiver, {:response, "Processed"})
-      #      MatyDSL.suspend(:next_handler, state)
+      #      Maty.DSL.send(:receiver, {:response, "Processed"})
+      #      Maty.DSL.suspend(:next_handler, state)
       #    end
       #  end},
       # {"N-tuple payload",
@@ -48,28 +48,28 @@ defmodule Maty.HandlerExpansionTest do
       #            {:data, {a :: number(), b :: binary(), c :: boolean()}},
       #            state do
       #      IO.puts("Received data: #{a}, #{b}, #{c}")
-      #      MatyDSL.done(state)
+      #      Maty.DSL.done(state)
       #    end
       #  end},
       # {"List payload",
       #  quote do
       #    handler :list_handler, :sender, {:items, items :: list(binary())}, state do
       #      IO.puts("Received items: #{Enum.join(items, ", ")}")
-      #      MatyDSL.done(state)
+      #      Maty.DSL.done(state)
       #    end
       #  end},
       # {"Atom literal",
       #  quote do
       #    handler :atom_handler, :sender, {:command, :start}, state do
       #      IO.puts("Received start command")
-      #      MatyDSL.done(state)
+      #      Maty.DSL.done(state)
       #    end
       #  end},
       # {"Number literal",
       #  quote do
       #    handler :number_handler, :sender, {:value, 42}, state do
       #      IO.puts("Received fixed value")
-      #      MatyDSL.done(state)
+      #      Maty.DSL.done(state)
       #    end
       #  end}
     ]
