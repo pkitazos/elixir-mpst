@@ -8,15 +8,13 @@ defmodule TwoBuyer.Participants.Buyer2 do
   @st {:date_handler, "&seller:{date(date).end}"}
 
 
-
   @impl true
   @spec on_link(pid(), maty_actor_state()) :: {:ok, maty_actor_state()}
   def on_link(ap_pid, initial_state) do
-
     MatyDSL.register(
       ap_pid,
       @role,
-      [callback: :install, args: []],
+      [callback: :install, args: nil],
       initial_state
     )
   end
