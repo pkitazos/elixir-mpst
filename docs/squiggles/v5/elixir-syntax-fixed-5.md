@@ -379,7 +379,8 @@ $$
 
 ### Potentially Effectful Computations
 
-**(T-Let)**
+
+
 $$
     \frac{
     \begin{array}{c}
@@ -389,10 +390,10 @@ $$
     \end{array}
     }{
        \Psi;\ \Delta;\ \Gamma \mid Q_1 \rhd p = e_1; e_2 : T \lhd Q_3
-    }
+    } \qquad (\text{T-Let})
 $$
 
-**(T-Case)**
+
 $$
     \frac{
       \begin{array}{c}
@@ -406,19 +407,19 @@ $$
       \end{array}
     }{
       \Psi;\ \Delta;\ \Gamma \mid Q_1 \rhd \texttt{case } v \texttt{ do } (p_i \to e_i)_{i \in I} \text{ end} : T \lhd Q_2
-    }
+    } \qquad (\text{T-Case})
 $$
 
-**(T-Get)**
+
 $$
 \frac{
   \Psi;\ \Delta;\ \Gamma \vdash v : \mathsf{ActorState}(A)
 }{
   \Psi;\ \Delta;\ \Gamma \mid Q \rhd \texttt{getState}(v) : A \lhd Q
-}
+} \qquad (\text{T-Get})
 $$
 
-**(T-Set)**
+
 $$
 \frac{
   \begin{array}{c}
@@ -427,13 +428,10 @@ $$
   \end{array}
 }{
   \Psi;\ \Delta;\ \Gamma \mid Q \rhd \texttt{setState}(v_{1}, v_{2}) : \mathsf{ActorState}(A) \lhd Q
-}
+} \qquad (\text{T-Set})
 $$
 
->[!question]
->I totally forgot, but should the `getState` and `setState` functions be defined in the syntax? Or are they special functions just to explain that interacting with the actor state doesn't affect the session?
 
-**(T-Register)**
 $$
     \frac{
       \begin{array}{c}
@@ -443,10 +441,10 @@ $$
       \end{array}
     }{
       \Psi;\ \Delta;\ \Gamma \mid Q \rhd \texttt{maty\_register}(v_{1}, \color{#6d28d9}{\mathsf{q}} \color{#4A4943}, h, v_{2}) : \mathsf{Tuple}[\mathsf{Atom}, \mathsf{ActorState}(B)] \lhd Q
-    }
+    } \qquad (\text{T-Register})
 $$
 
-**(T-Send)**
+
 $$
 \frac{
   \begin{array}{c}
@@ -455,10 +453,10 @@ $$
   \end{array}
 }{
   \Psi;\ \Delta;\ \Gamma \mid \color{#6d28d9}{\mathsf{q}} \color{#4A4943} \oplus \{ l_i(A_i).S_i \}_{i \in I} \rhd \texttt{maty\_send}(\color{#6d28d9}{\mathsf{q}} \color{#4A4943},\ \{l, v\}) : \mathsf{Atom} \lhd S_j
-}
+} \qquad (\text{T-Send})
 $$
 
-**(T-Suspend)**
+
 $$
     \frac{
       \begin{array}{c}
@@ -467,16 +465,16 @@ $$
       \end{array}
     }{
       \Psi;\ \Delta;\ \Gamma \mid Q \rhd \texttt{maty\_suspend}(h, v) : \bot_T \lhd \bot_S
-    }
+    } \qquad (\text{T-Suspend})
 $$
 
-**(T-Done)**
+
 $$
     \frac{
       \Psi;\ \Delta;\ \Gamma \vdash v : \mathsf{ActorState}(A)
     }{
       \Psi;\ \Delta;\ \Gamma \mid Q \rhd \texttt{maty\_done}(v) : \bot_{T} \lhd \bot_{S}
-    }
+    } \qquad (\text{T-Done})
 $$
 
 
@@ -504,7 +502,6 @@ $$
 
 #### Handler Macros
 
-**(WF-MsgHandler)**
 $$
 \frac{
  \begin{array}{l}
@@ -519,11 +516,10 @@ $$
  \end{array}
 }{
    \Delta; \Psi \vdash ( \texttt{handler } h,\ \color{#6d28d9}{\mathsf{q}} \color{#4A4943},\ \{ l, p :: A\},\ x \texttt{ do } e \texttt{ end}) \text{ ok}
-}
+} \qquad (\text{WF-MsgHandler})
 $$
 
 
-**(WF-InitHandler)**
 $$
 \frac{
  \begin{array}{l}
@@ -539,13 +535,12 @@ $$
  \end{array}
 }{
    \Delta; \Psi \vdash ( \texttt{init\_handler } h,\ \{ p_1 :: A_{1}, \dots, p_n :: A_{n}\},\ x \texttt{ do } e \texttt{ end}) \text{ ok}
-}
+} \qquad (\text{WF-InitHandler})
 $$
 
 
 #### Module Definitions
 
-**(WF-Module)**
 $$
 \frac{
   \begin{array}{l}
@@ -560,5 +555,5 @@ $$
   \end{array}
 }{
   \vdash M \text{ ok}
-}
+} \qquad (\text{WF-Module})
 $$
