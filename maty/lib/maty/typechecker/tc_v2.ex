@@ -139,6 +139,7 @@ defmodule Maty.Typechecker.TCV2 do
     with {:v1, {:ok, {v1_type, v1_st}, v1_env}} <-
            {:v1, tc_expr(module, var_env, st_pre, v1_ast)},
          {:v2, {:ok, {v2_type, v2_st}, v2_env}} <- {:v2, tc_expr(module, v1_env, v1_st, v2_ast)} do
+      # potentially type 2-tuples the same way we type n-tuple
       {:ok, {{:tuple, [v1_type, v2_type]}, v2_st}, v2_env}
     else
       {:v1, {:error, error, err_env}} -> {:error, error, err_env}
@@ -273,32 +274,6 @@ defmodule Maty.Typechecker.TCV2 do
            {:rhs, tc_expr(module, lhs_env, lhs_st, rhs_ast)},
          {:op_check, {:ok, result_type}, _} <-
            {:op_check, Helpers.op_type_rel(op, lhs_type, rhs_type), [lhs_type, rhs_type, rhs_env]} do
-      {:op_check, :error,
-       [
-         :atom,
-         :number,
-         %{
-           state:
-             {:map,
-              %{
-                callbacks: {:map, %{ref: {:tuple, [:atom, :function]}}},
-                sessions:
-                  {:map,
-                   %{
-                     ref:
-                       {:map,
-                        %{
-                          id: :ref,
-                          handlers: {:map, %{atom: {:tuple, [:function, :atom]}}},
-                          participants: {:map, %{atom: :pid}},
-                          local_state: :any
-                        }}
-                   }}
-              }},
-           amount: :number
-         }
-       ]}
-
       {:ok, {result_type, rhs_st}, rhs_env}
     else
       {:lhs, {:error, msg, env}} ->
@@ -385,7 +360,7 @@ defmodule Maty.Typechecker.TCV2 do
       {:ok, signatures} when is_list(signatures) and signatures != [] ->
         Enum.reduce_while(
           arg_asts,
-          {:ok, [], st_pre, var_env},
+          {:ok, {[], st_pre}, var_env},
           fn arg_ast, {:ok, {acc_arg_types, current_st}, current_env} ->
             case tc_expr(module, current_env, current_st, arg_ast) do
               {:ok, {actual_type, next_st}, next_env} ->
