@@ -204,6 +204,7 @@ defmodule Maty.DSL.Handlers do
       is_integer(literal) -> quote(do: number())
       is_float(literal) -> quote(do: number())
       is_boolean(literal) -> quote(do: boolean())
+      is_nil(literal) -> quote(do: nil)
       is_atom(literal) -> quote(do: atom())
       true -> quote(do: any())
     end

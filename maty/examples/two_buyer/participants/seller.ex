@@ -14,7 +14,7 @@ defmodule TwoBuyer.Participants.Seller do
     MatyDSL.register(
       ap_pid,
       @role,
-      [callback: :install, args: ap_pid],
+      [callback: :install, args: [ap_pid]],
       initial_state
     )
   end
@@ -25,7 +25,7 @@ defmodule TwoBuyer.Participants.Seller do
       MatyDSL.register(
         ap_pid,
         @role,
-        [callback: :install, args: ap_pid],
+        [callback: :install, args: [ap_pid]],
         state
       )
 

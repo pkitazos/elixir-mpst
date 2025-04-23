@@ -25,6 +25,7 @@ defmodule Maty.Parser.Core do
     |> map({String, :to_atom, []})
 
   # Basic types with their Elixir representations
+  atom_type = string("atom") |> replace(:atom)
   binary_type = string("binary") |> replace(:binary)
   string_type = string("string") |> replace(:binary)
   number_type = string("number") |> replace(:number)
@@ -35,6 +36,7 @@ defmodule Maty.Parser.Core do
   # Basic payload type - matches one of the basic types
   basic_payload_type =
     choice([
+      atom_type,
       binary_type,
       string_type,
       number_type,

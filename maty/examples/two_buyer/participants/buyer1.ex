@@ -8,12 +8,12 @@ defmodule TwoBuyer.Participants.Buyer1 do
 
 
   @impl true
-  @spec on_link({pid(),  nil}, maty_actor_state()) :: {:ok, maty_actor_state()}
+  @spec on_link({pid(),  binary()}, maty_actor_state()) :: {:ok, maty_actor_state()}
   def on_link({ap_pid, title}, initial_state) do
     MatyDSL.register(
       ap_pid,
       @role,
-      [callback: :install, args: title],
+      [callback: :install, args: [title]],
       initial_state
     )
   end

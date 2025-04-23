@@ -83,6 +83,43 @@ defmodule Maty.Typechecker.TCV2 do
     {:ok, {:any, st_pre}, var_env}
   end
 
+  # --- Init Handler reference (Keyword list is technically a List)---
+  # Handles passing a reference to an init_handler when registering
+  def tc_expr(module, var_env, st_pre, [callback: init_handler, args: args_ast] = _ast)
+      when is_list(args_ast) do
+    myDEBUG(202)
+    delta_I = Utils.Env.get_map(module, :delta_I)
+
+    if Map.has_key?(delta_I, init_handler) do
+      {:ok, {{:fun, length(args_ast)}, st_pre}, var_env}
+    else
+      {:error, "Trying to register with invalid init_handler", var_env}
+    end
+  end
+
+  def tc_expr(module, var_env, st_pre, [callback: init_handler, args: args_ast] = _ast)
+      when is_nil(args_ast) do
+    myDEBUG(202)
+    delta_I = Utils.Env.get_map(module, :delta_I)
+
+    if Map.has_key?(delta_I, init_handler) do
+      {:ok, {{:fun, 0}, st_pre}, var_env}
+    else
+      {:error, "Trying to register with invalid init_handler", var_env}
+    end
+  end
+
+  def tc_expr(module, var_env, st_pre, [callback: init_handler] = _ast) do
+    myDEBUG(202)
+    delta_I = Utils.Env.get_map(module, :delta_I)
+
+    if Map.has_key?(delta_I, init_handler) do
+      {:ok, {{:fun, 0}, st_pre}, var_env}
+    else
+      {:error, "Trying to register with invalid init_handler", var_env}
+    end
+  end
+
   # List Construction [v1, v2, ...] (Val-Cons / Val-EmptyList adaptation)
   # Enforces homogeneity. Preserves session state.
   def tc_expr(_module, var_env, st_pre, []) do
@@ -92,6 +129,7 @@ defmodule Maty.Typechecker.TCV2 do
 
   def tc_expr(module, var_env, st_pre, items) when is_list(items) do
     myDEBUG(1)
+
     # Process list elements sequentially
     Enum.reduce_while(
       items,
@@ -344,75 +382,6 @@ defmodule Maty.Typechecker.TCV2 do
     end
   end
 
-  # --- Function Application (T-App) ---
-  # Handles local function calls: f(arg1, arg2, ...)
-  def tc_expr(module, var_env, st_pre, {func_name, meta, arg_asts})
-      when is_atom(func_name) and is_list(arg_asts) and meta != [] and
-             func_name not in [:=, :%, :{}, :|, :<<>>] do
-    myDEBUG(10)
-
-    arity = length(arg_asts)
-    func_id = {func_name, arity}
-
-    psi = Utils.Env.get_map(module, :psi)
-
-    case Map.fetch(psi, func_id) do
-      {:ok, signatures} when is_list(signatures) and signatures != [] ->
-        Enum.reduce_while(
-          arg_asts,
-          {:ok, {[], st_pre}, var_env},
-          fn arg_ast, {:ok, {acc_arg_types, current_st}, current_env} ->
-            case tc_expr(module, current_env, current_st, arg_ast) do
-              {:ok, {actual_type, next_st}, next_env} ->
-                # Accumulate actual types and pass state/env forward
-                {:cont, {:ok, {[actual_type | acc_arg_types], next_st}, next_env}}
-
-              {:error, error, err_env} ->
-                # Halt on first argument error
-                {:halt, {:error, error, err_env}}
-            end
-          end
-        )
-        |> case do
-          {:ok, actual_arg_types_rev, final_st, final_env} ->
-            actual_arg_types = Enum.reverse(actual_arg_types_rev)
-
-            Enum.find(signatures, fn {param_types, _return_type} ->
-              # Check arity and type compatibility for this signature
-              length(actual_arg_types) == length(param_types) and
-                Enum.zip(actual_arg_types, param_types)
-                |> Enum.all?(fn {actual, expected} -> actual == expected end)
-            end)
-            |> case do
-              {_param_types, return_type} ->
-                {:ok, {return_type, final_st}, final_env}
-
-              nil ->
-                error = Error.no_matching_function_clause(meta, func_id, actual_arg_types)
-                {:error, error, final_env}
-            end
-
-          {:error, error, final_env} ->
-            # An error occurred during argument typechecking
-            {:error, error, final_env}
-        end
-
-      # should not happen if specs are added correctly, but we handle defensively
-      {:ok, []} ->
-        # todo: more specific error
-        Logger.error("spec might be broken?")
-        error = Error.function_not_exist(meta, func_id)
-        {:error, error, var_env}
-
-      :error ->
-        # function definition not found in Psi
-        func = Utils.to_func(func_id)
-        Logger.error("can't find function #{func} in Psi")
-        error = Error.function_not_exist(meta, func)
-        {:error, error, var_env}
-    end
-  end
-
   # --- Raw Communication Checks ---
 
   # Disallow raw 'receive'
@@ -490,14 +459,15 @@ defmodule Maty.Typechecker.TCV2 do
 
   # --- Case Expression (T-Case) ---
   # AST: {:case, meta, [scrutinee_ast, [do: clauses_list]]}
+
   def tc_expr(module, var_env, st_pre, {:case, meta, [scrutinee_ast, [do: clauses_list]]}) do
     myDEBUG(19)
 
-    with {:scrutinee, {:ok, {type_A, st_after_scrutinee, env_after_scrutinee}}} <-
+    with {:scrutinee, {:ok, {type_A, st_after_scrutinee}, env_after_scrutinee}} <-
            {:scrutinee, tc_expr(module, var_env, st_pre, scrutinee_ast)},
          :ok <- Helpers.check_st_unchanged(st_pre, st_after_scrutinee, meta) do
       branch_results =
-        Enum.map(clauses_list, fn {:->, _clause_meta, [p_ast, e_ast]} ->
+        Enum.map(clauses_list, fn {:->, _clause_meta, [[p_ast], e_ast]} ->
           case tc_pattern(p_ast, type_A, env_after_scrutinee) do
             {:ok, _bindings, env_for_e} ->
               tc_expr(module, env_for_e, st_pre, e_ast)
@@ -630,70 +600,188 @@ defmodule Maty.Typechecker.TCV2 do
     end
   end
 
-  # --- Maty Register Operation (T-Register) ---
+  # --- Maty Register Operation (T-Register) V2 ---
   def tc_expr(
         module,
         var_env,
         st_pre,
-        {{:., _m1, [{:., _m2, [:Maty, :DSL]}, :register]}, meta,
-         [ap_pid_ast, role_ast, reg_info_ast, state_ast]}
+        {{:., _m1, [Maty.DSL, :register]}, meta, [ap_pid_ast, role_ast, reg_info_ast, state_ast]}
       ) do
     myDEBUG(22)
 
-    with {:ap, {:ok, {:pid, pid_st}, pid_env}} <-
-           {:ap, tc_expr(module, var_env, st_pre, ap_pid_ast)},
-         :ok <- Helpers.check_st_unchanged(st_pre, pid_st, meta),
-         #
-         {:role, {:ok, {:atom, role_st}, role_env}} <-
-           {:role, tc_expr(module, pid_env, pid_st, role_ast)},
-         :ok <- Helpers.check_st_unchanged(pid_st, role_st, meta),
+    with :ok,
+         # is ap_pid_ast a PID?
+         {:ap, {:ok, {:pid, ^st_pre}, _}} <- {:ap, tc_expr(module, var_env, st_pre, ap_pid_ast)},
 
-         #
-         {:reg_info, {:ok, {_reg_info_type, reg_info_st}, reg_info_env}} <-
-           {:reg_info, tc_expr(module, role_env, role_st, reg_info_ast)},
-         :ok <- Helpers.check_st_unchanged(role_st, reg_info_st, meta),
+         # is role_ast a role?
+         {:role, {:ok, {:atom, ^st_pre}, _}} <-
+           {:role, tc_expr(module, var_env, st_pre, role_ast)},
 
-         #
-         {:handler_check, {:ok, args_env}} <-
-           {:handler_check,
-            check_registration_info(module, reg_info_ast, reg_info_env, reg_info_st, meta)},
-         {:state, {:ok, {state_type, state_st}, state_env}} <-
-           {:state, tc_expr(module, args_env, reg_info_st, state_ast)},
-         :ok <- Helpers.check_st_unchanged(reg_info_st, state_st, meta),
-         :ok <- Helpers.check_maty_state_type(state_type, meta) do
-      return_type = {:tuple, [:ok, Type.maty_actor_state()]}
-      {:ok, {return_type, state_st}, state_env}
+         # is init_handler a proper handler?
+         # have they provided the required args?
+         {:handler, {:ok, {{:fun, _arity}, st_pre}, var_env}} <-
+           {:handler, tc_expr(module, var_env, st_pre, reg_info_ast)},
+
+         # is state_ast an ActorState
+         {:state, {:ok, {state_type, ^st_pre}, _}} <-
+           {:state, tc_expr(module, var_env, st_pre, state_ast)},
+         :ok <- Helpers.check_maty_state_type(state_type, meta),
+         return_type = {:tuple, [:ok, Type.maty_actor_state()]} do
+      # all checks passed
+
+      {:ok, {return_type, st_pre}, var_env}
     else
-      {:ap, {:error, msg, env}} ->
-        {:error, msg, env}
+      {:ap, {:error, _msg, _var_env} = error} ->
+        error
 
-      {:ap, {:ok, {other, _, _}, env}} ->
-        {:error, Error.invalid_ap_type(meta, expected: :pid, got: other), env}
+      {:role, {:error, _msg, _var_env} = error} ->
+        error
 
-      {:error, msg} ->
-        {:error, msg, var_env}
+      {:handler, {:error, _msg, _var_env} = error} ->
+        error
 
-      {:role, {:error, msg, env}} ->
-        {:error, msg, env}
-
-      {:role, {:ok, {other, _, _}, env}} ->
-        {:error, Error.role_type_invalid(meta, other), env}
-
-      {:reg_info, {:error, msg, env}} ->
-        {:error, msg, env}
-
-      {:handler_check, {:error, msg, err_env}} ->
-        {:error, msg, err_env}
-
-      {:state, {:error, msg, env}} ->
-        {:error, msg, env}
-
-      {:state, {:ok, {other, _, _}, env}} ->
-        {:error, Error.invalid_maty_state_type(meta, got: other), env}
+      {:state, {:error, _msg, _var_env} = error} ->
+        error
 
       other ->
         {:error, Error.internal_error("Unexpected mismatch in register check: #{inspect(other)}"),
          var_env}
+    end
+  end
+
+  # # --- Maty Register Operation (T-Register) ---
+  # def tc_expr(
+  #       module,
+  #       var_env,
+  #       st_pre,
+  #       {{:., _m1, [Maty.DSL, :register]}, meta, [ap_pid_ast, role_ast, reg_info_ast, state_ast]}
+  #     ) do
+  #   myDEBUG(22)
+  #   Logger.error("still using this one")
+
+  #   with {:ap, {:ok, {:pid, pid_st}, pid_env}} <-
+  #          {:ap, tc_expr(module, var_env, st_pre, ap_pid_ast)},
+  #        :ok <- Helpers.check_st_unchanged(st_pre, pid_st, meta),
+  #        #
+  #        {:role, {:ok, {:atom, role_st}, role_env}} <-
+  #          {:role, tc_expr(module, pid_env, pid_st, role_ast)},
+  #        :ok <- Helpers.check_st_unchanged(pid_st, role_st, meta),
+
+  #        #
+  #        {:reg_info, {:ok, {_reg_info_type, reg_info_st}, reg_info_env}} <-
+  #          {:reg_info, tc_expr(module, role_env, role_st, reg_info_ast)},
+  #        :ok <- Helpers.check_st_unchanged(role_st, reg_info_st, meta),
+
+  #        #
+  #        {:handler_check, {:ok, args_env}} <-
+  #          {:handler_check,
+  #           check_registration_info(module, reg_info_ast, reg_info_env, reg_info_st, meta)},
+  #        {:state, {:ok, {state_type, state_st}, state_env}} <-
+  #          {:state, tc_expr(module, args_env, reg_info_st, state_ast)},
+  #        :ok <- Helpers.check_st_unchanged(reg_info_st, state_st, meta),
+  #        :ok <- Helpers.check_maty_state_type(state_type, meta) do
+  #     return_type = {:tuple, [:ok, Type.maty_actor_state()]}
+  #     {:ok, {return_type, state_st}, state_env}
+  #   else
+  #     {:ap, {:error, msg, env}} ->
+  #       {:error, msg, env}
+
+  #     {:ap, {:ok, {other, _, _}, env}} ->
+  #       {:error, Error.invalid_ap_type(meta, expected: :pid, got: other), env}
+
+  #     {:error, msg} ->
+  #       {:error, msg, var_env}
+
+  #     {:role, {:error, msg, env}} ->
+  #       {:error, msg, env}
+
+  #     {:role, {:ok, {other, _, _}, env}} ->
+  #       {:error, Error.role_type_invalid(meta, other), env}
+
+  #     {:reg_info, {:error, msg, env}} ->
+  #       {:error, msg, env}
+
+  #     {:handler_check, {:error, msg, err_env}} ->
+  #       {:error, msg, err_env}
+
+  #     {:state, {:error, msg, env}} ->
+  #       {:error, msg, env}
+
+  #     {:state, {:ok, {other, _, _}, env}} ->
+  #       {:error, Error.invalid_maty_state_type(meta, got: other), env}
+
+  #     other ->
+  #       {:error, Error.internal_error("Unexpected mismatch in register check: #{inspect(other)}"),
+  #        var_env}
+  #   end
+  # end
+
+  # --- Function Application (T-App) ---
+  # Handles local function calls: f(arg1, arg2, ...)
+  def tc_expr(module, var_env, st_pre, {func_name, meta, arg_asts})
+      when is_atom(func_name) and is_list(arg_asts) and meta != [] and
+             func_name not in [:=, :%, :{}, :|, :<<>>] do
+    myDEBUG(10)
+
+    arity = length(arg_asts)
+    func_id = {func_name, arity}
+
+    psi = Utils.Env.get_map(module, :psi)
+
+    case Map.fetch(psi, func_id) do
+      {:ok, signatures} when is_list(signatures) and signatures != [] ->
+        Enum.reduce_while(
+          arg_asts,
+          {:ok, {[], st_pre}, var_env},
+          fn arg_ast, {:ok, {acc_arg_types, current_st}, current_env} ->
+            case tc_expr(module, current_env, current_st, arg_ast) do
+              {:ok, {actual_type, next_st}, next_env} ->
+                # Accumulate actual types and pass state/env forward
+                {:cont, {:ok, {[actual_type | acc_arg_types], next_st}, next_env}}
+
+              {:error, error, err_env} ->
+                # Halt on first argument error
+                {:halt, {:error, error, err_env}}
+            end
+          end
+        )
+        |> case do
+          {:ok, {actual_arg_types_rev, final_st}, final_env} ->
+            actual_arg_types = Enum.reverse(actual_arg_types_rev)
+
+            Enum.find(signatures, fn {param_types, _return_type} ->
+              # Check arity and type compatibility for this signature
+              length(actual_arg_types) == length(param_types) and
+                Enum.zip(actual_arg_types, param_types)
+                |> Enum.all?(fn {actual, expected} -> actual == expected end)
+            end)
+            |> case do
+              {_param_types, return_type} ->
+                {:ok, {return_type, final_st}, final_env}
+
+              nil ->
+                error = Error.no_matching_function_clause(meta, func_id, actual_arg_types)
+                {:error, error, final_env}
+            end
+
+          {:error, error, final_env} ->
+            # An error occurred during argument typechecking
+            {:error, error, final_env}
+        end
+
+      # should not happen if specs are added correctly, but we handle defensively
+      {:ok, []} ->
+        # todo: more specific error
+        Logger.error("spec might be broken?")
+        error = Error.function_not_exist(meta, func_id)
+        {:error, error, var_env}
+
+      :error ->
+        # function definition not found in Psi
+        func = Utils.to_func(func_id)
+        Logger.error("can't find function #{func} in Psi")
+        error = Error.function_not_exist(meta, func)
+        {:error, error, var_env}
     end
   end
 
@@ -702,6 +790,8 @@ defmodule Maty.Typechecker.TCV2 do
   def tc_expr(_module, var_env, st_pre, {var_name, meta, context})
       when is_atom(var_name) and (is_nil(context) or is_list(context)) do
     myDEBUG(25)
+
+    # Logger.info(inspect(ast), ansi_color: :yellow)
 
     case Map.fetch(var_env, var_name) do
       {:ok, elixir_type} -> {:ok, {elixir_type, st_pre}, var_env}
@@ -828,80 +918,49 @@ defmodule Maty.Typechecker.TCV2 do
       ) do
     with [received_role, message_pattern_ast, state_var_ast, _session_ctx_var_ast] <- args,
          {[declared_role, message_type, _state, _session_ctx], _return_type} <- type_signature,
+
          # get name of state variable
          {state_var, _, _} <- state_var_ast,
+
          # role should already just be an atom
          {:ok, {:atom, ^st_pre}, _} <- tc_expr(module, %{}, st_pre, received_role),
+
          # get shape of message
          # bind whatever from the message payload
          {:ok, _message_bindings, var_env} <- tc_pattern(message_pattern_ast, message_type, %{}),
+
          # create all the necessary bindings (this thing Γ_args, x : ActorState(B))
          # need to also add psi here
          var_env = Map.put(var_env, state_var, Type.maty_actor_state()),
+
          #  var_env = Map.merge(gamma_args_env, psi),
          # check the session type is SIn
          {:st, %ST.SIn{from: expected_role, branches: branches}} <- {:st, st_pre},
+
          # check handler and session type roles align
          {:role, ^expected_role} <- {:role, ^received_role = declared_role},
          {label, _} <- message_pattern_ast,
          {:tuple, [_, payload_type]} <- message_type,
+
          # check there is a matching branch
          # take note of this branch
          {:branch, {:ok, handler_branch}} <-
            {:branch, Helpers.find_matching_branch(branches, {label, payload_type})},
-         # extract only the relevant bits (leave out the try catch)
-         body = extract_body(body_block) do
-      case tc_expr_list(module, var_env, handler_branch.continue_as, body) do
-        {:ok, {:no_return, {:st_bottom}}, _var_env} -> {:ok, handler_branch}
-        {:error, msg, _var_env} -> {:error, msg}
-        other -> {:error, "Unreachable? #{inspect(other)}"}
-      end
 
-      # -------------------------
-      #  {:ok, state_var_name} <- extract_state_var(state_var_ast, clause_meta),
-      #  {:ok, declared_role} <- extract_declared_role(role_ast, clause_meta),
-      #  {:ok, {declared_label, payload_pattern_ast}} <- extract_message_pattern(message_pattern_ast,clause_meta),
-      #  {:session_type_ok, _expected_role, branches} <- check_session_type_is_sin(st_pre,declared_role,handler_label,clause_meta),
-      #  {:branch_found, matched_branch} <- Helpers.find_matching_branch(branches, declared_label, clause_meta),
-      #  %{payload: expected_payload_type_A, continue_as: continuation_state_Sj} = matched_branch,
-      #  {:pattern_ok, _bindings_gamma_prime, env_gamma_prime} <- tc_pattern(payload_pattern_ast, expected_payload_type_A, %{}),
-      #  body_env = Map.put(env_gamma_prime, state_var_name, Type.maty_actor_state()),
-      #  body_asts = extract_body(body_block),
-      #  {:body_ok, {:no_return, {:st_bottom}}, _final_env} <- tc_expr_list(module, body_env, continuation_state_Sj, body_asts)
-      #  return the session type branch we covered
-      # {:ok, {declared_label, declared_role}}
+         # extract only the relevant bits (leave out the try catch)
+         body = extract_body(body_block),
+         {:ok, {:no_return, {:st_bottom}}, _var_env} <-
+           tc_expr_list(module, var_env, handler_branch.continue_as, body) do
+      # all checks passed!
+      {:ok, handler_branch}
     else
       {:error, msg, _env} ->
         {:error, msg}
 
       {:error, msg} ->
-        Logger.error("here1")
         {:error, msg}
 
       {:st, other_st} ->
-        %{
-          function: {:title_handler, 4},
-          st: %Maty.ST.SIn{
-            from: :buyer1,
-            branches: [
-              %Maty.ST.SBranch{
-                label: :title,
-                payload: :binary,
-                continue_as: %Maty.ST.SOut{
-                  to: :buyer1,
-                  branches: [
-                    %Maty.ST.SBranch{
-                      label: :quote,
-                      payload: :number,
-                      continue_as: %Maty.ST.SName{handler: :decision_handler}
-                    }
-                  ]
-                }
-              }
-            ]
-          }
-        }
-
         {:error, "st broken: #{inspect(other_st)}"}
 
       {:role, other_role} ->
@@ -922,7 +981,6 @@ defmodule Maty.Typechecker.TCV2 do
         {:error, error}
 
       other ->
-        Logger.error("here2")
         {:error, Error.internal_error("Unexpected mismatch in handler check: #{inspect(other)}")}
     end
   end
@@ -946,40 +1004,41 @@ defmodule Maty.Typechecker.TCV2 do
           module :: module(),
           handler_label :: atom(),
           handler_ast_clause :: Macro.t(),
-          # %{function: {name, arity}, st: session_type}
-          delta_i_entry :: map(),
-          # List of {[arg_types], return_type} for the function
-          psi_entry :: list()
+          st_pre :: ST.t(),
+          type_signature :: tuple()
         ) ::
-          {:ok, atom()} | {:error, binary()}
+          :ok | {:error, binary()}
   def check_wf_init_handler_clause(
-        _module,
+        module,
         handler_label,
-        {clause_meta, args, _guards, _body_block},
-        _delta_i_entry,
-        _psi_entry
+        {clause_meta, args, _guards, body_block},
+        st_pre,
+        type_signature
       ) do
-    with [_arg_pattern_ast, _state_var_ast, _session_ctx_var_ast] <- args do
-      #  get name of state variable
-      #  bind whatever from the args
-      #  check the session type is NOT SIn (should be SOut or Suspend)
-      #  check there is a matching branch
-      #  take note of this branch
-      #  create all the necessary bindings (this thing Γ_args, x : ActorState(B))
-      #  extract only the relevant bits (leave out the try catch)
-      #  typecheck that shit and make sure we don't get a return value and our return session is st_bottom
-      # ------------------------------
-      #  {:ok, state_var_name} <- extract_state_var(state_var_ast, clause_meta),
-      #  initial_session_state_S <- delta_i_entry.st,
-      #  {:ok, expected_arg_type_A} <- extract_init_handler_arg_type(psi_entry,delta_i_entry.function,handler_label),
-      #  {:pattern_ok, _bindings_gamma_p, env_gamma_p} <- tc_pattern(arg_pattern_ast, expected_arg_type_A, %{}),
-      # Γ = Γₚ, x:ActorState
-      #  body_env = Map.put(env_gamma_p, state_var_name, Type.maty_actor_state()),
-      #  body_asts = extract_body(body_block),
-      #  {:body_ok, {:no_return, {:st_bottom}}, _final_env} <-  tc_expr_list(module, body_env, initial_session_state_S, body_asts)
+    with [arg_pattern_ast, state_var_ast, _session_ctx_var_ast] <- args,
+         {[args_types, _state, _session_ctx], _return_type} <- type_signature,
+         #  get name of state variable
+         {state_var, _, _} <- state_var_ast,
+
+         #  bind whatever from the args
+         {:ok, _message_bindings, var_env} <- tc_pattern(arg_pattern_ast, args_types, %{}),
+
+         #  create all the necessary bindings (this thing Γ_args, x : ActorState(B))
+         var_env = Map.put(var_env, state_var, Type.maty_actor_state()),
+
+         # check the session type is NOT SIn (should be SOut or Suspend)
+         {:st, :ok} <- {:st, check_init_st(st_pre)},
+
+         # extract only the relevant bits (leave out the try catch)
+         body = extract_body(body_block),
+         {:ok, {:no_return, {:st_bottom}}, _var_env} <-
+           tc_expr_list(module, var_env, st_pre, body) do
       # all checks passed!
-      {:ok, handler_label}
+      :ok
     else
+      {:error, msg, _env} ->
+        {:error, msg}
+
       {:error, msg} ->
         {:error, msg}
 
@@ -994,6 +1053,9 @@ defmodule Maty.Typechecker.TCV2 do
 
         {:error, error}
 
+      {:st, {:error, _msg} = error} ->
+        error
+
       other ->
         {:error,
          Error.internal_error("Unexpected mismatch in init handler check: #{inspect(other)}")}
@@ -1001,160 +1063,43 @@ defmodule Maty.Typechecker.TCV2 do
   end
 
   def check_wf_on_link_callback(
-        _module,
-        _func_id,
-        _clause,
-        _delta_i,
-        _psi_entry
+        module,
+        {_clause_meta, args, _guards, body_block},
+        type_signature
       ) do
-    # bind variables from the function signature
-    # create the var env
-    # typecheck the function (calls to register etc.)
-    # make sure there is at least one call to register in this function
-    # make sure the function returns {:ok, some_actor_state}
+    with [arg_pattern_ast, state_var_ast] <- args,
+         {[args_types, _state], _return_type} <- type_signature,
+
+         #  get name of state variable
+         {state_var, _, _} <- state_var_ast,
+
+         # bind variables from the function signature
+         {:ok, _message_bindings, var_env} <- tc_pattern(arg_pattern_ast, args_types, %{}),
+         #  create all the necessary bindings (this thing Γ_args, x : ActorState(B))
+         var_env = Map.put(var_env, state_var, Type.maty_actor_state()),
+
+         # typecheck the function (calls to register etc.)
+         body = extract_body(body_block),
+         {:ok, {return_type, %ST.SEnd{}}, _var_env} <-
+           tc_expr_list(module, var_env, %ST.SEnd{}, body),
+
+         # make sure there is at least one call to register in this function
+         {:register, true} <- {:register, Helpers.contains_register_call?(body)},
+
+         # make sure the function returns {:ok, some_actor_state}
+         true <- return_type == {:tuple, [:ok, Type.maty_actor_state()]} do
+      # all checks pass
+      :ok
+    else
+      {:error, msg, _var_env} -> {:error, msg}
+      other -> {:error, "Something is not looking right: #{inspect(other)}"}
+    end
   end
 
   # -------------- HELPERS sorta --------------------
 
-  defp extract_reg_info_details([{:callback, {handler_name, _, nil}}, {:args, args_ast}], _meta)
-       when is_atom(handler_name) do
-    {:ok, handler_name, args_ast}
-  end
-
-  defp extract_reg_info_details(other_ast, _meta) do
-    {:error, :invalid_structure, other_ast}
-  end
-
-  @spec check_registration_info(
-          module :: module(),
-          reg_info_ast :: ast(),
-          var_env :: var_env(),
-          st_pre :: ST.t(),
-          meta :: keyword()
-        ) :: :ok | {:error, String.t(), var_env()}
-  defp check_registration_info(module, reg_info_ast, var_env, st_pre, meta) do
-    with {:ok, handler_name, args_ast} <- extract_reg_info_details(reg_info_ast, meta),
-         #
-         delta_I <- Utils.Env.get_map(module, :delta_I),
-         {:handler, {:ok, delta_entry}, _} <-
-           {:handler, Map.fetch(delta_I, handler_name), handler_name},
-         func_id = delta_entry.function,
-         #
-         {:ok, {actual_args_type, args_st}, args_env} <-
-           tc_expr(module, var_env, st_pre, args_ast),
-         :ok <- Helpers.check_st_unchanged(st_pre, args_st, meta),
-         #
-         psi <- Utils.Env.get_map(module, :psi),
-         {:func, {:ok, [{[expected_arg_type], _return_type} | _]}, {_, handler_name}} <-
-           {:func, Map.fetch(psi, func_id), {func_id, handler_name}},
-         #
-         {true, _, args_env} <-
-           {Type.is?(actual_args_type, expected_arg_type) or actual_args_type == :any or
-              expected_arg_type == :any, {handler_name, actual_args_type, expected_arg_type},
-            args_env} do
-      {:ok, args_env}
-    else
-      {:error, :invalid_structure, details} ->
-        {:error, Error.invalid_registration_info_structure(meta, details), var_env}
-
-      {:handler, :error, handler_name} when not is_nil(handler_name) ->
-        {:error, Error.register_unknown_handler(meta, handler_name), var_env}
-
-      {:error, msg, err_env} ->
-        {:error, "Error typechecking registration arguments: #{msg}", err_env}
-
-      {:error, msg} ->
-        {:error, msg, var_env}
-
-      {:func, :error, {func_id, handler_name}} when not is_nil(func_id) ->
-        error =
-          Error.internal_error(
-            "Missing or invalid Psi entry for init handler #{handler_name} / #{inspect(func_id)}"
-          )
-
-        {:error, error, var_env}
-
-      {false, {handler_name, actual_args_type, expected_arg_type}, args_env} ->
-        error =
-          Error.register_arg_type_mismatch(meta,
-            handler: handler_name,
-            expected: expected_arg_type,
-            got: actual_args_type
-          )
-
-        {:error, error, args_env}
-
-      other ->
-        {:error,
-         Error.internal_error("Unexpected error in check_registration_info: #{inspect(other)}"),
-         var_env}
-    end
-  end
-
-  # defp extract_init_handler_arg_type(psi_entry, func_id, handler_label) do
-  #   case psi_entry do
-  #     [{[type_A], _return_type}] ->
-  #       {:ok, type_A}
-
-  #     _ ->
-  #       {:error,
-  #        Error.internal_error(
-  #          "Mismatch between Delta_I and Psi structure for init handler #{handler_label} / #{inspect(func_id)}"
-  #        )}
-  #   end
-  # end
-
-  # defp extract_state_var({state_var_name, _, _}, _meta) when is_atom(state_var_name) do
-  #   {:ok, state_var_name}
-  # end
-
-  # defp extract_state_var(state_var_ast, meta) do
-  #   {:error, Error.handler_state_var_not_atom(meta, state_var_ast)}
-  # end
-
-  # defp extract_declared_role(role_ast, meta) do
-  #   declared_role = Helpers.ast_to_literal(role_ast)
-
-  #   if is_atom(declared_role) do
-  #     {:ok, declared_role}
-  #   else
-  #     {:error, Error.handler_role_not_atom(meta, role_ast)}
-  #   end
-  # end
-
-  # defp extract_message_pattern({label, payload}, _meta)
-  #      when is_atom(label) do
-  #   {:ok, {label, payload}}
-  # end
-
-  # defp extract_message_pattern(message_pattern_ast, meta) do
-  #   {:error, Error.handler_msg_pattern_invalid(meta, message_pattern_ast)}
-  # end
-
-  # defp check_session_type_is_sin(
-  #        %ST.SIn{from: expected_role, branches: branches},
-  #        declared_role,
-  #        _handler_label,
-  #        clause_meta
-  #      ) do
-  #   if declared_role == expected_role do
-  #     {:session_type_ok, expected_role, branches}
-  #   else
-  #     error =
-  #       Error.handler_role_mismatch(
-  #         clause_meta,
-  #         expected: expected_role,
-  #         got: declared_role
-  #       )
-
-  #     {:error, error}
-  #   end
-  # end
-
-  # defp check_session_type_is_sin(other_st, _declared_role, handler_label, clause_meta) do
-  #   error = Error.handler_session_type_not_sin(clause_meta, handler_label, got: other_st)
-  #   {:error, error}
-  # end
+  defp check_init_st(%ST.SIn{}), do: {:error, "Session precondition cannot be a receive"}
+  defp check_init_st(_st), do: :ok
 
   defp check_clause_arity(meta, func_id, arity, arg_pattern_asts, spec_args_types) do
     if length(arg_pattern_asts) == length(spec_args_types) do
@@ -1253,6 +1198,7 @@ defmodule Maty.Typechecker.TCV2 do
 
   def tc_expr_list(module, var_env, st_pre, ast_list) do
     # Reduce over expressions, threading state and env. Keep track of the *last* result.
+
     Enum.reduce_while(
       ast_list,
       {:ok, {nil, st_pre}, var_env},
@@ -1262,6 +1208,7 @@ defmodule Maty.Typechecker.TCV2 do
         case tc_expr(module, current_env, current_st, expr_ast) do
           {:ok, last_result, next_env} ->
             # Store the latest successful result and continue
+            # Logger.error("last item in block: #{inspect(last_result)}")
             {:cont, {:ok, last_result, next_env}}
 
           {:error, error, err_env} ->
@@ -1613,6 +1560,6 @@ defmodule Maty.Typechecker.TCV2 do
 
   defp extract_body(expr) when not is_list(expr), do: [expr]
 
-  # def myDEBUG(_num), do: :ok
-  def myDEBUG(num), do: Logger.debug("[#{num}]", ansi_color: :light_green)
+  def myDEBUG(_num), do: :ok
+  # def myDEBUG(num), do: Logger.debug("[#{num}]", ansi_color: :light_green)
 end

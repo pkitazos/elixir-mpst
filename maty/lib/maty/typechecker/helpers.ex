@@ -255,4 +255,16 @@ defmodule Maty.Typechecker.Helpers do
       do: {:ok, {fun, arity}}
 
   def extract_capture_fun_id(_other_ast), do: :error
+
+  @spec contains_register_call?(Macro.t()) :: boolean()
+
+  def contains_register_call?(ast) do
+    {_, found} =
+      Macro.prewalk(ast, false, fn
+        {{:., _, [Maty.DSL, :register]}, _meta, _args} = node, _acc -> {node, true}
+        node, acc -> {node, acc}
+      end)
+
+    found
+  end
 end

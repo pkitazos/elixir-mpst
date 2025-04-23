@@ -66,13 +66,14 @@ defmodule Maty.Typechecker do
 
     spec_errors = Module.get_attribute(env.module, :spec_errors)
 
-    if length(spec_errors) > 0 do
+    if err_count = length(spec_errors) > 0 do
       out =
         for err <- spec_errors, reduce: "" do
           acc -> acc <> "#{inspect(err)}\n"
         end
 
       Logger.error(out)
+      throw({:phase_1, "#{err_count} errors you need to fix"})
     end
   end
 
@@ -86,7 +87,7 @@ defmodule Maty.Typechecker do
     delta_m = Utils.Env.get_map(env.module, :delta_M)
 
     delta_I = Module.get_attribute(env.module, :delta_I)
-    _delta_i = Utils.Env.get_map(env.module, :delta_I)
+    delta_i = Utils.Env.get_map(env.module, :delta_I)
 
     psi = Utils.Env.get_map(env.module, :psi)
 
@@ -100,40 +101,11 @@ defmodule Maty.Typechecker do
             MapSet.member?(module_handlers, func_id) ->
               {handler_name, 4} = func_id
 
-              # Logger.info(inspect(func_clauses))
-              # throw(:def_only)
-
-              # share =
-              #   TCV2.tc_expr(
-              #     env.module,
-              #     %{:amount => :number},
-              #     %Maty.ST.SEnd{},
-              #     {{:., [line: 31, column: 27], [:erlang, :/]}, [line: 31, column: 27],
-              #      [{:amount, [version: 0, line: 31, column: 20], nil}, 2]}
-              #   )
-
-              # Logger.info(inspect(share))
-
-              # throw(:naur)
-
               handler_M = delta_m[handler_name]
               type_signatures = psi[func_id] |> Enum.reverse()
 
-              # myDEBUG(:init, Utils.to_func(func_id))
-              # Logger.debug("boo: #{inspect(func_clauses)}", ansi_color: :yellow)
-
-              # Logger.info("#{inspect(handler_M)}: #{inspect(type_signatures)}", ansi_color: :light_blue)
-
               for {clause, type_signature} <- Enum.zip(func_clauses, type_signatures) do
-                # Logger.info(
-                #   "\n#{}
-                #   # \n#{}
-                #   \n#{inspect(handler_M)}
-                #   \n#{}",
-                #   ansi_color: :light_blue
-                # )
-
-                res =
+                {_status, %Maty.ST.SBranch{}} =
                   TCV2.check_wf_message_handler_clause(
                     env.module,
                     handler_name,
@@ -142,87 +114,77 @@ defmodule Maty.Typechecker do
                     type_signature
                   )
 
-                # res = clause
-
-                Logger.info("[#{inspect(handler_M.function)}]: #{inspect(res)}",
+                Logger.info("[#{env.module}]\n[#{inspect(func_id)}]: :ok",
                   ansi_color: :light_blue
                 )
-
-                # throw(:oops)
               end
 
-              # throw(:oops)
-
-              # res = TC.session_typecheck_handler(env.module, handler, func_clauses)
-
-              # if Enum.member?(@debug, :log_res) do
-              #   log_typechecking_results(func_id, res, label: "session typechecking handler")
-              # end
-
-              # acc ++ extract_errors(res)
               acc
 
             func_id == {:on_link, 2} ->
-              # res = TC.session_typecheck_init_actor(env.module, func_id, func_clauses)
+              type_signatures = psi[func_id] |> Enum.reverse()
 
-              # if Enum.member?(@debug, :log_res) do
-              #   log_typechecking_results(func_id, res, label: "session typechecking on_link")
-              # end
+              with {:clause, [clause]} <- {:clause, func_clauses},
+                   {:signature, [type_signature]} <- {:signature, type_signatures} do
+                res =
+                  TCV2.check_wf_on_link_callback(
+                    env.module,
+                    clause,
+                    type_signature
+                  )
 
-              # acc ++ extract_errors(res)
+                Logger.info("[#{env.module}]\n[#{inspect(func_id)}]: #{inspect(res)}",
+                  ansi_color: :light_blue
+                )
+              else
+                {:clause, _other} -> "Incompatible number of clauses defined for on_link/2"
+                {:signature, _other} -> "Incompatible number of @spec's defined for on_link/2"
+              end
+
               acc
 
             MapSet.member?(module_init_handlers, func_id) ->
-              _handler_I =
-                delta_I
-                |> Enum.find_value(fn {handler, map} ->
-                  if map.function == func_id, do: handler
-                end)
+              {handler_name, 3} = func_id
 
-              # myDEBUG(:init, Utils.to_func(func_id))
-              # Logger.debug("boo: #{inspect(func_clauses)}", ansi_color: :yellow)
-              # hello4 = psi[func_id]
+              handler_I = delta_i[handler_name]
+              type_signatures = psi[func_id] |> Enum.reverse()
 
-              # Logger.info("#{inspect(handler_I)}: #{inspect(hello4)}", ansi_color: :light_blue)
+              for {clause, type_signature} <- Enum.zip(func_clauses, type_signatures) do
+                res =
+                  TCV2.check_wf_init_handler_clause(
+                    env.module,
+                    handler_name,
+                    clause,
+                    handler_I.st,
+                    type_signature
+                  )
 
-              # todo: typecheck each clause by itself
-              # [
-              #   {_meta, [args_ast, state_var_ast, session_ctx], [],
-              #    {:try, _, [[do: {:__block__, _, [_, _, {:__block__, _, block}]}, catch: _]]}}
-              # ]
-              # for clause <- func_clauses do
-              #   TCV2.check_wf_init_handler_clause(
-              #     env.module,
-              #     handler_label,
-              #     clause,
-              #     # # %{function: {name, arity}, st: session_type}
-              #     delta_i_entry,
-              #     # # List of {[arg_types], return_type} for the function
-              #     psi_entry
-              #   )
-              # end
+                Logger.info("[#{env.module}]\n[#{inspect(handler_I.function)}]: #{inspect(res)}",
+                  ansi_color: :light_blue
+                )
+              end
 
-              # res = TC.session_typecheck_init_handler(env.module, handler_M, func_clauses)
-
-              # if Enum.member?(@debug, :log_res) do
-              #   log_typechecking_results(func_id, res, label: "session typechecking handler")
-              # end
-
-              # acc ++ extract_errors(res)
               acc
 
             true ->
-              _well_formed = TCV2.check_wf_function(env.module, func_id, func_clauses)
+              well_formed = TCV2.check_wf_function(env.module, func_id, func_clauses)
 
-              # Logger.debug("[#{Maty.Utils.to_func(func_id)}] WF-Func: #{inspect(well_formed)}")
+              res =
+                Enum.all?(well_formed, fn
+                  {:ok, _} -> true
+                  _ -> false
+                end)
+                |> if do
+                  :ok
+                else
+                  well_formed
+                end
 
-              # res = TC.typecheck_function(env.module, func_id, func_clauses)
+              Logger.debug(
+                "[#{env.module}]\n[#{inspect(func_id)}]: #{inspect(res)}",
+                ansi_color: :light_blue
+              )
 
-              # if Enum.member?(@debug, :log_res) do
-              #   log_typechecking_results(func_id, res, label: "typechecking regular function")
-              # end
-
-              # acc ++ extract_errors(res)
               acc
           end
       end
