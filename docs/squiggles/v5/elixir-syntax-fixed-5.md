@@ -315,25 +315,23 @@ $$
 ### Pure Computations
 
 
-**(T-Pure)**
+
 $$
 \frac{
     \Psi;\ \Delta;\ \Gamma \vdash v : A
 }{
     \Psi;\ \Delta;\ \Gamma \mid Q \rhd v: A \lhd Q
-}
+}  \quad (\text{T-Pure})
 $$
 
-**(T-Not)**
 $$
     \frac{
       \Psi;\ \Delta;\ \Gamma \vdash v : \mathsf{Bool}
     }{
       \Psi;\ \Delta;\ \Gamma \mid Q \rhd (\texttt{not } v) : \mathsf{Bool} \lhd Q
-    }
+    }  \quad (\text{T-Not})
 $$
 
-**(T-Op)**
 $$
     \frac{
       \begin{array}{c}
@@ -343,7 +341,7 @@ $$
       \end{array}
     }{
       \Psi;\ \Delta;\ \Gamma \mid Q \rhd v_1 \diamond v_2 : C \lhd Q
-    }
+    } \quad (\text{T-Op})
 $$
 
 $$
@@ -361,7 +359,7 @@ $$
 \end{gathered}
 $$
 
-**(T-App)**
+
 $$
     \frac{
       \begin{array}{c}
@@ -372,13 +370,6 @@ $$
       \Psi;\ \Delta;\ \Gamma \mid Q \rhd f(v_{1}, \dots,v_{n}) : B \lhd Q
     } \quad (\text{T-App})
 $$
-
-
----
-
-
-### Potentially Effectful Computations
-
 
 
 $$
@@ -506,7 +497,7 @@ $$
 \frac{
  \begin{array}{l}
    h \mapsto S \in \Delta_M \\
-   S = \text{\& } q:\{l_i(A_i).S_i\}_{i \in I} \\
+   S = \text{\& } \color{#6d28d9}{\mathsf{q}} \color{#4A4943}:\{l_i(A_i).S_i\}_{i \in I} \\
    (l = l_j \land A = A_j) \in \{l_i(A_i).S_i\}_{i \in I} \quad (\text{for some } j \in I) \\ \\
 
    \vdash p : A \implies \Gamma' \\

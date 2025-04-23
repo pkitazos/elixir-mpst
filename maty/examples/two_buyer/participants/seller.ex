@@ -36,13 +36,14 @@ defmodule TwoBuyer.Participants.Seller do
   handler :title_handler, :buyer1, {:title, title :: binary()}, state do
     amount = lookup_price(title)
 
-    MatyDSL.send(:buyer2, {:quote, amount})
+    MatyDSL.send(:buyer1, {:quote, amount})
     MatyDSL.suspend(:decision_handler, state)
   end
 
 
   handler :decision_handler, :buyer2, {:address, addr :: binary()}, state do
     date = shipping_date(addr)
+
     MatyDSL.send(:buyer2, {:date, date})
     MatyDSL.done(state)
   end
