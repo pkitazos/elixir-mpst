@@ -123,6 +123,7 @@ defmodule Maty.Typechecker.TypeSpecParser do
       |> Map.merge(Maty.Types.map())
       |> Map.put(:no_return, :no_return)
       |> Map.put(:any, :any)
+      |> Map.put(:map, :map)
 
     parse(type_ast, type_env)
   end

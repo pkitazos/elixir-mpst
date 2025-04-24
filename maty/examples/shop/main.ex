@@ -9,7 +9,7 @@ defmodule Shop.Main do
 
     Shop.start_link({customer_ap, staff_ap, initial_stock})
 
-    Staff.start_link(staff_ap)
+    # Staff.start_link(staff_ap)
     Customer.start_link(customer_ap)
     PaymentProcessor.start_link(customer_ap)
   end
