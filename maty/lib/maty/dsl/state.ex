@@ -13,7 +13,7 @@ defmodule Maty.DSL.State do
 
   defmacro set(state, local_state) do
     quote do
-      State.set(unquote(state), unquote(local_state), var!(session_ctx))
+      Maty.DSL.State.set(unquote(state), unquote(local_state), var!(session_ctx))
     end
   end
 
@@ -24,7 +24,7 @@ defmodule Maty.DSL.State do
 
   defmacro get(state) do
     quote do
-      State.get(unquote(state), var!(session_ctx))
+      Maty.DSL.State.get(unquote(state), var!(session_ctx))
     end
   end
 end

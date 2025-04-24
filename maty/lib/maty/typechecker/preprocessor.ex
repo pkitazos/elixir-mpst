@@ -161,6 +161,11 @@ defmodule Maty.Typechecker.TypeSpecParser do
     parse_tuple_elements(elements_list, type_env)
   end
 
+  # Case 4: List {:list, _, [elements...]}
+  defp do_parse({:list, _meta, elements_list}, type_env) when is_list(elements_list) do
+    parse_list_elements(elements_list, type_env)
+  end
+
   # Catch-all for unsupported AST formats
   defp do_parse(other_ast, _type_env) do
     {:error, Error.unsupported_type_constructor(other_ast)}
@@ -193,6 +198,42 @@ defmodule Maty.Typechecker.TypeSpecParser do
 
       _ ->
         {:error, Error.internal_error("parsing tuple elements")}
+    end
+  end
+
+  defp parse_list_elements(element_asts, type_env) do
+    parsed_elements =
+      Enum.reduce_while(
+        element_asts,
+        [],
+        fn elem_ast, acc ->
+          case do_parse(elem_ast, type_env) do
+            {:ok, parsed_type} -> {:cont, [{:ok, parsed_type} | acc]}
+            {:error, _} = err -> {:halt, err}
+          end
+        end
+      )
+
+    case parsed_elements do
+      {:error, _} = first_error ->
+        first_error
+
+      list_of_oks when is_list(list_of_oks) ->
+        all_types =
+          list_of_oks
+          |> Enum.reverse()
+          |> Enum.map(fn {:ok, type} -> type end)
+          |> MapSet.new()
+
+        if MapSet.size(all_types) == 1 do
+          type = all_types |> MapSet.to_list() |> List.first()
+          {:ok, {:list, type}}
+        else
+          {:error, "Heterogenous list supplied"}
+        end
+
+      _ ->
+        {:error, Error.internal_error("parsing list elements")}
     end
   end
 end

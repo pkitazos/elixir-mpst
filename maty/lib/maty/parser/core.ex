@@ -185,11 +185,11 @@ defmodule Maty.Parser.Core do
   - `type`: The element type of the list
 
   ## Returns
-  - A tuple of the form `{:list, [type]}`
+  - A tuple of the form `{:list, type}`
   """
-  @spec wrap_list_type(atom()) :: {:list, [atom()]}
+  @spec wrap_list_type(atom()) :: {:list, atom()}
   def wrap_list_type(type) do
-    {:list, [type]}
+    {:list, type}
   end
 
   @doc """

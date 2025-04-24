@@ -7,6 +7,8 @@ defmodule Maty.DSL do
       import Maty.DSL.Handlers, only: [handler: 5, init_handler: 4]
       require Maty.DSL
       alias Maty.DSL, as: MatyDSL
+      require Maty.DSL.State
+      alias Maty.DSL.State
     end
   end
 

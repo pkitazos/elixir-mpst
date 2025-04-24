@@ -66,7 +66,7 @@ defmodule Maty.Typechecker do
 
     spec_errors = Module.get_attribute(env.module, :spec_errors)
 
-    if err_count = length(spec_errors) > 0 do
+    if (err_count = length(spec_errors)) > 0 do
       out =
         for err <- spec_errors, reduce: "" do
           acc -> acc <> "#{inspect(err)}\n"
@@ -105,7 +105,7 @@ defmodule Maty.Typechecker do
               type_signatures = psi[func_id] |> Enum.reverse()
 
               for {clause, type_signature} <- Enum.zip(func_clauses, type_signatures) do
-                {_status, %Maty.ST.SBranch{}} =
+                res =
                   TCV2.check_wf_message_handler_clause(
                     env.module,
                     handler_name,
@@ -114,9 +114,15 @@ defmodule Maty.Typechecker do
                     type_signature
                   )
 
-                Logger.info("[#{env.module}]\n[#{inspect(func_id)}]: :ok",
-                  ansi_color: :light_blue
-                )
+                case res do
+                  {_status, %Maty.ST.SBranch{}} ->
+                    Logger.info("[#{env.module}]\n[#{inspect(func_id)}]: :ok",
+                      ansi_color: :light_blue
+                    )
+
+                  {:error, msg} ->
+                    Logger.error("[#{env.module}]\n[#{inspect(func_id)}]: #{msg}")
+                end
               end
 
               acc

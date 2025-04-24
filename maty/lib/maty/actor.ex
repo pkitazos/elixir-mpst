@@ -9,6 +9,8 @@ defmodule Maty.Actor do
     quote do
       use Maty.Hook
       use Maty.DSL
+      require Maty.DSL
+      require Maty.DSL.State
       @behaviour Maty.Actor
 
       @type actor_state :: Types.maty_actor_state()

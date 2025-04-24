@@ -37,6 +37,24 @@ defmodule Maty.Typechecker.TCV2 do
     {:ok, {:boolean, st_pre}, var_env}
   end
 
+  def tc_expr(
+        _module,
+        var_env,
+        st_pre,
+        {:when, _,
+         [
+           {:x, _, Kernel},
+           {{:., _, [:erlang, :orelse]}, _,
+            [
+              {{:., _, [:erlang, :"=:="]}, _, [{:x, _, Kernel}, false]},
+              {{:., _, [:erlang, :"=:="]}, _, [{:x, _, Kernel}, nil]}
+            ]}
+         ]}
+      ) do
+    myDEBUG(00)
+    {:ok, {:boolean, st_pre}, var_env}
+  end
+
   def tc_expr(_module, var_env, st_pre, nil) do
     myDEBUG(0)
     {:ok, {nil, st_pre}, var_env}
@@ -531,9 +549,10 @@ defmodule Maty.Typechecker.TCV2 do
                {:payload, tc_expr(module, recipient_env, recipient_st, payload_expr_ast)},
 
              # 5. Find matching branch for the label
-             {:branch, {:ok, matched_branch}} <-
+             {:branch, {:ok, matched_branch}, _branches, _attempted_match} <-
                {:branch,
-                Helpers.find_matching_branch(branches, {literal_label, actual_payload_type})},
+                Helpers.find_matching_branch(branches, {literal_label, actual_payload_type}),
+                branches, {literal_label, actual_payload_type}},
              %{payload: expected_payload_type, continue_as: st_Sj} = matched_branch,
 
              # Ensure payload check pure
@@ -545,15 +564,70 @@ defmodule Maty.Typechecker.TCV2 do
           # Use env after payload check
           {:ok, {:atom, st_Sj}, payload_env}
         else
-          {:error, msg, env} -> {:error, msg, env}
-          {:error, msg} -> {:error, msg, var_env}
-          {:branch, :error} -> {:error, ""}
-          {label, e} when label in [:recipient, :message, :branch, :payload] -> e
+          {:error, msg, env} ->
+            {:error, msg, env}
+
+          {:error, msg} ->
+            {:error, msg, var_env}
+
+          {:branch, :error, branches, attempted_match} ->
+            Logger.error(
+              "\nAttempted match: #{inspect(attempted_match)}\n\nAvailable Branches:\n#{inspect(branches)}"
+            )
+
+            {:error, "No matching branch found", var_env}
+
+          {label, e} when label in [:recipient, :message, :branch, :payload] ->
+            e
         end
 
       other_state ->
         error = Error.send_invalid_state(meta, expected: "SOut", got: other_state)
         {:error, error, var_env}
+    end
+  end
+
+  # --- Maty setState (T-Set) ---
+  def tc_expr(
+        module,
+        var_env,
+        st_pre,
+        {{:., meta, [Maty.DSL.State, :set]}, _, [state_ast, _new_state, _session_ctx]}
+      ) do
+    myDEBUG(221)
+
+    with :ok,
+         # check that state_ast is state var
+         {state_var, _, _} <- state_ast,
+         {:v, {:ok, {state_type, ^st_pre}, var_env}} <-
+           {:v, tc_expr(module, var_env, st_pre, state_ast)},
+         :ok <- Helpers.check_maty_state_type(state_type, meta),
+         var_env = Map.put(var_env, state_var, Type.maty_actor_state()) do
+      {:ok, {Type.maty_actor_state(), st_pre}, var_env}
+    else
+      _other -> {:error, "set state operation is not well structure"}
+    end
+  end
+
+  # --- Maty getState (T-Get) ---
+  def tc_expr(
+        module,
+        var_env,
+        st_pre,
+        {{:., meta, [Maty.DSL.State, :get]}, _, [state_ast, _session_ctx]}
+      ) do
+    myDEBUG(222)
+
+    with :ok,
+         # check that state_ast is state var
+         {state_var, _, _} <- state_ast,
+         {:v, {:ok, {state_type, ^st_pre}, var_env}} <-
+           {:v, tc_expr(module, var_env, st_pre, state_ast)},
+         :ok <- Helpers.check_maty_state_type(state_type, meta),
+         var_env = Map.put(var_env, state_var, Type.maty_actor_state()) do
+      {:ok, {:map, st_pre}, var_env}
+    else
+      _other -> {:error, "get state operation is not well structure"}
     end
   end
 
@@ -649,76 +723,9 @@ defmodule Maty.Typechecker.TCV2 do
     end
   end
 
-  # # --- Maty Register Operation (T-Register) ---
-  # def tc_expr(
-  #       module,
-  #       var_env,
-  #       st_pre,
-  #       {{:., _m1, [Maty.DSL, :register]}, meta, [ap_pid_ast, role_ast, reg_info_ast, state_ast]}
-  #     ) do
-  #   myDEBUG(22)
-  #   Logger.error("still using this one")
-
-  #   with {:ap, {:ok, {:pid, pid_st}, pid_env}} <-
-  #          {:ap, tc_expr(module, var_env, st_pre, ap_pid_ast)},
-  #        :ok <- Helpers.check_st_unchanged(st_pre, pid_st, meta),
-  #        #
-  #        {:role, {:ok, {:atom, role_st}, role_env}} <-
-  #          {:role, tc_expr(module, pid_env, pid_st, role_ast)},
-  #        :ok <- Helpers.check_st_unchanged(pid_st, role_st, meta),
-
-  #        #
-  #        {:reg_info, {:ok, {_reg_info_type, reg_info_st}, reg_info_env}} <-
-  #          {:reg_info, tc_expr(module, role_env, role_st, reg_info_ast)},
-  #        :ok <- Helpers.check_st_unchanged(role_st, reg_info_st, meta),
-
-  #        #
-  #        {:handler_check, {:ok, args_env}} <-
-  #          {:handler_check,
-  #           check_registration_info(module, reg_info_ast, reg_info_env, reg_info_st, meta)},
-  #        {:state, {:ok, {state_type, state_st}, state_env}} <-
-  #          {:state, tc_expr(module, args_env, reg_info_st, state_ast)},
-  #        :ok <- Helpers.check_st_unchanged(reg_info_st, state_st, meta),
-  #        :ok <- Helpers.check_maty_state_type(state_type, meta) do
-  #     return_type = {:tuple, [:ok, Type.maty_actor_state()]}
-  #     {:ok, {return_type, state_st}, state_env}
-  #   else
-  #     {:ap, {:error, msg, env}} ->
-  #       {:error, msg, env}
-
-  #     {:ap, {:ok, {other, _, _}, env}} ->
-  #       {:error, Error.invalid_ap_type(meta, expected: :pid, got: other), env}
-
-  #     {:error, msg} ->
-  #       {:error, msg, var_env}
-
-  #     {:role, {:error, msg, env}} ->
-  #       {:error, msg, env}
-
-  #     {:role, {:ok, {other, _, _}, env}} ->
-  #       {:error, Error.role_type_invalid(meta, other), env}
-
-  #     {:reg_info, {:error, msg, env}} ->
-  #       {:error, msg, env}
-
-  #     {:handler_check, {:error, msg, err_env}} ->
-  #       {:error, msg, err_env}
-
-  #     {:state, {:error, msg, env}} ->
-  #       {:error, msg, env}
-
-  #     {:state, {:ok, {other, _, _}, env}} ->
-  #       {:error, Error.invalid_maty_state_type(meta, got: other), env}
-
-  #     other ->
-  #       {:error, Error.internal_error("Unexpected mismatch in register check: #{inspect(other)}"),
-  #        var_env}
-  #   end
-  # end
-
   # --- Function Application (T-App) ---
   # Handles local function calls: f(arg1, arg2, ...)
-  def tc_expr(module, var_env, st_pre, {func_name, meta, arg_asts})
+  def tc_expr(module, var_env, st_pre, {func_name, meta, arg_asts} = ast)
       when is_atom(func_name) and is_list(arg_asts) and meta != [] and
              func_name not in [:=, :%, :{}, :|, :<<>>] do
     myDEBUG(10)
@@ -760,6 +767,7 @@ defmodule Maty.Typechecker.TCV2 do
                 {:ok, {return_type, final_st}, final_env}
 
               nil ->
+                Logger.error(inspect(ast))
                 error = Error.no_matching_function_clause(meta, func_id, actual_arg_types)
                 {:error, error, final_env}
             end
@@ -944,8 +952,9 @@ defmodule Maty.Typechecker.TCV2 do
 
          # check there is a matching branch
          # take note of this branch
-         {:branch, {:ok, handler_branch}} <-
-           {:branch, Helpers.find_matching_branch(branches, {label, payload_type})},
+         {:branch, {:ok, handler_branch}, _branches, _attempted_match} <-
+           {:branch, Helpers.find_matching_branch(branches, {label, payload_type}), branches,
+            {label, payload_type}},
 
          # extract only the relevant bits (leave out the try catch)
          body = extract_body(body_block),
@@ -966,7 +975,11 @@ defmodule Maty.Typechecker.TCV2 do
       {:role, other_role} ->
         {:error, "role broken: #{inspect(other_role)}"}
 
-      {:branch, :error} ->
+      {:branch, :error, branches, attempted_match} ->
+        Logger.error(
+          "\nAttempted match: #{inspect(attempted_match)}\n\nAvailable Branches:\n#{inspect(branches)}"
+        )
+
         {:error, "branch broken"}
 
       {:body_ok, {final_type, final_state}, _env} ->
@@ -1242,6 +1255,24 @@ defmodule Maty.Typechecker.TCV2 do
   # Pat-Wild: Pattern is '_'
   def tc_pattern(:_, _expected_type, var_env) do
     myDEBUG(301)
+    {:ok, %{}, var_env}
+  end
+
+  def tc_pattern(
+        {:when, _,
+         [
+           {:x, _, Kernel},
+           {{:., _, [:erlang, :orelse]}, _,
+            [
+              {{:., _, [:erlang, :"=:="]}, _, [{:x, _, Kernel}, false]},
+              {{:., _, [:erlang, :"=:="]}, _, [{:x, _, Kernel}, nil]}
+            ]}
+         ]},
+        _expected_type,
+        var_env
+      ) do
+    myDEBUG(320)
+
     {:ok, %{}, var_env}
   end
 
