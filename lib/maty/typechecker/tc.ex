@@ -1,4 +1,4 @@
-defmodule Maty.Typechecker.TCV2 do
+defmodule Maty.Typechecker.TC do
   require Logger
 
   alias Maty.{ST, Utils}
@@ -33,7 +33,7 @@ defmodule Maty.Typechecker.TCV2 do
   # Base Literals (Val-BaseLit adaptation)
   # These are pure values; they preserve the current session state.
   def tc_expr(_module, var_env, st_pre, value) when is_boolean(value) do
-    myDEBUG(0)
+    stack_trace(0)
     {:ok, {:boolean, st_pre}, var_env}
   end
 
@@ -51,53 +51,53 @@ defmodule Maty.Typechecker.TCV2 do
             ]}
          ]}
       ) do
-    myDEBUG(00)
+    stack_trace(00)
     {:ok, {:boolean, st_pre}, var_env}
   end
 
   def tc_expr(_module, var_env, st_pre, nil) do
-    myDEBUG(0)
+    stack_trace(0)
     {:ok, {nil, st_pre}, var_env}
   end
 
   def tc_expr(_module, var_env, st_pre, value) when is_binary(value) do
-    myDEBUG(0)
+    stack_trace(0)
     {:ok, {:binary, st_pre}, var_env}
   end
 
   def tc_expr(_module, var_env, st_pre, value) when is_number(value) do
-    myDEBUG(0)
+    stack_trace(0)
     {:ok, {:number, st_pre}, var_env}
   end
 
   def tc_expr(_module, var_env, st_pre, value) when is_pid(value) do
-    myDEBUG(0)
+    stack_trace(0)
     {:ok, {:pid, st_pre}, var_env}
   end
 
   def tc_expr(_module, var_env, st_pre, value) when is_reference(value) do
-    myDEBUG(0)
+    stack_trace(0)
     {:ok, {:ref, st_pre}, var_env}
   end
 
   # Date Literal check (example, assuming Date struct exists)
   def tc_expr(_module, var_env, st_pre, {:%, _, [Date, {:%{}, _, _}]}) do
-    myDEBUG(0)
+    stack_trace(0)
     {:ok, {:date, st_pre}, var_env}
   end
 
   def tc_expr(_module, var_env, st_pre, {{:., _, [{:__aliases__, _, [:Date]}, :t]}, _, []}) do
-    myDEBUG(0)
+    stack_trace(0)
     {:ok, {:date, st_pre}, var_env}
   end
 
   def tc_expr(_module, var_env, st_pre, {:no_return, _meta, []}) do
-    myDEBUG(0)
+    stack_trace(0)
     {:ok, {:no_return, st_pre}, var_env}
   end
 
   def tc_expr(_module, var_env, st_pre, {:any, _meta, []}) do
-    myDEBUG(0)
+    stack_trace(0)
     {:ok, {:any, st_pre}, var_env}
   end
 
@@ -105,7 +105,7 @@ defmodule Maty.Typechecker.TCV2 do
   # Handles passing a reference to an init_handler when registering
   def tc_expr(module, var_env, st_pre, [callback: init_handler, args: args_ast] = _ast)
       when is_list(args_ast) do
-    myDEBUG(202)
+    stack_trace(202)
     delta_I = Utils.Env.get_map(module, :delta_I)
 
     if Map.has_key?(delta_I, init_handler) do
@@ -117,7 +117,7 @@ defmodule Maty.Typechecker.TCV2 do
 
   def tc_expr(module, var_env, st_pre, [callback: init_handler, args: args_ast] = _ast)
       when is_nil(args_ast) do
-    myDEBUG(202)
+    stack_trace(202)
     delta_I = Utils.Env.get_map(module, :delta_I)
 
     if Map.has_key?(delta_I, init_handler) do
@@ -128,7 +128,7 @@ defmodule Maty.Typechecker.TCV2 do
   end
 
   def tc_expr(module, var_env, st_pre, [callback: init_handler] = _ast) do
-    myDEBUG(202)
+    stack_trace(202)
     delta_I = Utils.Env.get_map(module, :delta_I)
 
     if Map.has_key?(delta_I, init_handler) do
@@ -141,12 +141,12 @@ defmodule Maty.Typechecker.TCV2 do
   # List Construction [v1, v2, ...] (Val-Cons / Val-EmptyList adaptation)
   # Enforces homogeneity. Preserves session state.
   def tc_expr(_module, var_env, st_pre, []) do
-    myDEBUG(1)
+    stack_trace(1)
     {:ok, {{:list, :any}, st_pre}, var_env}
   end
 
   def tc_expr(module, var_env, st_pre, items) when is_list(items) do
-    myDEBUG(1)
+    stack_trace(1)
 
     # Process list elements sequentially
     Enum.reduce_while(
@@ -182,7 +182,7 @@ defmodule Maty.Typechecker.TCV2 do
   # Empty Tuple (Val-EmptyTuple adaptation)
   # Preserves session state.
   def tc_expr(_module, var_env, st_pre, {:{}, _, []}) do
-    myDEBUG(2)
+    stack_trace(2)
     # Formal: Tuple[]
     {:ok, {{:tuple, []}, st_pre}, var_env}
   end
@@ -190,7 +190,7 @@ defmodule Maty.Typechecker.TCV2 do
   # --- 2-Tuple Value Construction ---
   # Handles literal 2-tuples {v1, v2} explicitly, distinct from n-tuples {:{}, _, [...]} in the AST
   def tc_expr(module, var_env, st_pre, {v1_ast, v2_ast}) do
-    myDEBUG(2)
+    stack_trace(2)
 
     with {:v1, {:ok, {v1_type, v1_st}, v1_env}} <-
            {:v1, tc_expr(module, var_env, st_pre, v1_ast)},
@@ -206,7 +206,7 @@ defmodule Maty.Typechecker.TCV2 do
   # n-Tuple Construction {v1, v2, ...} (Val-Tuple adaptation)
   # Preserves session state.
   def tc_expr(module, var_env, st_pre, {:{}, _, items}) when is_list(items) do
-    myDEBUG(2)
+    stack_trace(2)
     # Process tuple elements sequentially, threading env and state
     Enum.reduce_while(
       items,
@@ -234,13 +234,13 @@ defmodule Maty.Typechecker.TCV2 do
   # Map Construction %{k1 => v1, ...} (Val-Map / Val-EmptyMap adaptation)
   # Allows heterogeneous value types, deviates slightly from our formalisation
   def tc_expr(_module, var_env, st_pre, {:%{}, _, []}) do
-    myDEBUG(3)
+    stack_trace(3)
     {:ok, {{:map, %{}}, st_pre}, var_env}
   end
 
   # Clause for Non-Empty Map %{k1 => v1, ...}
   def tc_expr(module, var_env, st_pre, {:%{}, meta, pairs}) when is_list(pairs) do
-    myDEBUG(3)
+    stack_trace(3)
 
     Enum.reduce_while(
       pairs,
@@ -302,7 +302,7 @@ defmodule Maty.Typechecker.TCV2 do
   # --- Logical Not Operator (T-Not) ---
 
   def tc_expr(module, var_env, st_pre, {{:., meta, [:erlang, :not]}, _, [operand_ast]}) do
-    myDEBUG(6)
+    stack_trace(6)
 
     case tc_expr(module, var_env, st_pre, operand_ast) do
       {:ok, {:boolean, operand_st}, operand_env} ->
@@ -322,7 +322,7 @@ defmodule Maty.Typechecker.TCV2 do
   # Handles Arithmetic and Comparison Ops: +, -, *, /, <, >, <=, >=, ==, !=
   def tc_expr(module, var_env, st_pre, {{:., meta, [:erlang, op]}, _, [lhs_ast, rhs_ast]})
       when op in [:+, :-, :*, :/, :<, :>, :<=, :>=, :==, :!=] do
-    myDEBUG(7)
+    stack_trace(7)
 
     with {:lhs, {:ok, {lhs_type, lhs_st}, lhs_env}} <-
            {:lhs, tc_expr(module, var_env, st_pre, lhs_ast)},
@@ -352,7 +352,7 @@ defmodule Maty.Typechecker.TCV2 do
         st_pre,
         {:<<>>, meta, [{:"::", _, [lhs_ast, _]}, {:"::", _, [rhs_ast, _]}]}
       ) do
-    myDEBUG(8)
+    stack_trace(8)
 
     with {:lhs, {:ok, {lhs_type, lhs_st}, lhs_env}} <-
            {:lhs, tc_expr(module, var_env, st_pre, lhs_ast)},
@@ -378,7 +378,7 @@ defmodule Maty.Typechecker.TCV2 do
   # Handles Boolean Ops: and, or
   def tc_expr(module, var_env, st_pre, {op, meta, [lhs_ast, rhs_ast]})
       when op in [:and, :or] do
-    myDEBUG(9)
+    stack_trace(9)
 
     with {:lhs, {:ok, {lhs_type, lhs_st}, lhs_env}} <-
            {:lhs, tc_expr(module, var_env, st_pre, lhs_ast)},
@@ -404,21 +404,21 @@ defmodule Maty.Typechecker.TCV2 do
 
   # Disallow raw 'receive'
   def tc_expr(_module, var_env, _st_pre, {:receive, meta, _}) do
-    myDEBUG(11)
+    stack_trace(11)
     {:error, Error.no_raw_receive(meta), var_env}
   end
 
   # Disallow raw 'send' (Kernel.send/2 or :erlang.send/2)
   def tc_expr(_module, var_env, _st_pre, {{:., meta, [:erlang, :send]}, _, args})
       when length(args) in [2, 3] do
-    myDEBUG(12)
+    stack_trace(12)
     {:error, Error.no_raw_send(meta), var_env}
   end
 
   # Check for Kernel.send/2
   def tc_expr(_module, var_env, _st_pre, {{:., meta, [:Kernel, :send]}, _, args})
       when length(args) == 2 do
-    myDEBUG(13)
+    stack_trace(13)
     {:error, Error.no_raw_send(meta), var_env}
   end
 
@@ -427,7 +427,7 @@ defmodule Maty.Typechecker.TCV2 do
 
   # Anonymous function: fn args -> ... end
   def tc_expr(_module, var_env, st_pre, {:fn, _meta, [{:->, _, [args_ast, _body_ast]}]}) do
-    myDEBUG(14)
+    stack_trace(14)
     arity = length(args_ast)
     {:ok, {{:fun, arity}, st_pre}, var_env}
   end
@@ -440,20 +440,20 @@ defmodule Maty.Typechecker.TCV2 do
         {:&, _meta, [{:/, _, [{{:., _, [_mod, _fun]}, _, _}, arity]}]}
       )
       when is_integer(arity) do
-    myDEBUG(15)
+    stack_trace(15)
     {:ok, {{:fun, arity}, st_pre}, var_env}
   end
 
   # Local function capture: &fun/arity
   def tc_expr(_module, var_env, st_pre, {:&, _meta, [{:/, _, [fun_atom, arity]}]})
       when is_atom(fun_atom) and is_integer(arity) do
-    myDEBUG(16)
+    stack_trace(16)
     {:ok, {{:fun, arity}, st_pre}, var_env}
   end
 
   # --- Block Scope ---
   def tc_expr(module, var_env, st_pre, {:__block__, _, body_asts}) when is_list(body_asts) do
-    myDEBUG(17)
+    stack_trace(17)
     tc_expr_list(module, var_env, st_pre, body_asts)
   end
 
@@ -462,7 +462,7 @@ defmodule Maty.Typechecker.TCV2 do
   # --- Let Expression / Match Operator (T-Let) ---
   # Represents `pattern = expr1`
   def tc_expr(module, var_env, st_pre, {:=, _meta, [pattern_ast, expr1_ast]}) do
-    myDEBUG(18)
+    stack_trace(18)
 
     with {:e1, {:ok, {type_A, st_post_e1}, env_post_e1}} <-
            {:e1, tc_expr(module, var_env, st_pre, expr1_ast)},
@@ -479,7 +479,7 @@ defmodule Maty.Typechecker.TCV2 do
   # AST: {:case, meta, [scrutinee_ast, [do: clauses_list]]}
 
   def tc_expr(module, var_env, st_pre, {:case, meta, [scrutinee_ast, [do: clauses_list]]}) do
-    myDEBUG(19)
+    stack_trace(19)
 
     with {:scrutinee, {:ok, {type_A, st_after_scrutinee}, env_after_scrutinee}} <-
            {:scrutinee, tc_expr(module, var_env, st_pre, scrutinee_ast)},
@@ -528,7 +528,7 @@ defmodule Maty.Typechecker.TCV2 do
         st_pre,
         {{:., meta, [Maty.DSL, :internal_send]}, _, [_session_ctx, recipient_ast, message_ast]}
       ) do
-    myDEBUG(20)
+    stack_trace(20)
 
     case st_pre do
       %ST.SOut{to: expected_role, branches: branches} ->
@@ -594,7 +594,7 @@ defmodule Maty.Typechecker.TCV2 do
         st_pre,
         {{:., meta, [Maty.DSL.State, :set]}, _, [state_ast, _new_state, _session_ctx]}
       ) do
-    myDEBUG(221)
+    stack_trace(221)
 
     with :ok,
          # check that state_ast is state var
@@ -616,7 +616,7 @@ defmodule Maty.Typechecker.TCV2 do
         st_pre,
         {{:., meta, [Maty.DSL.State, :get]}, _, [state_ast, _session_ctx]}
       ) do
-    myDEBUG(222)
+    stack_trace(222)
 
     with :ok,
          # check that state_ast is state var
@@ -639,7 +639,7 @@ defmodule Maty.Typechecker.TCV2 do
         st_pre,
         {{:., _, [:erlang, :throw]}, _, [{:{}, meta, [:suspend, handler_ast, state_ast]}]}
       ) do
-    myDEBUG(21)
+    stack_trace(21)
 
     with {:h, {:ok, {handler_type, h_st}, h_env}} <-
            {:h, tc_expr(module, var_env, st_pre, handler_ast)},
@@ -661,7 +661,7 @@ defmodule Maty.Typechecker.TCV2 do
   # AST: {:throw, meta, [{:done, state_ast}]}
 
   def tc_expr(module, var_env, st_pre, {{:., _, [:erlang, :throw]}, meta, [done: state_ast]}) do
-    myDEBUG(22)
+    stack_trace(22)
 
     with {:v, {:ok, {state_type, v_st}, v_env}} <-
            {:v, tc_expr(module, var_env, st_pre, state_ast)},
@@ -681,7 +681,7 @@ defmodule Maty.Typechecker.TCV2 do
         st_pre,
         {{:., _m1, [Maty.DSL, :register]}, meta, [ap_pid_ast, role_ast, reg_info_ast, state_ast]}
       ) do
-    myDEBUG(22)
+    stack_trace(22)
 
     with :ok,
          # is ap_pid_ast a PID?
@@ -728,7 +728,7 @@ defmodule Maty.Typechecker.TCV2 do
   def tc_expr(module, var_env, st_pre, {func_name, meta, arg_asts} = ast)
       when is_atom(func_name) and is_list(arg_asts) and meta != [] and
              func_name not in [:=, :%, :{}, :|, :<<>>] do
-    myDEBUG(10)
+    stack_trace(10)
 
     arity = length(arg_asts)
     func_id = {func_name, arity}
@@ -797,7 +797,7 @@ defmodule Maty.Typechecker.TCV2 do
   # Looking up a variable is pure; preserves session state.
   def tc_expr(_module, var_env, st_pre, {var_name, meta, context})
       when is_atom(var_name) and (is_nil(context) or is_list(context)) do
-    myDEBUG(25)
+    stack_trace(25)
 
     # Logger.info(inspect(ast), ansi_color: :yellow)
 
@@ -815,7 +815,7 @@ defmodule Maty.Typechecker.TCV2 do
   # This clause handles atoms that might be handler names.
   def tc_expr(module, var_env, st_pre, value)
       when is_atom(value) and not is_nil(value) do
-    myDEBUG(23)
+    stack_trace(23)
     # Check Delta environments directly
     delta_M = Utils.Env.get_map(module, :delta_M)
     delta_I = Utils.Env.get_map(module, :delta_I)
@@ -830,7 +830,7 @@ defmodule Maty.Typechecker.TCV2 do
       true ->
         # Not a handler name, treat as a standard atom literal.
         # Fall through by calling the more general atom clause.
-        myDEBUG(203)
+        stack_trace(203)
 
         # Logger.debug(
         #   "Already checked if #{value} is a variable or handler so it could only be an atom?",
@@ -843,7 +843,7 @@ defmodule Maty.Typechecker.TCV2 do
 
   # General Atom Literal Clause (catches atoms not matched above)
   def tc_expr(_module, var_env, st_pre, value) when is_atom(value) and not is_nil(value) do
-    myDEBUG(24)
+    stack_trace(24)
     # Logger.debug("This: #{inspect(value)} is an atom", ansi_color: :magenta)
 
     {:ok, {:atom, st_pre}, var_env}
@@ -915,8 +915,7 @@ defmodule Maty.Typechecker.TCV2 do
           handler_ast_clause :: Macro.t(),
           st_pre :: ST.t(),
           type_signature :: tuple()
-        ) ::
-          {:ok, {atom(), atom()}} | {:error, binary()}
+        ) :: {:ok, {atom(), atom()}} | {:error, binary()}
   def check_wf_message_handler_clause(
         module,
         handler_label,
@@ -1246,7 +1245,7 @@ defmodule Maty.Typechecker.TCV2 do
   # Pat-Var: Pattern is a variable 'x'
   def tc_pattern({var_name, _meta, context}, expected_type, var_env)
       when is_atom(var_name) and (is_atom(context) or is_nil(context)) do
-    myDEBUG(300)
+    stack_trace(300)
     new_bindings = %{var_name => expected_type}
     updated_env = Map.merge(var_env, new_bindings)
     {:ok, new_bindings, updated_env}
@@ -1254,7 +1253,7 @@ defmodule Maty.Typechecker.TCV2 do
 
   # Pat-Wild: Pattern is '_'
   def tc_pattern(:_, _expected_type, var_env) do
-    myDEBUG(301)
+    stack_trace(301)
     {:ok, %{}, var_env}
   end
 
@@ -1271,13 +1270,13 @@ defmodule Maty.Typechecker.TCV2 do
         _expected_type,
         var_env
       ) do
-    myDEBUG(320)
+    stack_trace(320)
 
     {:ok, %{}, var_env}
   end
 
   def tc_pattern({:_, _meta, _context}, _expected_type, var_env) do
-    myDEBUG(302)
+    stack_trace(302)
 
     {:ok, %{}, var_env}
   end
@@ -1288,7 +1287,7 @@ defmodule Maty.Typechecker.TCV2 do
              is_binary(literal_pattern) or
              is_boolean(literal_pattern) or
              is_atom(literal_pattern) do
-    myDEBUG(303)
+    stack_trace(303)
 
     case Helpers.get_literal_type(literal_pattern) do
       {:ok, literal_type} ->
@@ -1324,7 +1323,7 @@ defmodule Maty.Typechecker.TCV2 do
 
   # Pat-EmptyList: Pattern is '[]'
   def tc_pattern([], expected_type, var_env) do
-    myDEBUG(304)
+    stack_trace(304)
 
     case expected_type do
       {:list, _} ->
@@ -1350,7 +1349,7 @@ defmodule Maty.Typechecker.TCV2 do
 
   # Pat-EmptyTuple: Pattern is '{}'
   def tc_pattern({:{}, _, []}, expected_type, var_env) do
-    myDEBUG(305)
+    stack_trace(305)
 
     case expected_type do
       {:tuple, []} ->
@@ -1375,7 +1374,7 @@ defmodule Maty.Typechecker.TCV2 do
 
   # Pat-EmptyMap: Pattern is '%{}'
   def tc_pattern({:%{}, _, []}, expected_type, var_env) do
-    myDEBUG(306)
+    stack_trace(306)
 
     case expected_type do
       {:map, _} ->
@@ -1402,7 +1401,7 @@ defmodule Maty.Typechecker.TCV2 do
 
   # Pat-Cons
   def tc_pattern({:|, meta, [p1_ast, p2_ast]}, expected_type, var_env) do
-    myDEBUG(307)
+    stack_trace(307)
 
     case expected_type do
       {:list, element_type} ->
@@ -1429,7 +1428,7 @@ defmodule Maty.Typechecker.TCV2 do
 
   # Pat-Tuple
   def tc_pattern({p1_ast, p2_ast} = pattern_ast, expected_type, var_env) do
-    myDEBUG(308)
+    stack_trace(308)
 
     case expected_type do
       {:tuple, [type_a, type_b]} ->
@@ -1464,7 +1463,7 @@ defmodule Maty.Typechecker.TCV2 do
   end
 
   def tc_pattern({:{}, meta, elements_asts}, expected_type, var_env) do
-    myDEBUG(309)
+    stack_trace(309)
 
     case expected_type do
       {:tuple, expected_types} when length(elements_asts) == length(expected_types) ->
@@ -1518,7 +1517,7 @@ defmodule Maty.Typechecker.TCV2 do
   # Pat-Map
   # Assuming keys k_i are literal atoms.
   def tc_pattern({:%{}, meta, pairs}, expected_type, var_env) do
-    myDEBUG(310)
+    stack_trace(310)
 
     case expected_type do
       {:map, expected_type_map} ->
@@ -1591,6 +1590,6 @@ defmodule Maty.Typechecker.TCV2 do
 
   defp extract_body(expr) when not is_list(expr), do: [expr]
 
-  def myDEBUG(_num), do: :ok
-  # def myDEBUG(num), do: Logger.debug("[#{num}]", ansi_color: :light_green)
+  def stack_trace(_num), do: :ok
+  # def stack_trace(num), do: Logger.debug("[#{num}]", ansi_color: :light_green)
 end

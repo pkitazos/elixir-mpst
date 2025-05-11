@@ -8,7 +8,7 @@ defmodule Maty.Typechecker do
 
   alias Maty.Utils
   alias Maty.Typechecker.Delta
-  alias Maty.Typechecker.TCV2
+  alias Maty.Typechecker.TC
   alias Maty.Typechecker.Error
   alias Maty.Typechecker.Preprocessor
 
@@ -106,7 +106,7 @@ defmodule Maty.Typechecker do
 
               res =
                 for {clause, type_signature} <- Enum.zip(func_clauses, type_signatures) do
-                  TCV2.check_wf_message_handler_clause(
+                  TC.check_wf_message_handler_clause(
                     env.module,
                     handler_name,
                     clause,
@@ -128,7 +128,7 @@ defmodule Maty.Typechecker do
 
               with {:clause, [clause]} <- {:clause, func_clauses},
                    {:signature, [type_signature]} <- {:signature, type_signatures} do
-                TCV2.check_wf_on_link_callback(
+                TC.check_wf_on_link_callback(
                   env.module,
                   clause,
                   type_signature
@@ -155,7 +155,7 @@ defmodule Maty.Typechecker do
 
               res =
                 for {clause, type_signature} <- Enum.zip(func_clauses, type_signatures) do
-                  TCV2.check_wf_init_handler_clause(
+                  TC.check_wf_init_handler_clause(
                     env.module,
                     handler_name,
                     clause,
@@ -174,12 +174,12 @@ defmodule Maty.Typechecker do
 
             true ->
               if func_id == {:decrease_stock, 2} do
-                hello = TCV2.check_wf_function(env.module, func_id, func_clauses)
+                hello = TC.check_wf_function(env.module, func_id, func_clauses)
                 Logger.debug("hello: #{inspect(hello)}")
               end
 
               res =
-                TCV2.check_wf_function(env.module, func_id, func_clauses)
+                TC.check_wf_function(env.module, func_id, func_clauses)
                 |> Enum.reject(&match?({:ok, _}, &1))
                 |> Enum.map(fn {:error, error_msg} -> {func_id, error_msg} end)
 
@@ -281,5 +281,6 @@ defmodule Maty.Typechecker do
     "[#{Utils.to_func(func_id)}] #{error_msg}"
   end
 
-  def myDEBUG(num, extra \\ ""), do: Logger.debug("[#{num}] #{extra}", ansi_color: :light_blue)
+  def stack_trace(num, extra \\ ""),
+    do: Logger.debug("[#{num}] #{extra}", ansi_color: :light_blue)
 end
