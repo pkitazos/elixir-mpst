@@ -4,19 +4,19 @@
 
 - [ ] make sure 
 
-- [ ] branches handled by separate clauses accumulated in Π environment
-- [ ] case expressions in non-handlers
+- [x] branches handled by separate clauses accumulated in Π environment
+- [x] case expressions in non-handlers
 - [ ] more map operations
 
-- [ ] create @init_handler annotation and typechecking clause
-- [ ] handler send/suspend/end macros
+- [x] create @init_handler annotation and typechecking clause
+- [x] handler send/suspend/end macros
 - [ ] add sub-typing
 - [ ] get/set state
 
 - [ ] polish up error reporting to use meta information (function/module name, line/col numbers, remove datetime reporting)
 - [ ] add `@doc` and `@moduledoc` comments to code
 - [ ] add a couple more examples
-  - [ ] shop
+  - [x] shop
   - [ ] three-buyer
   - [ ] auction
   - [ ] chat_server

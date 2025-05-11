@@ -38,7 +38,6 @@ defmodule Shop.Participants.Shop do
   @impl true
   @spec on_link({pid(), pid(), map()}, maty_actor_state()) :: {:ok, maty_actor_state()}
   def on_link({customer_ap, staff_ap, initial_stock}, initial_state) do
-
     MatyDSL.register(
       customer_ap,
       @role,
@@ -73,7 +72,6 @@ defmodule Shop.Participants.Shop do
     MatyDSL.suspend(:staff_admin_handler, updated_state)
   end
 
-
   handler :item_req_handler, :customer, {:request_items, nil}, state do
     items = Maty.DSL.State.get(state)
     summary = summarise_items(items)
@@ -82,7 +80,10 @@ defmodule Shop.Participants.Shop do
     MatyDSL.suspend(:cust_req_handler, state)
   end
 
-  handler :cust_req_handler, :customer, {:checkout, {item_ids, details} :: {list(binary()), binary()}}, state do
+  handler :cust_req_handler,
+          :customer,
+          {:checkout, {item_ids, details} :: {list(binary()), binary()}},
+          state do
     items = Maty.DSL.State.get(state)
     item_id = "item 1"
     in_stock = check_capacity(items, item_id)
@@ -113,7 +114,8 @@ defmodule Shop.Participants.Shop do
 
   @spec summarise_items(map()) :: list(binary())
   def summarise_items(_items) do
-    "something interesting"
+    summary = ["something about item 1", "something about item 2", "something about item 3"]
+    summary
   end
 
   @spec lookup_item(map(), binary()) :: binary()

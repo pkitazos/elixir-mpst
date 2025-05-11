@@ -475,6 +475,15 @@ defmodule Maty.Typechecker.Error do
   def handler_body_wrong_termination(_a, _b, _c, _d), do: "handler_body_wrong_termination"
   def logical_operator_type_mismatch(_a, _b, _c, _d), do: "logical_operator_type_mismatch"
   def binary_operator_type_mismatch(_a, _b, _c, _d), do: "binary_operator_type_mismatch"
+
+  def wrong_number_of_clauses do
+    "Incompatible number of clauses defined for on_link/2"
+  end
+
+  def wrong_number_of_specs do
+    "Incompatible number of @spec's defined for on_link/2"
+  end
+
   # -----------------------------------------------------------------
 
   defp with_meta(meta, str) do
@@ -484,5 +493,111 @@ defmodule Maty.Typechecker.Error do
 
   defp display_opts([expected: expected, got: got] = _opts) do
     "Expected: #{inspect(expected)} \nGot: #{inspect(got)}"
+  end
+end
+
+defmodule Maty.Typechecker.Error.ProtocolViolation do
+  def incorrect_action(module, line, handler) do
+    """
+    ** (ElixirMatyTypeError) Protocol Violation: Incorrect Action
+      Module: #{module}
+      Line: #{line}
+      Handler: #{handler}
+
+      Action: <unquoted AST of expression that blew up>
+      Expected Action: <unquoted AST of expression that is required>
+      Session Type: <session type>
+    """
+  end
+
+  def incorrect_target_participant(module, line, handler) do
+    """
+    ** (ElixirMatyTypeError) Protocol Violation: Incorrect Target Participant
+      Module: #{module}
+      Line: #{line}
+      Handler: #{handler}
+
+      Action: <unquoted AST of expression that blew up>
+      Expected Action: <unquoted AST of expression that is required>
+      Session Type: <session type>
+    """
+  end
+
+  def incorrect_handler_suspension(module, line, handler) do
+    """
+    ** (ElixirMatyTypeError) Protocol Violation: Incorrect Handler Suspension
+      Module: #{module}
+      Line: #{line}
+      Handler: #{handler}
+
+      Action: <unquoted AST of expression that blew up>
+      Expected Action: <unquoted AST of expression that is required>
+      Session Type: <session type>
+    """
+  end
+
+  def incorrect_message_label(module, line, handler) do
+    """
+    ** (ElixirMatyTypeError) Protocol Violation: Incorrect Message Label
+      Module: #{module}
+      Line: #{line}
+      Handler: #{handler}
+
+      Action: <unquoted AST of expression that blew up>
+      Expected Action: <unquoted AST of expression that is required>
+      Session Type: <session type>
+    """
+  end
+
+  def incorrect_payload_type(module, line, handler) do
+    """
+    ** (ElixirMatyTypeError) Protocol Violation: Incorrect Payload Type
+      Module: #{module}
+      Line: #{line}
+      Handler: #{handler}
+
+      Action: <unquoted AST of expression that blew up>
+      Expected Action: <unquoted AST of expression that is required>
+      Session Type: <session type>
+    """
+  end
+
+  def incorrect_choice_implementation(module, line, handler) do
+    """
+    ** (ElixirMatyTypeError) Protocol Violation: Incorrect Payload Type
+      Module: #{module}
+      Line: #{line}
+      Handler: #{handler}
+
+      Action: <unquoted AST of expression that blew up>
+      Expected Action: <unquoted AST of expression that is required>
+      Session Type: <session type>
+    """
+  end
+end
+
+defmodule Maty.Typechecker.Error.FrameworkUsage do
+  def missing_session_registration() do
+    """
+    ** (ElixirMatyTypeError) Framework Usage Violation: <kind of violation>
+      Module: <name of module>
+      Line: <line number>
+    """
+  end
+
+  def invalid_init_handler() do
+    """
+    ** (ElixirMatyTypeError) Framework Usage Violation: <kind of violation>
+      Module: <name of module>
+      Line: <line number>
+    """
+  end
+
+  def use_of_native_communication() do
+    """
+    ** (ElixirMatyTypeError) Framework Usage Violation: <kind of violation>
+      Module: <name of module>
+      Line: <line number>
+    """
   end
 end

@@ -11,7 +11,7 @@ defmodule Shop.Participants.Customer do
                           }\
                       }"}
 
-  @st {:payment_processing_handler,  "&shop:{\
+  @st {:payment_processing_handler, "&shop:{\
                           processing_payment(nil).purchase_outcome_handler,\
                           out_of_stock(nil).end\
                       }"}
@@ -20,7 +20,6 @@ defmodule Shop.Participants.Customer do
                           ok(nil).end,\
                           declined(nil).end\
                       }"}
-
 
   @impl true
   @spec on_link(pid(), maty_actor_state()) :: {:ok, maty_actor_state()}
@@ -35,9 +34,8 @@ defmodule Shop.Participants.Customer do
 
   init_handler :install, nil, state do
     MatyDSL.send(:shop, {:request_items, nil})
-    MatyDSL.suspend(:item_req_handler, state)
+    MatyDSL.suspend(:item_summary_handler, state)
   end
-
 
   handler :item_summary_handler, :shop, {:items, _items :: list(binary())}, state do
     MatyDSL.send(:shop, {:checkout, {["item1", "item2"], "my payment details"}})
@@ -62,6 +60,4 @@ defmodule Shop.Participants.Customer do
     # MatyDSL.suspend(:item_summary_handler, state)
     MatyDSL.done(state)
   end
-
-
 end

@@ -94,7 +94,7 @@ defmodule Maty.Typechecker do
     module_init_handlers = Delta.key_set(delta_I)
     module_handlers = Delta.key_set(delta_M)
 
-    _errors =
+    errors =
       for {func_id, _kind, _meta, func_clauses} <- all_module_definitions, reduce: [] do
         acc ->
           cond do
@@ -104,8 +104,8 @@ defmodule Maty.Typechecker do
               handler_M = delta_m[handler_name]
               type_signatures = psi[func_id] |> Enum.reverse()
 
-              for {clause, type_signature} <- Enum.zip(func_clauses, type_signatures) do
-                res =
+              res =
+                for {clause, type_signature} <- Enum.zip(func_clauses, type_signatures) do
                   TCV2.check_wf_message_handler_clause(
                     env.module,
                     handler_name,
@@ -113,41 +113,39 @@ defmodule Maty.Typechecker do
                     handler_M.st,
                     type_signature
                   )
-
-                case res do
-                  {_status, %Maty.ST.SBranch{}} ->
-                    Logger.info("[#{env.module}]\n[#{inspect(func_id)}]: :ok",
-                      ansi_color: :light_blue
-                    )
-
-                  {:error, msg} ->
-                    Logger.error("[#{env.module}]\n[#{inspect(func_id)}]: #{msg}")
+                  |> case do
+                    {_status, %Maty.ST.SBranch{}} -> :ok
+                    {:error, error_msg} -> error_msg
+                  end
                 end
-              end
+                |> Enum.reject(&(&1 == :ok))
+                |> Enum.map(&{func_id, &1})
 
-              acc
+              res ++ acc
 
             func_id == {:on_link, 2} ->
               type_signatures = psi[func_id] |> Enum.reverse()
 
               with {:clause, [clause]} <- {:clause, func_clauses},
                    {:signature, [type_signature]} <- {:signature, type_signatures} do
-                res =
-                  TCV2.check_wf_on_link_callback(
-                    env.module,
-                    clause,
-                    type_signature
-                  )
-
-                Logger.info("[#{env.module}]\n[#{inspect(func_id)}]: #{inspect(res)}",
-                  ansi_color: :light_blue
+                TCV2.check_wf_on_link_callback(
+                  env.module,
+                  clause,
+                  type_signature
                 )
+                |> case do
+                  :ok -> acc
+                  {:error, error_msg} -> [{func_id, error_msg} | acc]
+                end
               else
-                {:clause, _other} -> "Incompatible number of clauses defined for on_link/2"
-                {:signature, _other} -> "Incompatible number of @spec's defined for on_link/2"
-              end
+                {:clause, _other} ->
+                  error_msg = Error.wrong_number_of_clauses()
+                  [{func_id, error_msg} | acc]
 
-              acc
+                {:signature, _other} ->
+                  error_msg = Error.wrong_number_of_specs()
+                  [{func_id, error_msg} | acc]
+              end
 
             MapSet.member?(module_init_handlers, func_id) ->
               {handler_name, 3} = func_id
@@ -155,8 +153,8 @@ defmodule Maty.Typechecker do
               handler_I = delta_i[handler_name]
               type_signatures = psi[func_id] |> Enum.reverse()
 
-              for {clause, type_signature} <- Enum.zip(func_clauses, type_signatures) do
-                res =
+              res =
+                for {clause, type_signature} <- Enum.zip(func_clauses, type_signatures) do
                   TCV2.check_wf_init_handler_clause(
                     env.module,
                     handler_name,
@@ -164,44 +162,38 @@ defmodule Maty.Typechecker do
                     handler_I.st,
                     type_signature
                   )
+                  |> case do
+                    :ok -> :ok
+                    {:error, error_msg} -> error_msg
+                  end
+                end
+                |> Enum.reject(&(&1 == :ok))
+                |> Enum.map(&{func_id, &1})
 
-                Logger.info("[#{env.module}]\n[#{inspect(handler_I.function)}]: #{inspect(res)}",
-                  ansi_color: :light_blue
-                )
-              end
-
-              acc
+              res ++ acc
 
             true ->
-              well_formed = TCV2.check_wf_function(env.module, func_id, func_clauses)
+              if func_id == {:decrease_stock, 2} do
+                hello = TCV2.check_wf_function(env.module, func_id, func_clauses)
+                Logger.debug("hello: #{inspect(hello)}")
+              end
 
               res =
-                Enum.all?(well_formed, fn
-                  {:ok, _} -> true
-                  _ -> false
-                end)
-                |> if do
-                  :ok
-                else
-                  well_formed
-                end
+                TCV2.check_wf_function(env.module, func_id, func_clauses)
+                |> Enum.reject(&match?({:ok, _}, &1))
+                |> Enum.map(fn {:error, error_msg} -> {func_id, error_msg} end)
 
-              Logger.debug(
-                "[#{env.module}]\n[#{inspect(func_id)}]: #{inspect(res)}",
-                ansi_color: :light_blue
-              )
-
-              acc
+              res ++ acc
           end
       end
 
-    # if length(errors) != 0 do
-    #   for err <- errors do
-    #     Logger.error(err)
-    #   end
-    # else
-    #   Logger.info("\n[#{env.module}] No communication errors", ansi_color: :light_green)
-    # end
+    if length(errors) != 0 do
+      for err <- errors do
+        Logger.error("\n[#{env.module}] #{display_error(err)}")
+      end
+    else
+      Logger.info("\n[#{env.module}] No communication errors", ansi_color: :light_green)
+    end
   end
 
   def fetch_module_definitions!(bytecode) do
@@ -283,6 +275,10 @@ defmodule Maty.Typechecker do
       end)
 
     IO.puts(module_header <> "\n" <> display <> "\n")
+  end
+
+  def display_error({func_id, error_msg}) do
+    "[#{Utils.to_func(func_id)}] #{error_msg}"
   end
 
   def myDEBUG(num, extra \\ ""), do: Logger.debug("[#{num}] #{extra}", ansi_color: :light_blue)
