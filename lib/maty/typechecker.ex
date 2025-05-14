@@ -210,11 +210,6 @@ defmodule Maty.Typechecker do
               res ++ acc
 
             true ->
-              if func_id == {:decrease_stock, 2} do
-                hello = TC.check_wf_function(env.module, func_id, func_clauses)
-                Logger.debug("hello: #{inspect(hello)}")
-              end
-
               res =
                 TC.check_wf_function(env.module, func_id, func_clauses)
                 |> Enum.reject(&match?({:ok, _}, &1))
@@ -226,7 +221,12 @@ defmodule Maty.Typechecker do
 
     if length(errors) != 0 do
       for err <- errors do
-        Logger.error("\n[#{env.module}] #{display_error(err)}")
+        if Enum.member?(@debug, :verbose) do
+          Logger.error("\n[#{env.module}] #{display_error(err)}")
+        else
+          {_, error_msg} = err
+          Logger.error(error_msg, ansi_color: :light_red)
+        end
       end
     else
       Logger.info("\n[#{env.module}] No communication errors", ansi_color: :light_green)

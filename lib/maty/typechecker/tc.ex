@@ -639,8 +639,15 @@ defmodule Maty.Typechecker.TC do
         end
 
       other_state ->
-        error = Error.send_invalid_state(meta, expected: "SOut", got: other_state)
-        {:error, error, var_env}
+        error_msg =
+          Error.ProtocolViolation.incorrect_action(
+            module,
+            meta,
+            [got: "MatyDSL.send(:#{recipient_ast}, message)"],
+            other_state
+          )
+
+        {:error, error_msg, var_env}
     end
   end
 
@@ -701,7 +708,9 @@ defmodule Maty.Typechecker.TC do
     with {:h, {:ok, {handler_type, h_st}, h_env}} <-
            {:h, tc_expr(module, var_env, st_pre, handler_ast)},
          :ok <- Helpers.check_st_unchanged(st_pre, h_st, meta),
-         :ok <- Helpers.check_handler_type(handler_type, meta),
+         {:suspension, :ok, [got: _], _st} <-
+           {:suspension, Helpers.check_handler_type(handler_type, meta), [got: handler_ast],
+            st_pre},
          #
          {:v, {:ok, {state_type, v_st}, v_env}} <- {:v, tc_expr(module, h_env, h_st, state_ast)},
          :ok <- Helpers.check_st_unchanged(h_st, v_st, meta),
@@ -726,6 +735,12 @@ defmodule Maty.Typechecker.TC do
             [got: "MatyDSL.suspend(:#{handler_ast}, #{state_var})"],
             other_st
           )
+
+        {:error, error_msg, var_env}
+
+      {:suspension, :error, [got: got], st} ->
+        error_msg =
+          Error.ProtocolViolation.suspend_invalid_handler_type(module, meta, [got: got], st)
 
         {:error, error_msg, var_env}
 

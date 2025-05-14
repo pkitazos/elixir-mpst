@@ -42,8 +42,8 @@ defmodule Maty.Typechecker.Error.ProtocolViolation do
       Module: #{module}
       Handler: #{handler}
       --
-      Got: #{role_received}
-      Expected: #{role_expected}
+      Got: #{render_atom(role_received)}
+      Expected: #{render_atom(role_expected)}
       --
       Session Type: #{ST.repr(st)}
     """
@@ -142,8 +142,8 @@ defmodule Maty.Typechecker.Error.ProtocolViolation do
       Module: #{module}
       Line: #{line}
       --
-      Got: #{payload_received}
-      Expected: #{payload_expected}
+      Got: #{render_atom(payload_received)}
+      Expected: #{render_atom(payload_expected)}
       --
       Session Type: #{ST.repr(st)}
     """
@@ -156,6 +156,32 @@ defmodule Maty.Typechecker.Error.ProtocolViolation do
       Handler: #{handler}
       --
       Missing implementation for branches: #{missing_branches}
+      --
+      Session Type: #{ST.repr(st)}
+    """
+  end
+
+  def suspend_invalid_handler_type(module, [line: line], [got: got], st) do
+    """
+    \n\n** (ElixirMatyTypeError) Protocol Violation: Suspended with Invalid Handler
+      Module: #{module}
+      Line: #{line}
+      --
+      Tried: #{got}
+      --
+      Session Type: #{ST.repr(st)}
+    """
+  end
+
+  def send_invalid_state(module, meta, [got: got], st) do
+    line = Keyword.fetch!(meta, :line)
+
+    """
+    \n\n** (ElixirMatyTypeError) Protocol Violation: Incorrect Action
+      Module: #{module}
+      Line: #{line}
+      --
+      Tried: #{got}
       --
       Session Type: #{ST.repr(st)}
     """

@@ -243,11 +243,7 @@ defmodule Maty.Typechecker.Helpers do
   # Checks if a type is one of the valid handler types we defined earlier
   def check_handler_type(:maty_handler_msg, _meta), do: :ok
   def check_handler_type(:maty_handler_init, _meta), do: :ok
-
-  def check_handler_type(other_type, meta) do
-    error = Error.suspend_invalid_handler_type(meta, got: other_type)
-    {:error, error}
-  end
+  def check_handler_type(_other_type, _meta), do: :error
 
   # Checks if a type is compatible with maty_actor_state
   def check_maty_state_type(state_type, meta) do

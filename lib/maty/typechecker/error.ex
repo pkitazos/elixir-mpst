@@ -454,7 +454,7 @@ defmodule Maty.Typechecker.Error do
   def register_unknown_handler(_a, _b), do: "register_unknown_handler"
   def invalid_registration_info_structure(_a, _b), do: "invalid_registration_info_structure"
   def invalid_maty_state_type(_a, _b), do: "invalid_maty_state_type"
-  def send_invalid_state(_a, opts), do: "send_invalid_state: #{display_opts(opts)}"
+
   def function_not_exist(_a, func), do: "function_not_exist: #{func}"
   def case_scrutinee_altered_state(_a, _b), do: "case_scrutinee_altered_state"
   def case_branches_incompatible_types(_a, _b), do: "case_branches_incompatible_types"
@@ -462,7 +462,6 @@ defmodule Maty.Typechecker.Error do
   def send_message_not_tuple(_a, _b), do: "send_message_not_tuple"
   def send_invalid_label(_a, _b), do: "send_invalid_label"
   def send_payload_mismatch(_a, _b), do: "send_payload_mismatch"
-  def suspend_invalid_handler_type(_a, _b), do: "suspend_invalid_handler_type"
 
   def pattern_arity_mismatch(_a, _b, _c), do: "pattern_arity_mismatch"
   def function_altered_state(_a, _b, _c), do: "function_altered_state"
