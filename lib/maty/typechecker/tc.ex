@@ -538,7 +538,9 @@ defmodule Maty.Typechecker.TC do
              :ok <- Helpers.check_st_unchanged(st_pre, recipient_st, meta),
 
              # Check recipient matches expected role
-             :ok <- Helpers.check_recipient_role(recipient_ast, expected_role, meta),
+             #  :ok <- Helpers.check_recipient_role(recipient_ast, expected_role, meta),
+             {:role, [got: ^expected_role, expected: _expected_role], _st} <-
+               {:role, [got: recipient_ast, expected: expected_role], recipient_st},
 
              # 4. Check message structure {label, payload_expr}
              {:message, {:ok, literal_label, payload_expr_ast}} <-
@@ -549,16 +551,24 @@ defmodule Maty.Typechecker.TC do
                {:payload, tc_expr(module, recipient_env, recipient_st, payload_expr_ast)},
 
              # 5. Find matching branch for the label
-             {:branch, {:ok, matched_branch}, _branches, _attempted_match} <-
-               {:branch,
-                Helpers.find_matching_branch(branches, {literal_label, actual_payload_type}),
-                branches, {literal_label, actual_payload_type}},
+             {:branch, {:ok, matched_branch}, _branches, _attempted_match, _st} <-
+               {
+                 :branch,
+                 Helpers.find_matching_branch(branches, {literal_label, actual_payload_type}),
+                 # this looks for a matching branch so an incorrect payload type also triggers the same function
+                 # that means we need the error to be a bit more specific
+                 branches,
+                 {literal_label, actual_payload_type},
+                 payload_st
+               },
              %{payload: expected_payload_type, continue_as: st_Sj} = matched_branch,
 
              # Ensure payload check pure
              :ok <- Helpers.check_st_unchanged(recipient_st, payload_st, meta),
              # Check payload type matches expected
-             :ok <- Helpers.check_payload_type(actual_payload_type, expected_payload_type, meta) do
+             {:payload, :ok, _st} <-
+               {:payload, Helpers.check_payload_type(actual_payload_type, expected_payload_type),
+                payload_st} do
           # All checks passed!
           # Result type is :atom, next session state is st_Sj
           # Use env after payload check
@@ -570,12 +580,28 @@ defmodule Maty.Typechecker.TC do
           {:error, msg} ->
             {:error, msg, var_env}
 
-          {:branch, :error, branches, attempted_match} ->
-            Logger.error(
-              "\nAttempted match: #{inspect(attempted_match)}\n\nAvailable Branches:\n#{inspect(branches)}"
-            )
+          {:branch, :error, branches, {label_received, _}, st} ->
+            branch_options = branches |> Enum.map(fn b -> b.label end) |> Enum.join(" | ")
 
-            {:error, "No matching branch found", var_env}
+            error_msg =
+              Error.ProtocolViolation.incorrect_message_label(module, meta, st,
+                got: label_received,
+                expected: branch_options
+              )
+
+            {:error, error_msg, var_env}
+
+          {:role, roles, st} ->
+            error_msg =
+              Error.ProtocolViolation.incorrect_target_participant(module, meta, st, roles)
+
+            {:error, error_msg, var_env}
+
+          {:payload, payloads, st} ->
+            error_msg =
+              Error.ProtocolViolation.incorrect_payload_type(module, meta, st, payloads)
+
+            {:error, error_msg, var_env}
 
           {label, e} when label in [:recipient, :message, :branch, :payload] ->
             e
@@ -648,11 +674,35 @@ defmodule Maty.Typechecker.TC do
          #
          {:v, {:ok, {state_type, v_st}, v_env}} <- {:v, tc_expr(module, h_env, h_st, state_ast)},
          :ok <- Helpers.check_st_unchanged(h_st, v_st, meta),
-         :ok <- Helpers.check_maty_state_type(state_type, meta) do
-      {:ok, {:no_return, {:st_bottom}}, v_env}
+         :ok <- Helpers.check_maty_state_type(state_type, meta),
+         {state_var, _, _} = state_ast,
+         {:st, %ST.SName{handler: expected_handler}, _state_var} <- {:st, v_st, state_var},
+         {:handler_name, [got: ^expected_handler, expected: _expected_handler], _st} <-
+           {:handler_name, [got: handler_ast, expected: expected_handler], v_st} do
+      {:ok, {:no_return, {:st_bottom, :suspend}}, v_env}
     else
-      {:error, msg, env} -> {:error, msg, env}
-      {:error, msg} -> {:error, msg, var_env}
+      {:error, msg, env} ->
+        {:error, msg, env}
+
+      {:error, msg} ->
+        {:error, msg, var_env}
+
+      {:st, other_st, state_var} ->
+        error_msg =
+          Error.ProtocolViolation.incorrect_action(
+            module,
+            meta,
+            [got: "MatyDSL.suspend(:#{handler_ast}, #{state_var})"],
+            other_st
+          )
+
+        {:error, error_msg, var_env}
+
+      {:handler_name, handlers, st} ->
+        error_msg =
+          Error.ProtocolViolation.incorrect_handler_suspension(module, meta, st, handlers)
+
+        {:error, error_msg, var_env}
     end
   end
 
@@ -666,11 +716,27 @@ defmodule Maty.Typechecker.TC do
     with {:v, {:ok, {state_type, v_st}, v_env}} <-
            {:v, tc_expr(module, var_env, st_pre, state_ast)},
          :ok <- Helpers.check_st_unchanged(st_pre, v_st, meta),
-         :ok <- Helpers.check_maty_state_type(state_type, meta) do
-      {:ok, {:no_return, {:st_bottom}}, v_env}
+         :ok <- Helpers.check_maty_state_type(state_type, meta),
+         {state_var, _, _} = state_ast,
+         {:st, %ST.SEnd{}, _state_var} <- {:st, v_st, state_var} do
+      {:ok, {:no_return, {:st_bottom, :done}}, v_env}
     else
-      {:error, msg, env} -> {:error, msg, env}
-      {:error, msg} -> {:error, msg, var_env}
+      {:error, msg, env} ->
+        {:error, msg, env}
+
+      {:error, msg} ->
+        {:error, msg, var_env}
+
+      {:st, other_st, state_var} ->
+        error_msg =
+          Error.ProtocolViolation.incorrect_action(
+            module,
+            meta,
+            [got: "MatyDSL.done(#{state_var})"],
+            other_st
+          )
+
+        {:error, error_msg, var_env}
     end
   end
 
@@ -942,10 +1008,11 @@ defmodule Maty.Typechecker.TC do
 
          #  var_env = Map.merge(gamma_args_env, psi),
          # check the session type is SIn
-         {:st, %ST.SIn{from: expected_role, branches: branches}} <- {:st, st_pre},
+         {:st, st = %ST.SIn{from: expected_role, branches: branches}} <- {:st, st_pre},
 
          # check handler and session type roles align
-         {:role, ^expected_role} <- {:role, ^received_role = declared_role},
+         {:role, [got: ^expected_role, expected: _expected_role], _st} <-
+           {:role, [got: ^received_role = declared_role, expected: expected_role], st},
          {label, _} <- message_pattern_ast,
          {:tuple, [_, payload_type]} <- message_type,
 
@@ -957,7 +1024,7 @@ defmodule Maty.Typechecker.TC do
 
          # extract only the relevant bits (leave out the try catch)
          body = extract_body(body_block),
-         {:ok, {:no_return, {:st_bottom}}, _var_env} <-
+         {:ok, {:no_return, {:st_bottom, _exit_status}}, _var_env} <-
            tc_expr_list(module, var_env, handler_branch.continue_as, body) do
       # all checks passed!
       {:ok, handler_branch}
@@ -971,8 +1038,17 @@ defmodule Maty.Typechecker.TC do
       {:st, other_st} ->
         {:error, "st broken: #{inspect(other_st)}"}
 
-      {:role, other_role} ->
-        {:error, "role broken: #{inspect(other_role)}"}
+      {:role, [got: role_received, expected: role_expected], st} ->
+        error_msg =
+          Error.ProtocolViolation.incorrect_recipient_participant(
+            module,
+            handler_label,
+            st,
+            got: role_received,
+            expected: role_expected
+          )
+
+        {:error, error_msg}
 
       {:branch, :error, branches, attempted_match} ->
         Logger.error(
@@ -1043,7 +1119,7 @@ defmodule Maty.Typechecker.TC do
 
          # extract only the relevant bits (leave out the try catch)
          body = extract_body(body_block),
-         {:ok, {:no_return, {:st_bottom}}, _var_env} <-
+         {:ok, {:no_return, {:st_bottom, _exit_status}}, _var_env} <-
            tc_expr_list(module, var_env, st_pre, body) do
       # all checks passed!
       :ok

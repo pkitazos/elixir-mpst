@@ -121,7 +121,44 @@ defmodule Maty.Typechecker do
                 |> Enum.reject(&(&1 == :ok))
                 |> Enum.map(&{func_id, &1})
 
-              res ++ acc
+              if(length(func_clauses) != length(handler_M.st.branches)) do
+                visited_branches =
+                  for {clause, type_signature} <- Enum.zip(func_clauses, type_signatures) do
+                    TC.check_wf_message_handler_clause(
+                      env.module,
+                      handler_name,
+                      clause,
+                      handler_M.st,
+                      type_signature
+                    )
+                    |> case do
+                      {:ok, %Maty.ST.SBranch{} = branch} -> branch
+                      {:error, _msg} -> :error
+                    end
+                  end
+                  |> Enum.reject(&(&1 == :error))
+                  |> MapSet.new()
+
+                missing_branches =
+                  handler_M.st.branches
+                  |> MapSet.new()
+                  |> MapSet.difference(visited_branches)
+                  |> MapSet.to_list()
+
+                missing_st = Maty.ST.repr(%{handler_M.st | branches: missing_branches})
+
+                error_msg =
+                  Error.ProtocolViolation.incorrect_choice_implementation(
+                    env.module,
+                    handler_name,
+                    missing_st,
+                    handler_M.st
+                  )
+
+                [{func_id, error_msg} | acc]
+              else
+                res ++ acc
+              end
 
             func_id == {:on_link, 2} ->
               type_signatures = psi[func_id] |> Enum.reverse()

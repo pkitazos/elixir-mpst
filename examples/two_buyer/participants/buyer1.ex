@@ -6,9 +6,8 @@ defmodule TwoBuyer.Participants.Buyer1 do
   @st {:install, "+seller:{title(binary).quote_handler}"}
   @st {:quote_handler, "&seller:{quote(number).+buyer2:{share(number).end}}"}
 
-
   @impl true
-  @spec on_link({pid(),  binary()}, maty_actor_state()) :: {:ok, maty_actor_state()}
+  @spec on_link({pid(), binary()}, maty_actor_state()) :: {:ok, maty_actor_state()}
   def on_link({ap_pid, title}, initial_state) do
     MatyDSL.register(
       ap_pid,
@@ -18,12 +17,10 @@ defmodule TwoBuyer.Participants.Buyer1 do
     )
   end
 
-
   init_handler :install, title :: binary(), state do
     MatyDSL.send(:seller, {:title, title})
     MatyDSL.suspend(:quote_handler, state)
   end
-
 
   handler :quote_handler, :seller, {:quote, amount :: number()}, state do
     share_amount = amount / 2

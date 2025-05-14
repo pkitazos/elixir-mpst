@@ -287,4 +287,34 @@ defmodule Maty.ST do
       handler: handler
     }
   end
+
+  def repr(%SEnd{}), do: "end"
+  def repr(%SName{handler: handler}), do: Atom.to_string(handler)
+
+  def repr(%SBranch{label: label, payload: payload, continue_as: st}) do
+    label_str = Atom.to_string(label)
+    payload_str = Atom.to_string(payload)
+
+    "#{label_str}(#{payload_str}).#{repr(st)}"
+  end
+
+  def repr(%SOut{to: to, branches: branches}) do
+    to_str = Atom.to_string(to)
+    branches_str = branches |> Enum.map(&repr/1) |> Enum.join(", ")
+
+    "#{to_str}+{#{branches_str}}"
+  end
+
+  def repr(%SIn{from: from, branches: branches}) do
+    from_str = Atom.to_string(from)
+    branches_str = branches |> Enum.map(&repr/1) |> Enum.join(", ")
+
+    "#{from_str}&{#{branches_str}}"
+  end
+
+  def get_action(%SEnd{}), do: :done
+  def get_action(%SName{}), do: :suspend
+  def get_action(%SOut{}), do: :send
+  def get_action(%SIn{}), do: :receive
+  def get_action(%SBranch{}), do: :error
 end
