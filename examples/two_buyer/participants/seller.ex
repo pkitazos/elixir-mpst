@@ -32,6 +32,7 @@ defmodule TwoBuyer.Participants.Seller do
 
   handler :title_handler, :buyer1, {:title, title :: binary()}, state do
     amount = lookup_price(title)
+    # amount = lookup_price_str(title)
     # MatyDSL.done(state)
     MatyDSL.send(:buyer1, {:quote, amount})
     MatyDSL.suspend(:decision_handler, state)
@@ -49,6 +50,9 @@ defmodule TwoBuyer.Participants.Seller do
 
   @spec lookup_price(binary()) :: number()
   defp lookup_price(_title_str), do: 150
+
+  # @spec lookup_price_str(binary()) :: binary()
+  # defp lookup_price_str(_title_str), do: "€150"
 
   @spec shipping_date(binary()) :: Date.t()
   defp shipping_date(_addr_str), do: ~D[2021-12-31]

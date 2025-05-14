@@ -1,4 +1,6 @@
 defmodule Maty.Typechecker.Helpers do
+  require Logger
+
   alias Maty.ST
   alias Maty.Typechecker.Error
   alias Maty.Types.T, as: Type
@@ -200,16 +202,34 @@ defmodule Maty.Typechecker.Helpers do
   end
 
   def find_matching_branch(branches, {label, payload_type}) do
-    Enum.find(
-      branches,
-      fn %ST.SBranch{label: l, payload: p} ->
-        l == label and p == payload_type
+    branches
+    |> Enum.map(fn %ST.SBranch{label: l, payload: p} = branch ->
+      cond do
+        l == label and p == payload_type -> {:ok, branch}
+        l != label -> {:error, :label_mismatch}
+        true -> {:error, :payload_mismatch}
       end
-    )
+    end)
+    |> then(fn bs -> Enum.find(bs, bs, &match?({:ok, _}, &1)) end)
     |> case do
-      nil -> :error
-      matched_branch -> {:ok, matched_branch}
+      {:ok, matched_branch} -> {:ok, matched_branch}
+      [error | _] -> error
     end
+
+    # if Enum.any?(bs, &match?({:ok, _}, &1)) do
+    #   Enum.find()
+    # end
+
+    # Enum.find(
+    #   branches,
+    #   fn %ST.SBranch{label: l, payload: p} ->
+    #     l == label and p == payload_type
+    #   end
+    # )
+    # |> case do
+    #   nil -> {:error, :payload_mismatch}
+    #   matched_branch -> {:ok, matched_branch}
+    # end
   end
 
   def check_payload_type(actual_payload_type, expected_payload_type) do

@@ -551,14 +551,11 @@ defmodule Maty.Typechecker.TC do
                {:payload, tc_expr(module, recipient_env, recipient_st, payload_expr_ast)},
 
              # 5. Find matching branch for the label
-             {:branch, {:ok, matched_branch}, _branches, _attempted_match, _st} <-
+             {:branch, {:ok, matched_branch}, [got: _attempted_match, expected: _branches], _st} <-
                {
                  :branch,
                  Helpers.find_matching_branch(branches, {literal_label, actual_payload_type}),
-                 # this looks for a matching branch so an incorrect payload type also triggers the same function
-                 # that means we need the error to be a bit more specific
-                 branches,
-                 {literal_label, actual_payload_type},
+                 [got: {literal_label, actual_payload_type}, expected: branches],
                  payload_st
                },
              %{payload: expected_payload_type, continue_as: st_Sj} = matched_branch,
@@ -580,8 +577,8 @@ defmodule Maty.Typechecker.TC do
           {:error, msg} ->
             {:error, msg, var_env}
 
-          {:branch, :error, branches, {label_received, _}, st} ->
-            branch_options = branches |> Enum.map(fn b -> b.label end) |> Enum.join(" | ")
+          {:branch, {:error, :label_mismatch}, [got: {label_received, _}, expected: branches], st} ->
+            branch_options = branches |> Enum.map(fn b -> b.label end)
 
             error_msg =
               Error.ProtocolViolation.incorrect_message_label(module, meta, st,
@@ -590,6 +587,40 @@ defmodule Maty.Typechecker.TC do
               )
 
             {:error, error_msg, var_env}
+
+          {:branch, {:error, :payload_mismatch},
+           [got: {label_received, payload_received}, expected: branches], st} ->
+            expected_branch =
+              branches
+              |> Enum.find(fn b -> b.label == label_received end)
+
+            case expected_branch do
+              nil ->
+                branch_options = branches |> Enum.map(fn b -> b.label end)
+
+                error_msg =
+                  Error.ProtocolViolation.incorrect_message_label(
+                    module,
+                    meta,
+                    st,
+                    got: label_received,
+                    expected: branch_options
+                  )
+
+                {:error, error_msg, var_env}
+
+              other ->
+                error_msg =
+                  Error.ProtocolViolation.incorrect_payload_type(
+                    module,
+                    meta,
+                    st,
+                    got: payload_received,
+                    expected: other.payload
+                  )
+
+                {:error, error_msg, var_env}
+            end
 
           {:role, roles, st} ->
             error_msg =
@@ -1018,9 +1049,12 @@ defmodule Maty.Typechecker.TC do
 
          # check there is a matching branch
          # take note of this branch
-         {:branch, {:ok, handler_branch}, _branches, _attempted_match} <-
-           {:branch, Helpers.find_matching_branch(branches, {label, payload_type}), branches,
-            {label, payload_type}},
+         {:branch, {:ok, handler_branch}, [got: _attempted_match, expected: _branches], _st} <-
+           {:branch,
+            Helpers.find_matching_branch(
+              branches,
+              {label, payload_type}
+            ), [got: {label, payload_type}, expected: branches], st},
 
          # extract only the relevant bits (leave out the try catch)
          body = extract_body(body_block),
@@ -1050,12 +1084,61 @@ defmodule Maty.Typechecker.TC do
 
         {:error, error_msg}
 
-      {:branch, :error, branches, attempted_match} ->
-        Logger.error(
-          "\nAttempted match: #{inspect(attempted_match)}\n\nAvailable Branches:\n#{inspect(branches)}"
-        )
+      {:branch, {:error, :label_mismatch},
+       [got: {label_received, _payload_received}, expected: branches], st} ->
+        branch_options = branches |> Enum.map(fn b -> b.label end)
 
-        {:error, "branch broken"}
+        error_msg =
+          Error.ProtocolViolation.incorrect_incoming_message_label(module, handler_label, st,
+            got: label_received,
+            expected: branch_options
+          )
+
+        [
+          ok: %Maty.ST.SBranch{
+            label: :quote,
+            payload: :number,
+            continue_as: %Maty.ST.SOut{
+              to: :buyer2,
+              branches: [
+                %Maty.ST.SBranch{label: :share, payload: :number, continue_as: %Maty.ST.SEnd{}}
+              ]
+            }
+          }
+        ]
+
+        {:error, error_msg}
+
+      {:branch, {:error, :payload_mismatch},
+       [got: {label_received, payload_received}, expected: branches], st} ->
+        expected_branch =
+          branches
+          |> Enum.find(fn b -> b.label == label_received end)
+
+        case expected_branch do
+          nil ->
+            branch_options = branches |> Enum.map(fn b -> b.label end)
+
+            error_msg =
+              Error.ProtocolViolation.incorrect_incoming_message_label(
+                module,
+                handler_label,
+                st,
+                got: label_received,
+                expected: branch_options
+              )
+
+            {:error, error_msg}
+
+          other ->
+            error_msg =
+              Error.ProtocolViolation.incorrect_incoming_payload_type(module, handler_label, st,
+                got: payload_received,
+                expected: other.payload
+              )
+
+            {:error, error_msg}
+        end
 
       {:body_ok, {final_type, final_state}, _env} ->
         error =
