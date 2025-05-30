@@ -28,7 +28,7 @@ defmodule Maty.Typechecker.Preprocessor do
         {:error, error}
 
       {:error, _} ->
-        error = Error.invalid_session_type_annotation(handler_label)
+        error = Error.TypeSpecification.invalid_session_type_annotation(handler_label)
         Logger.error(error)
         {:error, error}
     end
@@ -56,7 +56,7 @@ defmodule Maty.Typechecker.Preprocessor do
         else
           {:info, _} ->
             error =
-              Error.function_spec_info_mismatch(
+              Error.TypeSpecification.function_spec_info_mismatch(
                 spec_name: spec_name,
                 spec_arity: length(args_asts),
                 fn_name: name,
@@ -67,12 +67,12 @@ defmodule Maty.Typechecker.Preprocessor do
             Module.put_attribute(module, :spec_errors, {{name, arity}, error})
 
           {:args_ok, {:error, msg}} ->
-            error = Error.spec_args_not_well_typed(spec_name, args_asts, msg)
+            error = Error.TypeSpecification.spec_args_not_well_typed(spec_name, args_asts, msg)
             Logger.error(error)
             Module.put_attribute(module, :spec_errors, {{name, arity}, error})
 
           {:return_ok, {:error, msg}} ->
-            error = Error.spec_return_not_well_typed(spec_name, return_ast, msg)
+            error = Error.TypeSpecification.spec_return_not_well_typed(spec_name, return_ast, msg)
             Logger.error(error)
             Module.put_attribute(module, :spec_errors, {{name, arity}, error})
 
@@ -96,7 +96,7 @@ defmodule Maty.Typechecker.Preprocessor do
       Enum.map(parsed_results, fn {:ok, type} -> type end)
     else
       {:error, msg} = Enum.at(parsed_results, failed_index)
-      {:error, Error.parse_error_at(failed_index, spec_name, msg)}
+      {:error, Error.TypeSpecification.parse_error_at(failed_index, spec_name, msg)}
     end
   end
 end
@@ -147,7 +147,7 @@ defmodule Maty.Typechecker.TypeSpecParser do
   defp do_parse({atom_name, _meta, []}, type_env) when is_atom(atom_name) do
     case Map.fetch(type_env, atom_name) do
       {:ok, internal_type} -> {:ok, internal_type}
-      :error -> {:error, Error.unknown_type_constructor(atom_name)}
+      :error -> {:error, Error.TypeSpecification.unknown_type_constructor(atom_name)}
     end
   end
 
@@ -168,7 +168,7 @@ defmodule Maty.Typechecker.TypeSpecParser do
 
   # Catch-all for unsupported AST formats
   defp do_parse(other_ast, _type_env) do
-    {:error, Error.unsupported_type_constructor(other_ast)}
+    {:error, Error.TypeSpecification.unsupported_type_constructor(other_ast)}
   end
 
   defp parse_tuple_elements(element_asts, type_env) do

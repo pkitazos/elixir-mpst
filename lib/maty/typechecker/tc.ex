@@ -180,7 +180,8 @@ defmodule Maty.Typechecker.TC do
           # todo: add meta information to the error if possible
           meta = []
           # pin - convert to new kind of error
-          {:error, Error.list_elements_incompatible(meta, Enum.reverse(types_rev)), final_env}
+          {:error, Error.TypeMismatch.list_elements_incompatible(meta, Enum.reverse(types_rev)),
+           final_env}
         else
           {:ok, {{:list, element_type}, final_st}, final_env}
         end
@@ -283,13 +284,15 @@ defmodule Maty.Typechecker.TC do
                 # We require literal atom keys.
                 # Error for non-literal atom key
                 # pin - convert to new kind of error
-                error = Error.complex_map_key(meta, key_ast)
+                error = Error.PatternMatching.complex_map_key(meta, key_ast)
                 {:halt, {:error, error, key_env}}
               end
             else
               # Key type check failed (key_type was not :atom).
               # pin - convert to new kind of error
-              error = Error.invalid_map_key_type(meta, expected: :atom, got: key_type)
+              error =
+                Error.PatternMatching.invalid_map_key_type(meta, expected: :atom, got: key_type)
+
               # Halt the reduction.
               {:halt, {:error, error, key_env}}
             end
@@ -323,7 +326,7 @@ defmodule Maty.Typechecker.TC do
 
       {:ok, {other_type, _operand_st}, operand_env} ->
         # pin - convert to new kind of error
-        error = Error.logical_operator_requires_boolean(meta, "not", other_type)
+        error = Error.TypeMismatch.logical_operator_requires_boolean(meta, "not", other_type)
         {:error, error, operand_env}
 
       {:error, error, err_env} ->
@@ -355,7 +358,7 @@ defmodule Maty.Typechecker.TC do
 
       {:op_check, :error, [lhs_type, rhs_type, rhs_env]} ->
         # pin - convert to new kind of error
-        error = Error.binary_operator_type_mismatch(meta, op, lhs_type, rhs_type)
+        error = Error.TypeMismatch.binary_operator_type_mismatch(meta, op, lhs_type, rhs_type)
         {:error, error, rhs_env}
     end
   end
@@ -388,7 +391,7 @@ defmodule Maty.Typechecker.TC do
 
       {:op_check, :error, [lhs_type, rhs_type, rhs_env]} ->
         # pin - convert to new kind of error
-        error = Error.binary_operator_type_mismatch(meta, :<>, lhs_type, rhs_type)
+        error = Error.TypeMismatch.binary_operator_type_mismatch(meta, :<>, lhs_type, rhs_type)
         {:error, error, rhs_env}
     end
   end
@@ -415,7 +418,7 @@ defmodule Maty.Typechecker.TC do
 
       {:op_check, :error, [lhs_type, rhs_type, rhs_env]} ->
         # pin - convert to new kind of error
-        error = Error.logical_operator_type_mismatch(meta, op, lhs_type, rhs_type)
+        error = Error.TypeMismatch.logical_operator_type_mismatch(meta, op, lhs_type, rhs_type)
         {:error, error, rhs_env}
     end
   end
@@ -922,7 +925,10 @@ defmodule Maty.Typechecker.TC do
 
               nil ->
                 Logger.error(inspect(ast))
-                error = Error.no_matching_function_clause(meta, func_id, actual_arg_types)
+
+                error =
+                  Error.FunctionCall.no_matching_function_clause(meta, func_id, actual_arg_types)
+
                 {:error, error, final_env}
             end
 
@@ -935,7 +941,7 @@ defmodule Maty.Typechecker.TC do
       {:ok, []} ->
         # todo: more specific error
         Logger.error("spec might be broken?")
-        error = Error.function_not_exist(meta, func_id)
+        error = Error.FunctionCall.function_not_exist(meta, func_id)
         {:error, error, var_env}
 
       :error ->
@@ -943,7 +949,7 @@ defmodule Maty.Typechecker.TC do
         func = Utils.to_func(func_id)
         # pin - convert to new kind of error
         Logger.error("can't find function #{func} in Psi")
-        error = Error.function_not_exist(meta, func)
+        error = Error.FunctionCall.function_not_exist(meta, func)
         {:error, error, var_env}
     end
   end
@@ -1051,7 +1057,7 @@ defmodule Maty.Typechecker.TC do
 
       :error ->
         func_str = Utils.to_func(func_id)
-        error = Error.no_spec_for_function(func_str)
+        error = Error.TypeSpecification.no_spec_for_function(func_str)
         List.duplicate({:error, error}, length(clauses))
     end
   end
@@ -1332,7 +1338,13 @@ defmodule Maty.Typechecker.TC do
       :arity_ok
     else
       func_str = Utils.to_func(func_id)
-      error = Error.arity_mismatch(meta, func_str, expected: length(spec_args_types), got: arity)
+
+      error =
+        Error.FunctionCall.arity_mismatch(meta, func_str,
+          expected: length(spec_args_types),
+          got: arity
+        )
+
       {:error, error}
     end
   end
@@ -1392,7 +1404,7 @@ defmodule Maty.Typechecker.TC do
     if final_st == expected_st do
       :state_ok
     else
-      error = Error.function_altered_state(meta, func_id, final_st)
+      error = Error.FunctionCall.function_altered_state(meta, func_id, final_st)
       {:error, error}
     end
   end
@@ -1403,7 +1415,7 @@ defmodule Maty.Typechecker.TC do
       :type_ok
     else
       error =
-        Error.return_type_mismatch(meta,
+        Error.TypeMismatch.return_type_mismatch(meta,
           expected: spec_return_type,
           got: actual_return_type
         )
@@ -1518,7 +1530,7 @@ defmodule Maty.Typechecker.TC do
           meta = []
 
           error =
-            Error.pattern_type_mismatch(meta,
+            Error.PatternMatching.pattern_type_mismatch(meta,
               pattern: literal_pattern,
               expected: expected_type,
               got: literal_type
@@ -1557,7 +1569,7 @@ defmodule Maty.Typechecker.TC do
 
         # todo: fix the `got` value
         error =
-          Error.pattern_type_mismatch(meta,
+          Error.PatternMatching.pattern_type_mismatch(meta,
             pattern: [],
             expected: expected_type,
             got: "{:list, :any}"
@@ -1582,7 +1594,7 @@ defmodule Maty.Typechecker.TC do
         meta = []
 
         error =
-          Error.pattern_type_mismatch(meta,
+          Error.PatternMatching.pattern_type_mismatch(meta,
             pattern: {},
             expected: expected_type,
             got: "{:tuple, []}"
@@ -1607,7 +1619,7 @@ defmodule Maty.Typechecker.TC do
         meta = []
 
         error =
-          Error.pattern_type_mismatch(meta,
+          Error.PatternMatching.pattern_type_mismatch(meta,
             pattern: %{},
             expected: expected_type,
             got: "{:map, %{}}"
@@ -1640,7 +1652,11 @@ defmodule Maty.Typechecker.TC do
 
       other_type ->
         error =
-          Error.pattern_type_mismatch(meta, pattern: "[h|t]", expected: "List", got: other_type)
+          Error.PatternMatching.pattern_type_mismatch(meta,
+            pattern: "[h|t]",
+            expected: "List",
+            got: other_type
+          )
 
         {:error, error, var_env}
     end
@@ -1665,14 +1681,20 @@ defmodule Maty.Typechecker.TC do
 
       {:tuple, other_types} ->
         meta = []
-        error = Error.pattern_arity_mismatch(meta, "Tuple", expected: 2, got: length(other_types))
+
+        error =
+          Error.PatternMatching.pattern_arity_mismatch(meta, "Tuple",
+            expected: 2,
+            got: length(other_types)
+          )
+
         {:error, error, var_env}
 
       other_type ->
         meta = []
 
         error =
-          Error.pattern_type_mismatch(meta,
+          Error.PatternMatching.pattern_type_mismatch(meta,
             pattern: pattern_ast,
             expected: "Tuple",
             got: other_type
@@ -1687,7 +1709,7 @@ defmodule Maty.Typechecker.TC do
 
     case expected_type do
       {:tuple, expected_types} when length(elements_asts) == length(expected_types) ->
-        # process elements sequentially, checking disjointness at each step
+        # process elements sequentially, checking disjointedness at each step
         initial_acc = {:ok, %{}, var_env}
 
         Enum.zip(elements_asts, expected_types)
@@ -1719,7 +1741,7 @@ defmodule Maty.Typechecker.TC do
 
       {:tuple, expected_types} ->
         error =
-          Error.pattern_arity_mismatch(meta, "Tuple",
+          Error.PatternMatching.pattern_arity_mismatch(meta, "Tuple",
             expected: length(expected_types),
             got: length(elements_asts)
           )
@@ -1728,7 +1750,11 @@ defmodule Maty.Typechecker.TC do
 
       other_type ->
         error =
-          Error.pattern_type_mismatch(meta, pattern: "{...}", expected: "Tuple", got: other_type)
+          Error.PatternMatching.pattern_type_mismatch(meta,
+            pattern: "{...}",
+            expected: "Tuple",
+            got: other_type
+          )
 
         {:error, error, var_env}
     end
@@ -1750,14 +1776,16 @@ defmodule Maty.Typechecker.TC do
             literal_key = Helpers.ast_to_literal(key_ast)
 
             if not is_atom(literal_key) do
-              {:halt, {:error, Error.pattern_map_key_not_atom(meta, key_ast), current_env}}
+              {:halt,
+               {:error, Error.PatternMatching.pattern_map_key_not_atom(meta, key_ast),
+                current_env}}
             else
               # check if key exists in expected type map and get expected value type
               case Map.fetch(expected_type_map, literal_key) do
                 {:ok, p_expected_type} ->
                   case tc_pattern(p_ast, p_expected_type, current_env) do
                     {:ok, new_bindings, updated_env} ->
-                      # check disjointness and merge
+                      # check disjointedness and merge
                       case Helpers.check_and_merge_bindings(
                              acc_bindings,
                              new_bindings,
@@ -1776,7 +1804,7 @@ defmodule Maty.Typechecker.TC do
 
                 :error ->
                   # key from pattern not found in expected map type
-                  error = Error.pattern_map_key_not_found(meta, literal_key)
+                  error = Error.PatternMatching.pattern_map_key_not_found(meta, literal_key)
                   {:halt, {:error, error, current_env}}
               end
             end
@@ -1789,7 +1817,11 @@ defmodule Maty.Typechecker.TC do
 
       other_type ->
         error =
-          Error.pattern_type_mismatch(meta, pattern: "%{...}", expected: "Map", got: other_type)
+          Error.PatternMatching.pattern_type_mismatch(meta,
+            pattern: "%{...}",
+            expected: "Map",
+            got: other_type
+          )
 
         {:error, error, var_env}
     end

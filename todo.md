@@ -2,8 +2,6 @@
 
 ## Tasks
 
-- [ ] make sure 
-
 - [x] branches handled by separate clauses accumulated in Π environment
 - [x] case expressions in non-handlers
 - [ ] more map operations

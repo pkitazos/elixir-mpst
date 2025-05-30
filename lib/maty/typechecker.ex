@@ -176,11 +176,11 @@ defmodule Maty.Typechecker do
                 end
               else
                 {:clause, _other} ->
-                  error_msg = Error.wrong_number_of_clauses()
+                  error_msg = Error.FunctionCall.wrong_number_of_clauses()
                   [{func_id, error_msg} | acc]
 
                 {:signature, _other} ->
-                  error_msg = Error.wrong_number_of_specs()
+                  error_msg = Error.FunctionCall.wrong_number_of_specs()
                   [{func_id, error_msg} | acc]
               end
 

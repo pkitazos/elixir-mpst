@@ -116,7 +116,7 @@ defmodule Maty.Typechecker.Helpers do
       {:ok, merged_new_bindings, updated_env}
     else
       conflicting_vars = Enum.join(intersection, ", ")
-      error = Error.conflicting_pattern_bindings(conflicting_vars)
+      error = Error.PatternMatching.conflicting_pattern_bindings(conflicting_vars)
       {:error, error, current_env}
     end
   end
@@ -171,9 +171,9 @@ defmodule Maty.Typechecker.Helpers do
         # determine which join failed
         error_msg =
           if joined_t == :error_incompatible_types do
-            Error.case_branches_incompatible_types(acc_t, ti)
+            Error.TypeMismatch.case_branches_incompatible_types(acc_t, ti)
           else
-            Error.case_branches_incompatible_states(acc_q, qi)
+            Error.TypeMismatch.case_branches_incompatible_states(acc_q, qi)
           end
 
         {:halt, {:error, error_msg}}
@@ -186,7 +186,12 @@ defmodule Maty.Typechecker.Helpers do
       :ok
     else
       # New Error
-      error = Error.send_role_mismatch(meta, expected: expected_role, got: literal_recipient)
+      error =
+        Error.TypeMismatch.send_role_mismatch(meta,
+          expected: expected_role,
+          got: literal_recipient
+        )
+
       {:error, error}
     end
   end
@@ -197,7 +202,7 @@ defmodule Maty.Typechecker.Helpers do
 
   def check_message_structure(other_ast, meta) do
     # New Error
-    error = Error.send_message_not_tuple(meta, got: other_ast)
+    error = Error.TypeMismatch.send_message_not_tuple(meta, got: other_ast)
     {:error, error}
   end
 
@@ -250,7 +255,7 @@ defmodule Maty.Typechecker.Helpers do
     if Type.is?(state_type, :maty_actor_state) do
       :ok
     else
-      error = Error.invalid_maty_state_type(meta, got: state_type)
+      error = Error.TypeMismatch.invalid_maty_state_type(meta, got: state_type)
       {:error, error}
     end
   end
