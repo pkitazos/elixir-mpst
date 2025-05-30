@@ -101,6 +101,13 @@ defmodule Maty.Typechecker.TC do
     {:ok, {:any, st_pre}, var_env}
   end
 
+  # todo: either add support for keyword lists or make this just work properly
+  # as in this part of the register macro could either straight up expand to an anonymous function
+  # or it could require a list of 2-tuples where
+  # the first element is a tagged tuple containing an atom which maps to a handler
+  # and the second element is a tagged tuple containing a list of arguments of whatever type
+  # and the types need to match the type of the handler somehow?
+
   # --- Init Handler reference (Keyword list is technically a List)---
   # Handles passing a reference to an init_handler when registering
   def tc_expr(module, var_env, st_pre, [callback: init_handler, args: args_ast] = _ast)
@@ -111,6 +118,7 @@ defmodule Maty.Typechecker.TC do
     if Map.has_key?(delta_I, init_handler) do
       {:ok, {{:fun, length(args_ast)}, st_pre}, var_env}
     else
+      # pin - convert to new kind of error
       {:error, "Trying to register with invalid init_handler", var_env}
     end
   end
@@ -123,6 +131,7 @@ defmodule Maty.Typechecker.TC do
     if Map.has_key?(delta_I, init_handler) do
       {:ok, {{:fun, 0}, st_pre}, var_env}
     else
+      # pin - convert to new kind of error
       {:error, "Trying to register with invalid init_handler", var_env}
     end
   end
@@ -134,6 +143,7 @@ defmodule Maty.Typechecker.TC do
     if Map.has_key?(delta_I, init_handler) do
       {:ok, {{:fun, 0}, st_pre}, var_env}
     else
+      # pin - convert to new kind of error
       {:error, "Trying to register with invalid init_handler", var_env}
     end
   end
@@ -169,6 +179,7 @@ defmodule Maty.Typechecker.TC do
         if element_type == :error_incompatible do
           # todo: add meta information to the error if possible
           meta = []
+          # pin - convert to new kind of error
           {:error, Error.list_elements_incompatible(meta, Enum.reverse(types_rev)), final_env}
         else
           {:ok, {{:list, element_type}, final_st}, final_env}
@@ -183,7 +194,6 @@ defmodule Maty.Typechecker.TC do
   # Preserves session state.
   def tc_expr(_module, var_env, st_pre, {:{}, _, []}) do
     stack_trace(2)
-    # Formal: Tuple[]
     {:ok, {{:tuple, []}, st_pre}, var_env}
   end
 
@@ -194,8 +204,8 @@ defmodule Maty.Typechecker.TC do
 
     with {:v1, {:ok, {v1_type, v1_st}, v1_env}} <-
            {:v1, tc_expr(module, var_env, st_pre, v1_ast)},
-         {:v2, {:ok, {v2_type, v2_st}, v2_env}} <- {:v2, tc_expr(module, v1_env, v1_st, v2_ast)} do
-      # potentially type 2-tuples the same way we type n-tuple
+         {:v2, {:ok, {v2_type, v2_st}, v2_env}} <-
+           {:v2, tc_expr(module, v1_env, v1_st, v2_ast)} do
       {:ok, {{:tuple, [v1_type, v2_type]}, v2_st}, v2_env}
     else
       {:v1, {:error, error, err_env}} -> {:error, error, err_env}
@@ -251,6 +261,7 @@ defmodule Maty.Typechecker.TC do
             if key_type == :atom do
               literal_key = Helpers.ast_to_literal(key_ast)
 
+              # todo: this whole thing needs cleaning up tbh
               # Check if the key AST could be converted to a literal atom
               if is_atom(literal_key) do
                 # 4. Typecheck the value AST (using state and env from key check)
@@ -271,11 +282,13 @@ defmodule Maty.Typechecker.TC do
                 # Or Helpers.ast_to_literal returned an error indicator.
                 # We require literal atom keys.
                 # Error for non-literal atom key
+                # pin - convert to new kind of error
                 error = Error.complex_map_key(meta, key_ast)
                 {:halt, {:error, error, key_env}}
               end
             else
               # Key type check failed (key_type was not :atom).
+              # pin - convert to new kind of error
               error = Error.invalid_map_key_type(meta, expected: :atom, got: key_type)
               # Halt the reduction.
               {:halt, {:error, error, key_env}}
@@ -309,6 +322,7 @@ defmodule Maty.Typechecker.TC do
         {:ok, {:boolean, operand_st}, operand_env}
 
       {:ok, {other_type, _operand_st}, operand_env} ->
+        # pin - convert to new kind of error
         error = Error.logical_operator_requires_boolean(meta, "not", other_type)
         {:error, error, operand_env}
 
@@ -328,6 +342,7 @@ defmodule Maty.Typechecker.TC do
            {:lhs, tc_expr(module, var_env, st_pre, lhs_ast)},
          {:rhs, {:ok, {rhs_type, rhs_st}, rhs_env}} <-
            {:rhs, tc_expr(module, lhs_env, lhs_st, rhs_ast)},
+         # pin - maybe helper could return more standard type
          {:op_check, {:ok, result_type}, _} <-
            {:op_check, Helpers.op_type_rel(op, lhs_type, rhs_type), [lhs_type, rhs_type, rhs_env]} do
       {:ok, {result_type, rhs_st}, rhs_env}
@@ -339,6 +354,7 @@ defmodule Maty.Typechecker.TC do
         {:error, msg, env}
 
       {:op_check, :error, [lhs_type, rhs_type, rhs_env]} ->
+        # pin - convert to new kind of error
         error = Error.binary_operator_type_mismatch(meta, op, lhs_type, rhs_type)
         {:error, error, rhs_env}
     end
@@ -358,6 +374,7 @@ defmodule Maty.Typechecker.TC do
            {:lhs, tc_expr(module, var_env, st_pre, lhs_ast)},
          {:rhs, {:ok, {rhs_type, rhs_st}, rhs_env}} <-
            {:rhs, tc_expr(module, lhs_env, lhs_st, rhs_ast)},
+         # pin - maybe helper could return more standard type
          {:op_check, {:ok, result_type}, _} <-
            {:op_check, Helpers.op_type_rel(:<>, lhs_type, rhs_type),
             [lhs_type, rhs_type, rhs_env]} do
@@ -370,6 +387,7 @@ defmodule Maty.Typechecker.TC do
         {:error, msg, env}
 
       {:op_check, :error, [lhs_type, rhs_type, rhs_env]} ->
+        # pin - convert to new kind of error
         error = Error.binary_operator_type_mismatch(meta, :<>, lhs_type, rhs_type)
         {:error, error, rhs_env}
     end
@@ -384,6 +402,7 @@ defmodule Maty.Typechecker.TC do
            {:lhs, tc_expr(module, var_env, st_pre, lhs_ast)},
          {:rhs, {:ok, {rhs_type, rhs_st}, rhs_env}} <-
            {:rhs, tc_expr(module, lhs_env, lhs_st, rhs_ast)},
+         # pin - maybe helper could return more standard type
          {:op_check, {:ok, result_type}, _} <-
            {:op_check, Helpers.op_type_rel(op, lhs_type, rhs_type), [lhs_type, rhs_type, rhs_env]} do
       {:ok, {result_type, rhs_st}, rhs_env}
@@ -395,6 +414,7 @@ defmodule Maty.Typechecker.TC do
         {:error, msg, env}
 
       {:op_check, :error, [lhs_type, rhs_type, rhs_env]} ->
+        # pin - convert to new kind of error
         error = Error.logical_operator_type_mismatch(meta, op, lhs_type, rhs_type)
         {:error, error, rhs_env}
     end
@@ -405,6 +425,7 @@ defmodule Maty.Typechecker.TC do
   # Disallow raw 'receive'
   def tc_expr(_module, var_env, _st_pre, {:receive, meta, _}) do
     stack_trace(11)
+    # pin - convert to new kind of error
     {:error, Error.no_raw_receive(meta), var_env}
   end
 
@@ -412,6 +433,7 @@ defmodule Maty.Typechecker.TC do
   def tc_expr(_module, var_env, _st_pre, {{:., meta, [:erlang, :send]}, _, args})
       when length(args) in [2, 3] do
     stack_trace(12)
+    # pin - convert to new kind of error
     {:error, Error.no_raw_send(meta), var_env}
   end
 
@@ -419,11 +441,14 @@ defmodule Maty.Typechecker.TC do
   def tc_expr(_module, var_env, _st_pre, {{:., meta, [:Kernel, :send]}, _, args})
       when length(args) == 2 do
     stack_trace(13)
+    # pin - convert to new kind of error
     {:error, Error.no_raw_send(meta), var_env}
   end
 
   # --- Anonymous Functions and Captures ---
   # todo: these are a bit rudimentary
+  # for proper typechecking of anonymous functions and/or captures we may need to either introduce more syntax
+  # or change the typechecker to use constraints and unification
 
   # Anonymous function: fn args -> ... end
   def tc_expr(_module, var_env, st_pre, {:fn, _meta, [{:->, _, [args_ast, _body_ast]}]}) do
@@ -466,6 +491,7 @@ defmodule Maty.Typechecker.TC do
 
     with {:e1, {:ok, {type_A, st_post_e1}, env_post_e1}} <-
            {:e1, tc_expr(module, var_env, st_pre, expr1_ast)},
+         #  todo not sure about the naming of the atoms here
          {:p_match, {:ok, _new_bindings, updated_env_with_bindings}} <-
            {:p_match, tc_pattern(pattern_ast, type_A, env_post_e1)} do
       {:ok, {type_A, st_post_e1}, updated_env_with_bindings}
@@ -483,7 +509,9 @@ defmodule Maty.Typechecker.TC do
 
     with {:scrutinee, {:ok, {type_A, st_after_scrutinee}, env_after_scrutinee}} <-
            {:scrutinee, tc_expr(module, var_env, st_pre, scrutinee_ast)},
+         # pin - maybe helper could return more standard type
          :ok <- Helpers.check_st_unchanged(st_pre, st_after_scrutinee, meta) do
+      # todo: this is also a bit of a messy one
       branch_results =
         Enum.map(clauses_list, fn {:->, _clause_meta, [[p_ast], e_ast]} ->
           case tc_pattern(p_ast, type_A, env_after_scrutinee) do
@@ -491,6 +519,7 @@ defmodule Maty.Typechecker.TC do
               tc_expr(module, env_for_e, st_pre, e_ast)
               |> case do
                 # Success for this branch, return the result pair
+                # todo: the names for these vars suck
                 {:ok, {type_Ti, st_Q_i}, _env_final_i} -> {:ok, {type_Ti, st_Q_i}}
                 # Error in branch body
                 {:error, msg, _env} -> {:error, msg}
@@ -551,6 +580,7 @@ defmodule Maty.Typechecker.TC do
                {:payload, tc_expr(module, recipient_env, recipient_st, payload_expr_ast)},
 
              # 5. Find matching branch for the label
+             #  pin - this is really messy
              {:branch, {:ok, matched_branch}, [got: _attempted_match, expected: _branches], _st} <-
                {
                  :branch,
@@ -559,10 +589,10 @@ defmodule Maty.Typechecker.TC do
                  payload_st
                },
              %{payload: expected_payload_type, continue_as: st_Sj} = matched_branch,
-
              # Ensure payload check pure
              :ok <- Helpers.check_st_unchanged(recipient_st, payload_st, meta),
              # Check payload type matches expected
+             # todo: should try have it so that the shape of the data sent to the error branches is a little more standardised / uniform
              {:payload, :ok, _st} <-
                {:payload, Helpers.check_payload_type(actual_payload_type, expected_payload_type),
                 payload_st} do
@@ -588,6 +618,7 @@ defmodule Maty.Typechecker.TC do
 
             {:error, error_msg, var_env}
 
+          # todo: try doing something about this situation. don't wanna have to check twice for the label violations
           {:branch, {:error, :payload_mismatch},
            [got: {label_received, payload_received}, expected: branches], st} ->
             expected_branch =
@@ -634,6 +665,7 @@ defmodule Maty.Typechecker.TC do
 
             {:error, error_msg, var_env}
 
+          # todo: fix this it
           {label, e} when label in [:recipient, :message, :branch, :payload] ->
             e
         end
@@ -643,6 +675,7 @@ defmodule Maty.Typechecker.TC do
           Error.ProtocolViolation.incorrect_action(
             module,
             meta,
+            # todo: try to render shape of message
             [got: "MatyDSL.send(:#{recipient_ast}, message)"],
             other_state
           )
@@ -665,10 +698,12 @@ defmodule Maty.Typechecker.TC do
          {state_var, _, _} <- state_ast,
          {:v, {:ok, {state_type, ^st_pre}, var_env}} <-
            {:v, tc_expr(module, var_env, st_pre, state_ast)},
+         # pin - maybe helper could return more standard type
          :ok <- Helpers.check_maty_state_type(state_type, meta),
          var_env = Map.put(var_env, state_var, Type.maty_actor_state()) do
       {:ok, {Type.maty_actor_state(), st_pre}, var_env}
     else
+      # pin - convert to new kind of error
       _other -> {:error, "set state operation is not well structure"}
     end
   end
@@ -687,10 +722,12 @@ defmodule Maty.Typechecker.TC do
          {state_var, _, _} <- state_ast,
          {:v, {:ok, {state_type, ^st_pre}, var_env}} <-
            {:v, tc_expr(module, var_env, st_pre, state_ast)},
+         # pin - maybe helper could return more standard type
          :ok <- Helpers.check_maty_state_type(state_type, meta),
          var_env = Map.put(var_env, state_var, Type.maty_actor_state()) do
       {:ok, {:map, st_pre}, var_env}
     else
+      # pin - convert to new kind of error
       _other -> {:error, "get state operation is not well structure"}
     end
   end
@@ -704,15 +741,18 @@ defmodule Maty.Typechecker.TC do
         {{:., _, [:erlang, :throw]}, _, [{:{}, meta, [:suspend, handler_ast, state_ast]}]}
       ) do
     stack_trace(21)
-
+    # todo: threading of environment and st in with clause
     with {:h, {:ok, {handler_type, h_st}, h_env}} <-
            {:h, tc_expr(module, var_env, st_pre, handler_ast)},
+         # pin - maybe helper could return more standard type
          :ok <- Helpers.check_st_unchanged(st_pre, h_st, meta),
+         # pin - maybe helper could return more standard type
          {:suspension, :ok, [got: _], _st} <-
            {:suspension, Helpers.check_handler_type(handler_type, meta), [got: handler_ast],
             st_pre},
          #
          {:v, {:ok, {state_type, v_st}, v_env}} <- {:v, tc_expr(module, h_env, h_st, state_ast)},
+         # pin - maybe helper could return more standard type
          :ok <- Helpers.check_st_unchanged(h_st, v_st, meta),
          :ok <- Helpers.check_maty_state_type(state_type, meta),
          {state_var, _, _} = state_ast,
@@ -761,6 +801,7 @@ defmodule Maty.Typechecker.TC do
 
     with {:v, {:ok, {state_type, v_st}, v_env}} <-
            {:v, tc_expr(module, var_env, st_pre, state_ast)},
+         # pin - maybe helper could return more standard type
          :ok <- Helpers.check_st_unchanged(st_pre, v_st, meta),
          :ok <- Helpers.check_maty_state_type(state_type, meta),
          {state_var, _, _} = state_ast,
@@ -830,6 +871,7 @@ defmodule Maty.Typechecker.TC do
         error
 
       other ->
+        # pin - convert to new kind of error
         {:error, Error.internal_error("Unexpected mismatch in register check: #{inspect(other)}"),
          var_env}
     end
@@ -899,6 +941,7 @@ defmodule Maty.Typechecker.TC do
       :error ->
         # function definition not found in Psi
         func = Utils.to_func(func_id)
+        # pin - convert to new kind of error
         Logger.error("can't find function #{func} in Psi")
         error = Error.function_not_exist(meta, func)
         {:error, error, var_env}
@@ -915,6 +958,7 @@ defmodule Maty.Typechecker.TC do
 
     case Map.fetch(var_env, var_name) do
       {:ok, elixir_type} -> {:ok, {elixir_type, st_pre}, var_env}
+      # pin - convert to new kind of error
       :error -> {:error, Error.variable_not_exist(meta, var_name), var_env}
     end
   end
@@ -990,12 +1034,13 @@ defmodule Maty.Typechecker.TC do
                    arg_pattern_asts,
                    spec_args_types
                  ),
-               #
+               # pin - maybe helper could return more standard type
                {:args_ok, body_var_env} <-
                  check_argument_patterns(clause_meta, arg_pattern_asts, spec_args_types),
-               #
+               # pin - maybe helper could return more standard type
                {:body_ok, {actual_return_type, final_st}, _final_env} <-
                  check_function_body(module, body_var_env, body_block),
+               # pin - maybe helper could return more standard type
                :state_ok <- check_final_state(clause_meta, func_id, final_st),
                :type_ok <- check_return_type(clause_meta, actual_return_type, spec_return_type) do
             {:ok, actual_return_type}
@@ -1109,21 +1154,9 @@ defmodule Maty.Typechecker.TC do
             expected: branch_options
           )
 
-        [
-          ok: %Maty.ST.SBranch{
-            label: :quote,
-            payload: :number,
-            continue_as: %Maty.ST.SOut{
-              to: :buyer2,
-              branches: [
-                %Maty.ST.SBranch{label: :share, payload: :number, continue_as: %Maty.ST.SEnd{}}
-              ]
-            }
-          }
-        ]
-
         {:error, error_msg}
 
+      # todo: fix the double incorrect message label check
       {:branch, {:error, :payload_mismatch},
        [got: {label_received, payload_received}, expected: branches], st} ->
         expected_branch =
@@ -1167,6 +1200,7 @@ defmodule Maty.Typechecker.TC do
         {:error, error}
 
       other ->
+        # pin - convert to new kind of error
         {:error, Error.internal_error("Unexpected mismatch in handler check: #{inspect(other)}")}
     end
   end
@@ -1243,8 +1277,11 @@ defmodule Maty.Typechecker.TC do
         error
 
       other ->
-        {:error,
-         Error.internal_error("Unexpected mismatch in init handler check: #{inspect(other)}")}
+        # pin - convert to new kind of error
+        error_msg =
+          Error.internal_error("Unexpected mismatch in init handler check: #{inspect(other)}")
+
+        {:error, error_msg}
     end
   end
 
@@ -1278,15 +1315,18 @@ defmodule Maty.Typechecker.TC do
       :ok
     else
       {:error, msg, _var_env} -> {:error, msg}
+      # pin - convert to new kind of error
       other -> {:error, "Something is not looking right: #{inspect(other)}"}
     end
   end
 
   # -------------- HELPERS sorta --------------------
-
+  # move
+  # pin - convert to new kind of error
   defp check_init_st(%ST.SIn{}), do: {:error, "Session precondition cannot be a receive"}
   defp check_init_st(_st), do: :ok
 
+  # move
   defp check_clause_arity(meta, func_id, arity, arg_pattern_asts, spec_args_types) do
     if length(arg_pattern_asts) == length(spec_args_types) do
       :arity_ok
@@ -1297,6 +1337,7 @@ defmodule Maty.Typechecker.TC do
     end
   end
 
+  # move
   defp check_argument_patterns(_meta, arg_pattern_asts, spec_args_types) do
     initial_arg_env = %{}
 
@@ -1330,6 +1371,7 @@ defmodule Maty.Typechecker.TC do
     end
   end
 
+  # move
   defp check_function_body(module, body_var_env, body_block) do
     body_asts = extract_body(body_block)
     initial_st = %ST.SEnd{}
@@ -1343,6 +1385,7 @@ defmodule Maty.Typechecker.TC do
     end
   end
 
+  # move
   defp check_final_state(meta, func_id, final_st) do
     expected_st = %ST.SEnd{}
 
@@ -1354,6 +1397,7 @@ defmodule Maty.Typechecker.TC do
     end
   end
 
+  # move
   defp check_return_type(meta, actual_return_type, spec_return_type) do
     if actual_return_type == spec_return_type do
       :type_ok
@@ -1368,6 +1412,7 @@ defmodule Maty.Typechecker.TC do
     end
   end
 
+  # move
   # Processes a list of expressions sequentially using tc_expr.
   # Returns the result of the *last* expression in the list.
   @spec tc_expr_list(
@@ -1405,6 +1450,7 @@ defmodule Maty.Typechecker.TC do
     )
   end
 
+  # move
   @doc """
   Checks if a pattern AST is compatible with an expected type and calculates
   the variable bindings introduced by the pattern. Corresponds to `⊢ p : A ⟹ Γ'`.
@@ -1749,6 +1795,7 @@ defmodule Maty.Typechecker.TC do
     end
   end
 
+  # move ?
   # Extracts a list of expressions from an AST body.
   #
   # This handles both block expressions (`do: begin ... end`) and single expressions.

@@ -1,19 +1,6 @@
 defmodule Maty.Typechecker.Error.ProtocolViolation do
   alias Maty.ST
 
-  def template(module, st, [line: line], [got: got, expected: expected], violation) do
-    """
-    \n\n** (ElixirMatyTypeError) Protocol Violation: #{violation}
-      Module: #{module}
-      Line: #{line}
-      --
-      Got: #{render_atom(got)}
-      Expected: #{render_atom(expected)}
-      --
-      Session Type: #{ST.repr(st)}
-    """
-  end
-
   defp render_atom(elt) when is_atom(elt), do: ":#{elt}"
   defp render_atom(elt), do: "#{inspect(elt)}"
 
