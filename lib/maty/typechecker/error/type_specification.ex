@@ -20,10 +20,6 @@ defmodule Maty.Typechecker.Error.TypeSpecification do
     "Spec info: {#{spec_name}, #{spec_arity}} doesn't match function info: {#{fn_name}, #{fn_arity}}"
   end
 
-  def missing_spec_annotation(func) do
-    "Function: #{func} is missing a @spec annotation"
-  end
-
   def spec_return_not_well_typed(spec_name, return_ast, msg) do
     "@spec return #{inspect(return_ast)} for #{inspect(spec_name)} is not well typed: #{inspect(msg)}"
   end
@@ -40,23 +36,11 @@ defmodule Maty.Typechecker.Error.TypeSpecification do
     "Error parsing argument ##{failed_index + 1} in spec #{spec_name}: #{msg}"
   end
 
-  def unexpected_error(func_id, other) do
-    "Unexpected error during spec processing for #{func_id}: #{inspect(other)}"
-  end
-
   def unknown_type_constructor(a) do
     "Unknown type constructor or type atom not found in type_env: #{a}"
   end
 
   def no_spec_for_function(type_specs) do
     "no spec for this function: #{inspect(type_specs)}"
-  end
-
-  def at_least_one_arg_not_well_typed(func, spec_args) do
-    "#{func} with types #{inspect(spec_args)} arguments not well typed. At least one argument is not well typed."
-  end
-
-  def invalid_session_type(error) do
-    "Invalid session type: #{inspect(error)}"
   end
 end
