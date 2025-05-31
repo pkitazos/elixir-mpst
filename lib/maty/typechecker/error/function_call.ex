@@ -1,66 +1,111 @@
 defmodule Maty.Typechecker.Error.FunctionCall do
-  defp with_meta(meta, str) do
-    meta = Keyword.take(meta, [:line, :column])
-    "#{inspect(meta)} #{str}"
+  alias Maty.Utils
+
+  defp render_type(type) when is_atom(type), do: ":#{type}"
+  defp render_type(type), do: "#{inspect(type)}"
+
+  # ok
+  def function_not_exist(module, meta, func_id) do
+    line = Keyword.fetch!(meta, :line)
+    func_str = Utils.to_func(func_id)
+
+    """
+    \n\n** (ElixirMatyTypeError) Function Call Error: Function Does Not Exist
+      Module: #{module}
+      Line: #{line}
+      --
+      Function: #{func_str}
+      --
+      The function #{func_str} is not defined in this module.
+    """
   end
 
-  defp display_opts([expected: expected, got: got] = _opts) do
-    "Expected: #{inspect(expected)} \nGot: #{inspect(got)}"
+  # ok
+  def arity_mismatch(module, meta, func_id, expected: expected, got: got) do
+    line = Keyword.fetch!(meta, :line)
+    func_str = Utils.to_func(func_id)
+
+    """
+    \n\n** (ElixirMatyTypeError) Function Call Error: Arity Mismatch
+      Module: #{module}
+      Line: #{line}
+      --
+      Function: #{func_str}
+      Expected arity: #{expected}
+      Got arity: #{got}
+      --
+      Arity mismatch between function spec and function definition.
+    """
   end
 
-  def function_not_exist(func) do
-    "function #{func} doesn't exist"
+  # ok
+  def no_matching_function_clause(module, meta, func_id, actual_arg_types) do
+    line = Keyword.fetch!(meta, :line)
+    func_str = Utils.to_func(func_id)
+
+    formatted_args =
+      actual_arg_types
+      |> Enum.map(&render_type/1)
+      |> Enum.join(", ")
+
+    """
+    \n\n** (ElixirMatyTypeError) Function Call Error: No Matching Function Clause
+      Module: #{module}
+      Line: #{line}
+      --
+      Function: #{func_str}
+      Called with argument types: (#{formatted_args})
+      --
+      No function clause matches the provided argument types.
+    """
   end
 
-  def function_not_exist(_a, func), do: "function_not_exist: #{func}"
+  # ok
+  def function_altered_state(module, meta, func_id, final_state) do
+    line = Keyword.fetch!(meta, :line)
+    func_str = Utils.to_func(func_id)
 
-  def too_few_arguments(meta, opts) do
-    with_meta(meta, "Too few params were given to function.\n#{display_opts(opts)}")
+    """
+    \n\n** (ElixirMatyTypeError) Function Call Error: Function Altered Session State
+      Module: #{module}
+      Line: #{line}
+      --
+      Function: #{func_str}
+      Final state: #{inspect(final_state)}
+      --
+      Function altered the session state when it should remain unchanged.
+    """
   end
 
-  def arity_mismatch(meta, func) do
-    with_meta(meta, "Arity mismatch between #{func} spec and function definition")
+  # ok
+  def wrong_number_of_clauses(module, func_id, expected: expected, got: got) do
+    func_str = Utils.to_func(func_id)
+
+    """
+    \n\n** (ElixirMatyTypeError) Function Call Error: Wrong Number of Clauses
+      Module: #{module}
+      Function: #{func_str}
+      --
+      Expected clauses: #{expected}
+      Got clauses: #{got}
+      --
+      Incompatible number of clauses defined for function.
+    """
   end
 
-  def arity_mismatch(_a, _b, _c), do: "arity_mismatch"
+  # ok
+  def wrong_number_of_specs(module, func_id, expected: expected, got: got) do
+    func_str = Utils.to_func(func_id)
 
-  def no_matching_function_clause(meta, func) do
-    with_meta(meta, "No function clause matches provided function info: #{func}")
-  end
-
-  def no_matching_function_clause(_a, _b, _c), do: "no_matching_function_clause"
-
-  def ambiguous_function_call(meta, func) do
-    with_meta(meta, "Too many function specs defined for function: #{func}")
-  end
-
-  def function_missing_session_type(meta, func) do
-    with_meta(meta, "function #{func} doesn't seem to have a session type stored")
-  end
-
-  def handler_from_unexpected_module(meta, opts) do
-    with_meta(meta, "Handler function from unexpected module.\n#{display_opts(opts)}")
-  end
-
-  def function_no_type do
-    "Can't typecheck this function"
-  end
-
-  def invalid_function_capture(meta, fun_capture) do
-    with_meta(meta, "Unsupported function reference syntax: #{inspect(fun_capture)}")
-  end
-
-  def function_altered_state(_a, _b, _c), do: "function_altered_state"
-
-  def insufficient_function_clauses do
-    "Not enough function clauses to support the annotated session type"
-  end
-
-  def wrong_number_of_clauses do
-    "Incompatible number of clauses defined for on_link/2"
-  end
-
-  def wrong_number_of_specs do
-    "Incompatible number of @spec's defined for on_link/2"
+    """
+    \n\n** (ElixirMatyTypeError) Function Call Error: Wrong Number of Specs
+      Module: #{module}
+      Function: #{func_str}
+      --
+      Expected specs: #{expected}
+      Got specs: #{got}
+      --
+      Incompatible number of @spec annotations defined for function.
+    """
   end
 end

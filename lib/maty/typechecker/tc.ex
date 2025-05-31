@@ -927,7 +927,12 @@ defmodule Maty.Typechecker.TC do
                 Logger.error(inspect(ast))
 
                 error =
-                  Error.FunctionCall.no_matching_function_clause(meta, func_id, actual_arg_types)
+                  Error.FunctionCall.no_matching_function_clause(
+                    module,
+                    meta,
+                    func_id,
+                    actual_arg_types
+                  )
 
                 {:error, error, final_env}
             end
@@ -941,15 +946,11 @@ defmodule Maty.Typechecker.TC do
       {:ok, []} ->
         # todo: more specific error
         Logger.error("spec might be broken?")
-        error = Error.FunctionCall.function_not_exist(meta, func_id)
+        error = Error.FunctionCall.function_not_exist(module, meta, func_id)
         {:error, error, var_env}
 
       :error ->
-        # function definition not found in Psi
-        func = Utils.to_func(func_id)
-        # pin - convert to new kind of error
-        Logger.error("can't find function #{func} in Psi")
-        error = Error.FunctionCall.function_not_exist(meta, func)
+        error = Error.FunctionCall.function_not_exist(module, meta, func_id)
         {:error, error, var_env}
     end
   end
@@ -1034,6 +1035,7 @@ defmodule Maty.Typechecker.TC do
              {clause_meta, arg_pattern_asts, _guards, body_block}} <- defs do
           with :arity_ok <-
                  check_clause_arity(
+                   module,
                    clause_meta,
                    func_id,
                    arity,
@@ -1047,7 +1049,7 @@ defmodule Maty.Typechecker.TC do
                {:body_ok, {actual_return_type, final_st}, _final_env} <-
                  check_function_body(module, body_var_env, body_block),
                # pin - maybe helper could return more standard type
-               :state_ok <- check_final_state(clause_meta, func_id, final_st),
+               :state_ok <- check_final_state(module, clause_meta, func_id, final_st),
                :type_ok <- check_return_type(clause_meta, actual_return_type, spec_return_type) do
             {:ok, actual_return_type}
           else
@@ -1333,14 +1335,13 @@ defmodule Maty.Typechecker.TC do
   defp check_init_st(_st), do: :ok
 
   # move
-  defp check_clause_arity(meta, func_id, arity, arg_pattern_asts, spec_args_types) do
+  # todo: fix this
+  defp check_clause_arity(module, meta, func_id, arity, arg_pattern_asts, spec_args_types) do
     if length(arg_pattern_asts) == length(spec_args_types) do
       :arity_ok
     else
-      func_str = Utils.to_func(func_id)
-
       error =
-        Error.FunctionCall.arity_mismatch(meta, func_str,
+        Error.FunctionCall.arity_mismatch(module, meta, func_id,
           expected: length(spec_args_types),
           got: arity
         )
@@ -1398,13 +1399,13 @@ defmodule Maty.Typechecker.TC do
   end
 
   # move
-  defp check_final_state(meta, func_id, final_st) do
+  defp check_final_state(module, meta, func_id, final_st) do
     expected_st = %ST.SEnd{}
 
     if final_st == expected_st do
       :state_ok
     else
-      error = Error.FunctionCall.function_altered_state(meta, func_id, final_st)
+      error = Error.FunctionCall.function_altered_state(module, meta, func_id, final_st)
       {:error, error}
     end
   end

@@ -175,12 +175,22 @@ defmodule Maty.Typechecker do
                   {:error, error_msg} -> [{func_id, error_msg} | acc]
                 end
               else
-                {:clause, _other} ->
-                  error_msg = Error.FunctionCall.wrong_number_of_clauses()
+                {:clause, got} ->
+                  error_msg =
+                    Error.FunctionCall.wrong_number_of_clauses(env.module, func_id,
+                      expected: 1,
+                      got: length(got)
+                    )
+
                   [{func_id, error_msg} | acc]
 
-                {:signature, _other} ->
-                  error_msg = Error.FunctionCall.wrong_number_of_specs()
+                {:signature, got} ->
+                  error_msg =
+                    Error.FunctionCall.wrong_number_of_specs(env.module, func_id,
+                      expected: 1,
+                      got: length(got)
+                    )
+
                   [{func_id, error_msg} | acc]
               end
 
