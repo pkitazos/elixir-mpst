@@ -1,4 +1,12 @@
 defmodule Maty.Typechecker.Error do
+  defstruct [:class, :func, :args]
+
+  @type t :: %__MODULE__{
+          class: atom(),
+          func: function(),
+          args: list(term())
+        }
+
   def version_mismatch(expected, got) do
     "Found version #{got} but expected #{expected}."
   end

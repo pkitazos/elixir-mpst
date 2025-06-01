@@ -2,7 +2,7 @@ defmodule Maty.Typechecker.Helpers do
   require Logger
 
   alias Maty.ST
-  alias Maty.Typechecker.Error
+  alias Maty.Typechecker.{Error, PatternBinding}
   alias Maty.Types.T, as: Type
 
   # Helper to unify list element types (simple version)
@@ -254,12 +254,12 @@ defmodule Maty.Typechecker.Helpers do
   def check_handler_type(_other_type, _meta), do: :error
 
   # Checks if a type is compatible with maty_actor_state
-  def check_maty_state_type(state_type, meta) do
+  def check_maty_state_type(state_type) do
     if Type.is?(state_type, :maty_actor_state) do
       :ok
     else
-      error = Error.TypeMismatch.invalid_maty_state_type(meta, got: state_type)
-      {:error, error}
+      error = Error.TypeMismatch.invalid_maty_state_type(state_type)
+      {:maty_state_error, error}
     end
   end
 
@@ -326,6 +326,46 @@ defmodule Maty.Typechecker.Helpers do
         )
 
       {:error, error}
+    end
+  end
+
+  # move
+  def check_argument_patterns(module, meta, arg_pattern_asts, spec_args_types) do
+    initial_arg_env = %{}
+
+    args_check_result =
+      Enum.zip(arg_pattern_asts, spec_args_types)
+      |> Enum.reduce_while(
+        {:ok, %{}, initial_arg_env},
+        fn {p_ast, expected_type}, {:ok, acc_bindings, current_env} ->
+          case PatternBinding.tc_pattern(module, p_ast, expected_type, current_env) do
+            {:ok, new_bindings, updated_env} ->
+              case check_and_merge_bindings(
+                     module,
+                     meta,
+                     acc_bindings,
+                     new_bindings,
+                     current_env
+                   ) do
+                {:ok, merged_bindings, _env_ignored} ->
+                  {:cont, {:ok, merged_bindings, updated_env}}
+
+                {:error, msg, _env} ->
+                  {:halt, {:error, msg}}
+              end
+
+            {:error, msg, _env} ->
+              {:halt, {:error, msg}}
+          end
+        end
+      )
+
+    case args_check_result do
+      {:ok, _final_bindings, body_var_env} ->
+        {:args_ok, body_var_env}
+
+      {:error, msg} ->
+        {:error, msg}
     end
   end
 end

@@ -183,7 +183,8 @@ defmodule Maty.Typechecker.TC do
           # todo: add meta information to the error if possible
           meta = []
 
-          {:error, Error.TypeMismatch.list_elements_incompatible(meta, Enum.reverse(types_rev)),
+          {:error,
+           Error.TypeMismatch.list_elements_incompatible(module, meta, Enum.reverse(types_rev)),
            final_env}
         else
           {:ok, {{:list, element_type}, final_st}, final_env}
@@ -362,7 +363,9 @@ defmodule Maty.Typechecker.TC do
         {:error, msg, env}
 
       {:op_check, :error, [lhs_type, rhs_type, rhs_env]} ->
-        error = Error.TypeMismatch.binary_operator_type_mismatch(meta, op, lhs_type, rhs_type)
+        error =
+          Error.TypeMismatch.binary_operator_type_mismatch(module, meta, op, lhs_type, rhs_type)
+
         {:error, error, rhs_env}
     end
   end
@@ -394,7 +397,9 @@ defmodule Maty.Typechecker.TC do
         {:error, msg, env}
 
       {:op_check, :error, [lhs_type, rhs_type, rhs_env]} ->
-        error = Error.TypeMismatch.binary_operator_type_mismatch(meta, :<>, lhs_type, rhs_type)
+        error =
+          Error.TypeMismatch.binary_operator_type_mismatch(module, meta, :<>, lhs_type, rhs_type)
+
         {:error, error, rhs_env}
     end
   end
@@ -420,7 +425,9 @@ defmodule Maty.Typechecker.TC do
         {:error, msg, env}
 
       {:op_check, :error, [lhs_type, rhs_type, rhs_env]} ->
-        error = Error.TypeMismatch.logical_operator_type_mismatch(meta, op, lhs_type, rhs_type)
+        error =
+          Error.TypeMismatch.logical_operator_type_mismatch(module, meta, op, lhs_type, rhs_type)
+
         {:error, error, rhs_env}
     end
   end
@@ -719,13 +726,17 @@ defmodule Maty.Typechecker.TC do
          {state_var, _, _} <- state_ast,
          {:v, {:ok, {state_type, ^st_pre}, var_env}} <-
            {:v, tc_expr(module, var_env, st_pre, state_ast)},
-         # pin - maybe helper could return more standard type
-         :ok <- Helpers.check_maty_state_type(state_type, meta),
+         :ok <- Helpers.check_maty_state_type(state_type),
          var_env = Map.put(var_env, state_var, Type.maty_actor_state()) do
       {:ok, {Type.maty_actor_state(), st_pre}, var_env}
     else
-      # pin - convert to new kind of error
-      _other -> {:error, "set state operation is not well structured"}
+      {:maty_state_error, error_internal} ->
+        error_msg = Error.TypeMismatch.invalid_maty_state_type(module, meta, error_internal)
+        {:error, error_msg}
+
+      # todo: revisit
+      _other ->
+        {:error, "set state operation is not well structured"}
     end
   end
 
@@ -743,13 +754,17 @@ defmodule Maty.Typechecker.TC do
          {state_var, _, _} <- state_ast,
          {:v, {:ok, {state_type, ^st_pre}, var_env}} <-
            {:v, tc_expr(module, var_env, st_pre, state_ast)},
-         # pin - maybe helper could return more standard type
-         :ok <- Helpers.check_maty_state_type(state_type, meta),
+         :ok <- Helpers.check_maty_state_type(state_type),
          var_env = Map.put(var_env, state_var, Type.maty_actor_state()) do
       {:ok, {:map, st_pre}, var_env}
     else
-      # pin - convert to new kind of error
-      _other -> {:error, "get state operation is not well structured"}
+      {:maty_state_error, error_internal} ->
+        error_msg = Error.TypeMismatch.invalid_maty_state_type(module, meta, error_internal)
+        {:error, error_msg}
+
+      # todo: revisit
+      _other ->
+        {:error, "get state operation is not well structured"}
     end
   end
 
@@ -775,7 +790,7 @@ defmodule Maty.Typechecker.TC do
          {:v, {:ok, {state_type, v_st}, v_env}} <- {:v, tc_expr(module, h_env, h_st, state_ast)},
          # pin - maybe helper could return more standard type
          :ok <- Helpers.check_st_unchanged(h_st, v_st, meta),
-         :ok <- Helpers.check_maty_state_type(state_type, meta),
+         :ok <- Helpers.check_maty_state_type(state_type),
          {state_var, _, _} = state_ast,
          {:st, %ST.SName{handler: expected_handler}, _state_var} <- {:st, v_st, state_var},
          {:handler_name, [got: ^expected_handler, expected: _expected_handler], _st} <-
@@ -805,6 +820,10 @@ defmodule Maty.Typechecker.TC do
 
         {:error, error_msg, var_env}
 
+      {:maty_state_error, error_internal} ->
+        error_msg = Error.TypeMismatch.invalid_maty_state_type(module, meta, error_internal)
+        {:error, error_msg}
+
       {:handler_name, handlers, st} ->
         error_msg =
           Error.ProtocolViolation.incorrect_handler_suspension(module, meta, st, handlers)
@@ -824,7 +843,7 @@ defmodule Maty.Typechecker.TC do
            {:v, tc_expr(module, var_env, st_pre, state_ast)},
          # pin - maybe helper could return more standard type
          :ok <- Helpers.check_st_unchanged(st_pre, v_st, meta),
-         :ok <- Helpers.check_maty_state_type(state_type, meta),
+         :ok <- Helpers.check_maty_state_type(state_type),
          {state_var, _, _} = state_ast,
          {:st, %ST.SEnd{}, _state_var} <- {:st, v_st, state_var} do
       {:ok, {:no_return, {:st_bottom, :done}}, v_env}
@@ -834,6 +853,10 @@ defmodule Maty.Typechecker.TC do
 
       {:error, msg} ->
         {:error, msg, var_env}
+
+      {:maty_state_error, error_internal} ->
+        error_msg = Error.TypeMismatch.invalid_maty_state_type(module, meta, error_internal)
+        {:error, error_msg}
 
       {:st, other_st, state_var} ->
         error_msg =
@@ -873,7 +896,7 @@ defmodule Maty.Typechecker.TC do
          # is state_ast an ActorState
          {:state, {:ok, {state_type, ^st_pre}, _}} <-
            {:state, tc_expr(module, var_env, st_pre, state_ast)},
-         :ok <- Helpers.check_maty_state_type(state_type, meta),
+         :ok <- Helpers.check_maty_state_type(state_type),
          return_type = {:tuple, [:ok, Type.maty_actor_state()]} do
       # all checks passed
 
@@ -890,6 +913,10 @@ defmodule Maty.Typechecker.TC do
 
       {:state, {:error, _msg, _var_env} = error} ->
         error
+
+      {:maty_state_error, error_internal} ->
+        error_msg = Error.TypeMismatch.invalid_maty_state_type(module, meta, error_internal)
+        {:error, error_msg}
 
       other ->
         # pin - convert to new kind of error
@@ -1091,8 +1118,7 @@ defmodule Maty.Typechecker.TC do
         end
 
       :error ->
-        func_str = Utils.to_func(func_id)
-        error = Error.TypeSpecification.no_spec_for_function(func_str)
+        error = Error.TypeSpecification.no_spec_for_function(module, func_id)
         List.duplicate({:error, error}, length(clauses))
     end
   end

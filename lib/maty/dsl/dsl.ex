@@ -42,6 +42,8 @@ defmodule Maty.DSL do
   def register(ap_pid, role, reg_info, state) do
     with {:ok, handler_name} when is_atom(handler_name) <- Keyword.fetch(reg_info, :callback),
          {:ok, init_args} <- Keyword.fetch(reg_info, :args) do
+      # identified the suspended callback
+
       init_token = make_ref()
       Kernel.send(ap_pid, {:register, role, self(), init_token})
 

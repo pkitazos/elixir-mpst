@@ -399,44 +399,4 @@ defmodule Maty.Typechecker.PatternBinding do
         {:error, error, var_env}
     end
   end
-
-  # move
-  def check_argument_patterns(module, meta, arg_pattern_asts, spec_args_types) do
-    initial_arg_env = %{}
-
-    args_check_result =
-      Enum.zip(arg_pattern_asts, spec_args_types)
-      |> Enum.reduce_while(
-        {:ok, %{}, initial_arg_env},
-        fn {p_ast, expected_type}, {:ok, acc_bindings, current_env} ->
-          case tc_pattern(module, p_ast, expected_type, current_env) do
-            {:ok, new_bindings, updated_env} ->
-              case Helpers.check_and_merge_bindings(
-                     module,
-                     meta,
-                     acc_bindings,
-                     new_bindings,
-                     current_env
-                   ) do
-                {:ok, merged_bindings, _env_ignored} ->
-                  {:cont, {:ok, merged_bindings, updated_env}}
-
-                {:error, msg, _env} ->
-                  {:halt, {:error, msg}}
-              end
-
-            {:error, msg, _env} ->
-              {:halt, {:error, msg}}
-          end
-        end
-      )
-
-    case args_check_result do
-      {:ok, _final_bindings, body_var_env} ->
-        {:args_ok, body_var_env}
-
-      {:error, msg} ->
-        {:error, msg}
-    end
-  end
 end

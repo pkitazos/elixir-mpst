@@ -1,4 +1,6 @@
 defmodule Maty.Typechecker.Error.TypeMismatch do
+  alias Maty.Typechecker.Error
+
   defp render_type(type) when is_atom(type), do: ":#{type}"
   defp render_type(type), do: "#{inspect(type)}"
 
@@ -103,20 +105,30 @@ defmodule Maty.Typechecker.Error.TypeMismatch do
     """
   end
 
-  # pin
-  def invalid_maty_state_type(module, meta, got: got_type) do
+  def invalid_maty_state_type(module, meta, %Error.Internal{
+        title: title,
+        opts: opts,
+        message: message
+      }) do
     line = Keyword.fetch!(meta, :line)
 
     """
-    \n\n** (ElixirMatyTypeError) Type Mismatch Error: Invalid Maty State Type
+    \n\n** (ElixirMatyTypeError) Type Mismatch Error: #{title}
       Module: #{module}
       Line: #{line}
       --
-      Expected type: :maty_actor_state
-      Got type: #{render_type(got_type)}
+      #{opts}
       --
-      Maty operations require a valid actor state type.
+      #{message}
     """
+  end
+
+  def invalid_maty_state_type(got_type) do
+    %Error.Internal{
+      title: "Invalid Maty State Type",
+      opts: "Expected type: :maty_actor_state\nGot type: #{render_type(got_type)}",
+      message: "Maty operations require a valid actor state type."
+    }
   end
 
   def send_message_not_tuple(module, meta, got: message_ast) do
