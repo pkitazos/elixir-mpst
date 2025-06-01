@@ -182,7 +182,7 @@ defmodule Maty.Typechecker.TC do
         if element_type == :error_incompatible do
           # todo: add meta information to the error if possible
           meta = []
-          # pin - convert to new kind of error
+
           {:error, Error.TypeMismatch.list_elements_incompatible(meta, Enum.reverse(types_rev)),
            final_env}
         else
@@ -329,8 +329,9 @@ defmodule Maty.Typechecker.TC do
         {:ok, {:boolean, operand_st}, operand_env}
 
       {:ok, {other_type, _operand_st}, operand_env} ->
-        # pin - convert to new kind of error
-        error = Error.TypeMismatch.logical_operator_requires_boolean(meta, "not", other_type)
+        error =
+          Error.TypeMismatch.logical_operator_requires_boolean(module, meta, :not, other_type)
+
         {:error, error, operand_env}
 
       {:error, error, err_env} ->
@@ -361,7 +362,6 @@ defmodule Maty.Typechecker.TC do
         {:error, msg, env}
 
       {:op_check, :error, [lhs_type, rhs_type, rhs_env]} ->
-        # pin - convert to new kind of error
         error = Error.TypeMismatch.binary_operator_type_mismatch(meta, op, lhs_type, rhs_type)
         {:error, error, rhs_env}
     end
@@ -394,7 +394,6 @@ defmodule Maty.Typechecker.TC do
         {:error, msg, env}
 
       {:op_check, :error, [lhs_type, rhs_type, rhs_env]} ->
-        # pin - convert to new kind of error
         error = Error.TypeMismatch.binary_operator_type_mismatch(meta, :<>, lhs_type, rhs_type)
         {:error, error, rhs_env}
     end
@@ -421,7 +420,6 @@ defmodule Maty.Typechecker.TC do
         {:error, msg, env}
 
       {:op_check, :error, [lhs_type, rhs_type, rhs_env]} ->
-        # pin - convert to new kind of error
         error = Error.TypeMismatch.logical_operator_type_mismatch(meta, op, lhs_type, rhs_type)
         {:error, error, rhs_env}
     end
@@ -546,8 +544,24 @@ defmodule Maty.Typechecker.TC do
         successful_results = Enum.map(branch_results, fn {:ok, res} -> res end)
 
         case Helpers.join_branch_results(successful_results) do
-          {:ok, {final_T, final_Q2}} -> {:ok, {final_T, final_Q2}, env_after_scrutinee}
-          {:error, error_msg} -> {:error, error_msg, env_after_scrutinee}
+          {:ok, {final_T, final_Q2}} ->
+            {:ok, {final_T, final_Q2}, env_after_scrutinee}
+
+          {:error, [t1: _b1, t2: _b2] = error_branches} ->
+            error_msg =
+              Error.TypeMismatch.case_branches_incompatible_types(module, meta, error_branches)
+
+            {:error, error_msg, env_after_scrutinee}
+
+          {:error, [q1: _b1, q2: _b2] = error_branches} ->
+            error_msg =
+              Error.TypeMismatch.case_branches_incompatible_session_states(
+                module,
+                meta,
+                error_branches
+              )
+
+            {:error, error_msg, env_after_scrutinee}
         end
       end
     else
@@ -573,14 +587,14 @@ defmodule Maty.Typechecker.TC do
              # Ensure recipient check pure
              :ok <- Helpers.check_st_unchanged(st_pre, recipient_st, meta),
 
-             # Check recipient matches expected role
-             #  :ok <- Helpers.check_recipient_role(recipient_ast, expected_role, meta),
+             # Check recipient matches expected rol
              {:role, [got: ^expected_role, expected: _expected_role], _st} <-
                {:role, [got: recipient_ast, expected: expected_role], recipient_st},
 
              # 4. Check message structure {label, payload_expr}
-             {:message, {:ok, literal_label, payload_expr_ast}} <-
-               {:message, Helpers.check_message_structure(message_ast, meta)},
+             #  pin - standardise helper function APIs
+             {:message_ok, literal_label, payload_expr_ast} <-
+               Helpers.check_message_structure(module, meta, message_ast),
 
              # Typecheck payload expression
              {:payload, {:ok, {actual_payload_type, payload_st}, payload_env}} <-
@@ -711,7 +725,7 @@ defmodule Maty.Typechecker.TC do
       {:ok, {Type.maty_actor_state(), st_pre}, var_env}
     else
       # pin - convert to new kind of error
-      _other -> {:error, "set state operation is not well structure"}
+      _other -> {:error, "set state operation is not well structured"}
     end
   end
 
@@ -735,7 +749,7 @@ defmodule Maty.Typechecker.TC do
       {:ok, {:map, st_pre}, var_env}
     else
       # pin - convert to new kind of error
-      _other -> {:error, "get state operation is not well structure"}
+      _other -> {:error, "get state operation is not well structured"}
     end
   end
 
@@ -1048,16 +1062,28 @@ defmodule Maty.Typechecker.TC do
         for {{spec_args_types, spec_return_type},
              {clause_meta, arg_pattern_asts, _guards, body_block}} <- defs do
           with :arity_ok <-
-                 check_clause_arity(module, clause_meta, func_id, arity, spec_args_types),
+                 Helpers.check_clause_arity(module, clause_meta, func_id, arity, spec_args_types),
                # pin - maybe helper could return more standard type
                {:args_ok, body_var_env} <-
-                 check_argument_patterns(module, clause_meta, arg_pattern_asts, spec_args_types),
+                 Helpers.check_argument_patterns(
+                   module,
+                   clause_meta,
+                   arg_pattern_asts,
+                   spec_args_types
+                 ),
                # pin - maybe helper could return more standard type
                {:body_ok, {actual_return_type, final_st}, _final_env} <-
                  check_function_body(module, body_var_env, body_block),
                # pin - maybe helper could return more standard type
-               :state_ok <- check_final_session_state(module, clause_meta, func_id, final_st),
-               :type_ok <- check_return_type(clause_meta, actual_return_type, spec_return_type) do
+               :state_ok <-
+                 Helpers.check_final_session_state(module, clause_meta, func_id, final_st),
+               :type_ok <-
+                 Helpers.check_return_type(
+                   module,
+                   clause_meta,
+                   actual_return_type,
+                   spec_return_type
+                 ) do
             {:ok, actual_return_type}
           else
             {:error, error_msg} -> {:error, error_msg}
@@ -1264,7 +1290,7 @@ defmodule Maty.Typechecker.TC do
          var_env = Map.put(var_env, state_var, Type.maty_actor_state()),
 
          # check the session type is NOT SIn (should be SOut or Suspend)
-         {:st, :ok} <- {:st, check_init_st(st_pre)},
+         {:st, :ok} <- {:st, Helpers.check_init_st(st_pre)},
 
          # extract only the relevant bits (leave out the try catch)
          body = extract_body(body_block),
@@ -1338,105 +1364,6 @@ defmodule Maty.Typechecker.TC do
     end
   end
 
-  # -------------- HELPERS sorta --------------------
-  # move
-  # pin - convert to new kind of error
-  defp check_init_st(%ST.SIn{}), do: {:error, "Session precondition cannot be a receive"}
-  defp check_init_st(_st), do: :ok
-
-  # move
-  defp check_clause_arity(module, meta, func_id, arity, spec_args_types) do
-    if arity == length(spec_args_types) do
-      :arity_ok
-    else
-      error =
-        Error.FunctionCall.arity_mismatch(module, meta, func_id,
-          expected: length(spec_args_types),
-          got: arity
-        )
-
-      {:error, error}
-    end
-  end
-
-  # move
-  defp check_argument_patterns(module, meta, arg_pattern_asts, spec_args_types) do
-    initial_arg_env = %{}
-
-    args_check_result =
-      Enum.zip(arg_pattern_asts, spec_args_types)
-      |> Enum.reduce_while(
-        {:ok, %{}, initial_arg_env},
-        fn {p_ast, expected_type}, {:ok, acc_bindings, current_env} ->
-          case tc_pattern(module, p_ast, expected_type, current_env) do
-            {:ok, new_bindings, updated_env} ->
-              case Helpers.check_and_merge_bindings(
-                     module,
-                     meta,
-                     acc_bindings,
-                     new_bindings,
-                     current_env
-                   ) do
-                {:ok, merged_bindings, _env_ignored} ->
-                  {:cont, {:ok, merged_bindings, updated_env}}
-
-                {:error, msg, _env} ->
-                  {:halt, {:error, msg}}
-              end
-
-            {:error, msg, _env} ->
-              {:halt, {:error, msg}}
-          end
-        end
-      )
-
-    case args_check_result do
-      {:ok, _final_bindings, body_var_env} ->
-        {:args_ok, body_var_env}
-
-      {:error, msg} ->
-        {:error, msg}
-    end
-  end
-
-  # move
-  # check if argument alters session state
-  defp check_function_body(module, body_var_env, body_block) do
-    body_asts = extract_body(body_block)
-    initial_st = %ST.SEnd{}
-
-    case tc_expr_list(module, body_var_env, initial_st, body_asts) do
-      {:ok, {return_type, final_st}, final_env} ->
-        {:body_ok, {return_type, final_st}, final_env}
-
-      {:error, msg, _env} ->
-        {:error, msg}
-    end
-  end
-
-  # move
-  defp check_final_session_state(_module, _meta, _func_id, %ST.SEnd{}), do: :state_ok
-
-  defp check_final_session_state(module, meta, func_id, other_st) do
-    error = Error.FunctionCall.function_altered_session_state(module, meta, func_id, other_st)
-    {:error, error}
-  end
-
-  # move
-  defp check_return_type(meta, actual_return_type, spec_return_type) do
-    if actual_return_type == spec_return_type do
-      :type_ok
-    else
-      error =
-        Error.TypeMismatch.return_type_mismatch(meta,
-          expected: spec_return_type,
-          got: actual_return_type
-        )
-
-      {:error, error}
-    end
-  end
-
   # move
   # Processes a list of expressions sequentially using tc_expr.
   # Returns the result of the *last* expression in the list.
@@ -1473,6 +1400,21 @@ defmodule Maty.Typechecker.TC do
         end
       end
     )
+  end
+
+  # move
+  # check if argument alters session state
+  defp check_function_body(module, body_var_env, body_block) do
+    body_asts = extract_body(body_block)
+    initial_st = %ST.SEnd{}
+
+    case tc_expr_list(module, body_var_env, initial_st, body_asts) do
+      {:ok, {return_type, final_st}, final_env} ->
+        {:body_ok, {return_type, final_st}, final_env}
+
+      {:error, msg, _env} ->
+        {:error, msg}
+    end
   end
 
   # move ?

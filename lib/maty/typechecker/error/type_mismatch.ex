@@ -1,41 +1,151 @@
 defmodule Maty.Typechecker.Error.TypeMismatch do
-  defp with_meta(meta, str) do
-    meta = Keyword.take(meta, [:line, :column])
-    "#{inspect(meta)} #{str}"
+  defp render_type(type) when is_atom(type), do: ":#{type}"
+  defp render_type(type), do: "#{inspect(type)}"
+
+  defp render_operator(op) when is_atom(op), do: "#{op}"
+  defp render_operator(op), do: "#{inspect(op)}"
+
+  def logical_operator_requires_boolean(module, meta, operator, operand_type) do
+    line = Keyword.fetch!(meta, :line)
+
+    """
+    \n\n** (ElixirMatyTypeError) Type Mismatch Error: Logical Operator Type Error
+      Module: #{module}
+      Line: #{line}
+      --
+      Operator: #{render_operator(operator)}
+      Expected operand type: :boolean
+      Got operand type: #{render_type(operand_type)}
+      --
+      Logical operators require boolean operands.
+    """
   end
 
-  defp display_opts([expected: expected, got: got] = _opts) do
-    "Expected: #{inspect(expected)} \nGot: #{inspect(got)}"
+  def return_type_mismatch(module, meta, expected: expected, got: got) do
+    line = Keyword.fetch!(meta, :line)
+
+    """
+    \n\n** (ElixirMatyTypeError) Type Mismatch Error: Return Type Mismatch
+      Module: #{module}
+      Line: #{line}
+      --
+      Expected return type: #{render_type(expected)}
+      Got return type: #{render_type(got)}
+      --
+      The function's actual return type does not match the declared return type.
+    """
   end
 
-  def logical_operator_requires_boolean(op, expr_type) do
-    "Logical operator #{op} requires a boolean operand, got #{inspect(expr_type)}"
+  def binary_operator_type_mismatch(module, meta, operator, lhs_type, rhs_type) do
+    line = Keyword.fetch!(meta, :line)
+
+    """
+    \n\n** (ElixirMatyTypeError) Type Mismatch Error: Binary Operator Type Error
+      Module: #{module}
+      Line: #{line}
+      --
+      Operator: #{render_operator(operator)}
+      Left operand type: #{render_type(lhs_type)}
+      Right operand type: #{render_type(rhs_type)}
+      --
+      The operand types are not compatible with this binary operator.
+    """
   end
 
-  def return_type_mismatch(_a, _b), do: "return_type_mismatch"
+  def logical_operator_type_mismatch(module, meta, operator, lhs_type, rhs_type) do
+    line = Keyword.fetch!(meta, :line)
 
-  def binary_operator_type_mismatch(_a, _b, _c, _d), do: "binary_operator_type_mismatch"
-
-  def logical_operator_type_mismatch(_a, _b, _c, _d), do: "logical_operator_type_mismatch"
-
-  def logical_operator_requires_boolean(_a, _b, _c), do: "logical_operator_requires_boolean"
-
-  def list_elements_incompatible(_a, _b), do: "list_elements_incompatible"
-
-  def case_branches_incompatible_types(_a, _b), do: "case_branches_incompatible_types"
-
-  def send_role_mismatch(meta, opts) do
-    with_meta(
-      meta,
-      "recipient role mismatch. Sending to incorrect participant in session.\n#{display_opts(opts)}"
-    )
+    """
+    \n\n** (ElixirMatyTypeError) Type Mismatch Error: Logical Operator Type Error
+      Module: #{module}
+      Line: #{line}
+      --
+      Operator: #{render_operator(operator)}
+      Left operand type: #{render_type(lhs_type)}
+      Right operand type: #{render_type(rhs_type)}
+      Expected operand types: :boolean and :boolean
+      --
+      Logical operators require both operands to be boolean.
+    """
   end
 
-  def invalid_maty_state_type(_a, _b), do: "invalid_maty_state_type"
+  def list_elements_incompatible(module, meta, element_types) do
+    line = Keyword.fetch!(meta, :line)
 
-  def invalid_maty_state_type(_a, _b, _c), do: "invalid_maty_state_type"
+    formatted_types =
+      element_types
+      |> Enum.map(&render_type/1)
+      |> Enum.join(", ")
 
-  def send_message_not_tuple(_a, _b), do: "send_message_not_tuple"
+    """
+    \n\n** (ElixirMatyTypeError) Type Mismatch Error: Incompatible List Elements
+      Module: #{module}
+      Line: #{line}
+      --
+      Element types found: #{formatted_types}
+      --
+      All elements in a list must have the same type.
+    """
+  end
 
-  def case_branches_incompatible_states(_a, _b), do: "case_branches_incompatible_states"
+  def case_branches_incompatible_types(module, meta, t1: type1, t2: type2) do
+    line = Keyword.fetch!(meta, :line)
+
+    """
+    \n\n** (ElixirMatyTypeError) Type Mismatch Error: Incompatible Case Branch Types
+      Module: #{module}
+      Line: #{line}
+      --
+      Branch type 1: #{render_type(type1)}
+      Branch type 2: #{render_type(type2)}
+      --
+      All case branches must return the same type.
+    """
+  end
+
+  # pin
+  def invalid_maty_state_type(module, meta, got: got_type) do
+    line = Keyword.fetch!(meta, :line)
+
+    """
+    \n\n** (ElixirMatyTypeError) Type Mismatch Error: Invalid Maty State Type
+      Module: #{module}
+      Line: #{line}
+      --
+      Expected type: :maty_actor_state
+      Got type: #{render_type(got_type)}
+      --
+      Maty operations require a valid actor state type.
+    """
+  end
+
+  def send_message_not_tuple(module, meta, got: message_ast) do
+    line = Keyword.fetch!(meta, :line)
+
+    """
+    \n\n** (ElixirMatyTypeError) Type Mismatch Error: Send Message Not Tuple
+      Module: #{module}
+      Line: #{line}
+      --
+      Expected: Tagged tuple message {label, payload}
+      Got: #{inspect(message_ast)}
+      --
+      Messages must be 2-tuples with an atom label and payload.
+    """
+  end
+
+  def case_branches_incompatible_session_states(module, meta, q1: state1, q2: state2) do
+    line = Keyword.fetch!(meta, :line)
+
+    """
+    \n\n** (ElixirMatyTypeError) Type Mismatch Error: Incompatible Case Branch Session States
+      Module: #{module}
+      Line: #{line}
+      --
+      Branch state 1: #{inspect(state1)}
+      Branch state 2: #{inspect(state2)}
+      --
+      All case branches must result in compatible session states.
+    """
+  end
 end

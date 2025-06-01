@@ -187,40 +187,25 @@ defmodule Maty.Typechecker.Helpers do
         {:cont, {:ok, {joined_t, joined_q}}}
       else
         # determine which join failed
-        error_msg =
+        error_branches =
           if joined_t == :error_incompatible_types do
-            Error.TypeMismatch.case_branches_incompatible_types(acc_t, ti)
+            [t1: acc_t, t2: ti]
           else
-            Error.TypeMismatch.case_branches_incompatible_states(acc_q, qi)
+            [q1: acc_q, q2: qi]
           end
 
-        {:halt, {:error, error_msg}}
+        {:halt, {:error, error_branches}}
       end
     end)
   end
 
-  def check_recipient_role(literal_recipient, expected_role, meta) do
-    if is_atom(literal_recipient) and literal_recipient == expected_role do
-      :ok
-    else
-      # New Error
-      error =
-        Error.TypeMismatch.send_role_mismatch(meta,
-          expected: expected_role,
-          got: literal_recipient
-        )
-
-      {:error, error}
-    end
+  def check_message_structure(_module, _meta, {label_atom, payload_expr_ast})
+      when is_atom(label_atom) do
+    {:message_ok, label_atom, payload_expr_ast}
   end
 
-  def check_message_structure({label_atom, payload_expr_ast}, _meta) when is_atom(label_atom) do
-    {:ok, label_atom, payload_expr_ast}
-  end
-
-  def check_message_structure(other_ast, meta) do
-    # New Error
-    error = Error.TypeMismatch.send_message_not_tuple(meta, got: other_ast)
+  def check_message_structure(module, meta, other_ast) do
+    error = Error.TypeMismatch.send_message_not_tuple(module, meta, got: other_ast)
     {:error, error}
   end
 
@@ -298,5 +283,49 @@ defmodule Maty.Typechecker.Helpers do
       end)
 
     found
+  end
+
+  # -------------- HELPERS sorta --------------------
+  # move
+  # pin - convert to new kind of error
+  def check_init_st(%ST.SIn{}), do: {:error, "Session precondition cannot be a receive"}
+  def check_init_st(_st), do: :ok
+
+  # move
+  def check_clause_arity(module, meta, func_id, arity, spec_args_types) do
+    if arity == length(spec_args_types) do
+      :arity_ok
+    else
+      error =
+        Error.FunctionCall.arity_mismatch(module, meta, func_id,
+          expected: length(spec_args_types),
+          got: arity
+        )
+
+      {:error, error}
+    end
+  end
+
+  # move
+  def check_final_session_state(_module, _meta, _func_id, %ST.SEnd{}), do: :state_ok
+
+  def check_final_session_state(module, meta, func_id, other_st) do
+    error = Error.FunctionCall.function_altered_session_state(module, meta, func_id, other_st)
+    {:error, error}
+  end
+
+  # move
+  def check_return_type(module, meta, actual_return_type, spec_return_type) do
+    if actual_return_type == spec_return_type do
+      :type_ok
+    else
+      error =
+        Error.TypeMismatch.return_type_mismatch(module, meta,
+          expected: spec_return_type,
+          got: actual_return_type
+        )
+
+      {:error, error}
+    end
   end
 end
