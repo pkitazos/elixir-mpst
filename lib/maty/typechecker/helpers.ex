@@ -102,9 +102,15 @@ defmodule Maty.Typechecker.Helpers do
   Merges two maps of new variable bindings, checking for conflicting keys.
   If successful, returns the merged new bindings and the fully updated env.
   """
-  @spec check_and_merge_bindings(bindings1 :: map(), bindings2 :: map(), current_env :: map()) ::
+  @spec check_and_merge_bindings(
+          module :: module(),
+          meta :: Keyword.t(),
+          bindings1 :: map(),
+          bindings2 :: map(),
+          current_env :: map()
+        ) ::
           {:ok, map(), map()} | {:error, String.t(), map()}
-  def check_and_merge_bindings(bindings1, bindings2, current_env) do
+  def check_and_merge_bindings(module, meta, bindings1, bindings2, current_env) do
     keys1 = Map.keys(bindings1) |> MapSet.new()
     keys2 = Map.keys(bindings2) |> MapSet.new()
 
@@ -116,10 +122,22 @@ defmodule Maty.Typechecker.Helpers do
       {:ok, merged_new_bindings, updated_env}
     else
       conflicting_vars = Enum.join(intersection, ", ")
-      error = Error.PatternMatching.conflicting_pattern_bindings(conflicting_vars)
+      error = Error.PatternMatching.conflicting_pattern_bindings(module, meta, conflicting_vars)
       {:error, error, current_env}
     end
   end
+
+  @spec extract_meta_from_pattern({Macro.t(), Macro.t()}) :: Keyword.t()
+  def extract_meta_from_pattern({p1_ast, p2_ast}) do
+    case extract_meta_from_ast(p1_ast) do
+      [] -> extract_meta_from_ast(p2_ast)
+      meta -> meta
+    end
+  end
+
+  def extract_meta_from_ast({_var, meta, _context}) when is_list(meta), do: meta
+  def extract_meta_from_ast({_var, _meta, _context}), do: []
+  def extract_meta_from_ast(_), do: []
 
   @doc """
   Joins two types according to the lattice rules (T ⊔ T = T, ⊥ ⊔ T = T).

@@ -4,7 +4,6 @@ defmodule Maty.Typechecker.Error.FunctionCall do
   defp render_type(type) when is_atom(type), do: ":#{type}"
   defp render_type(type), do: "#{inspect(type)}"
 
-  # ok
   def function_not_exist(module, meta, func_id) do
     line = Keyword.fetch!(meta, :line)
     func_str = Utils.to_func(func_id)
@@ -20,7 +19,6 @@ defmodule Maty.Typechecker.Error.FunctionCall do
     """
   end
 
-  # ok
   def arity_mismatch(module, meta, func_id, expected: expected, got: got) do
     line = Keyword.fetch!(meta, :line)
     func_str = Utils.to_func(func_id)
@@ -38,7 +36,6 @@ defmodule Maty.Typechecker.Error.FunctionCall do
     """
   end
 
-  # ok
   def no_matching_function_clause(module, meta, func_id, actual_arg_types) do
     line = Keyword.fetch!(meta, :line)
     func_str = Utils.to_func(func_id)
@@ -60,8 +57,7 @@ defmodule Maty.Typechecker.Error.FunctionCall do
     """
   end
 
-  # ok
-  def function_altered_state(module, meta, func_id, final_state) do
+  def function_altered_session_state(module, meta, func_id, final_state) do
     line = Keyword.fetch!(meta, :line)
     func_str = Utils.to_func(func_id)
 
@@ -77,7 +73,6 @@ defmodule Maty.Typechecker.Error.FunctionCall do
     """
   end
 
-  # ok
   def wrong_number_of_clauses(module, func_id, expected: expected, got: got) do
     func_str = Utils.to_func(func_id)
 
@@ -93,7 +88,6 @@ defmodule Maty.Typechecker.Error.FunctionCall do
     """
   end
 
-  # ok
   def wrong_number_of_specs(module, func_id, expected: expected, got: got) do
     func_str = Utils.to_func(func_id)
 

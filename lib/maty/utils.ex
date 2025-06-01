@@ -64,4 +64,7 @@ defmodule Maty.Utils do
       end
     end
   end
+
+  def stack_trace(_num), do: :ok
+  # def stack_trace(num), do: Logger.debug("[#{num}]", ansi_color: :light_green)
 end

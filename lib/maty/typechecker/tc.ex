@@ -5,6 +5,9 @@ defmodule Maty.Typechecker.TC do
   alias Maty.Types.T, as: Type
   alias Maty.Typechecker.{Error, Helpers}
 
+  import Maty.Typechecker.PatternBinding, only: [tc_pattern: 4]
+  import Maty.Utils, only: [stack_trace: 1]
+
   @typedoc """
   Represents Elixir AST nodes that can be typechecked.
   """
@@ -283,15 +286,16 @@ defmodule Maty.Typechecker.TC do
                 # Or Helpers.ast_to_literal returned an error indicator.
                 # We require literal atom keys.
                 # Error for non-literal atom key
-                # pin - convert to new kind of error
-                error = Error.PatternMatching.complex_map_key(meta, key_ast)
+                error = Error.PatternMatching.complex_map_key(module, meta, key_ast)
                 {:halt, {:error, error, key_env}}
               end
             else
               # Key type check failed (key_type was not :atom).
-              # pin - convert to new kind of error
               error =
-                Error.PatternMatching.invalid_map_key_type(meta, expected: :atom, got: key_type)
+                Error.PatternMatching.invalid_map_key_type(module, meta,
+                  expected: :atom,
+                  got: key_type
+                )
 
               # Halt the reduction.
               {:halt, {:error, error, key_env}}
@@ -496,7 +500,7 @@ defmodule Maty.Typechecker.TC do
            {:e1, tc_expr(module, var_env, st_pre, expr1_ast)},
          #  todo not sure about the naming of the atoms here
          {:p_match, {:ok, _new_bindings, updated_env_with_bindings}} <-
-           {:p_match, tc_pattern(pattern_ast, type_A, env_post_e1)} do
+           {:p_match, tc_pattern(module, pattern_ast, type_A, env_post_e1)} do
       {:ok, {type_A, st_post_e1}, updated_env_with_bindings}
     else
       {:e1, {:error, msg, env}} -> {:error, msg, env}
@@ -517,7 +521,7 @@ defmodule Maty.Typechecker.TC do
       # todo: this is also a bit of a messy one
       branch_results =
         Enum.map(clauses_list, fn {:->, _clause_meta, [[p_ast], e_ast]} ->
-          case tc_pattern(p_ast, type_A, env_after_scrutinee) do
+          case tc_pattern(module, p_ast, type_A, env_after_scrutinee) do
             {:ok, _bindings, env_for_e} ->
               tc_expr(module, env_for_e, st_pre, e_ast)
               |> case do
@@ -892,60 +896,70 @@ defmodule Maty.Typechecker.TC do
 
     psi = Utils.Env.get_map(module, :psi)
 
-    case Map.fetch(psi, func_id) do
-      {:ok, signatures} when is_list(signatures) and signatures != [] ->
-        Enum.reduce_while(
-          arg_asts,
-          {:ok, {[], st_pre}, var_env},
-          fn arg_ast, {:ok, {acc_arg_types, current_st}, current_env} ->
-            case tc_expr(module, current_env, current_st, arg_ast) do
-              {:ok, {actual_type, next_st}, next_env} ->
-                # Accumulate actual types and pass state/env forward
-                {:cont, {:ok, {[actual_type | acc_arg_types], next_st}, next_env}}
+    # todo: maybe make use of more helpers?
+    # get all the type signatures
+    with {:ok, signatures} when is_list(signatures) and signatures != [] <-
+           Map.fetch(psi, func_id) do
+      # go through each list of arguments
+      Enum.reduce_while(
+        arg_asts,
+        {:ok, {[], st_pre}, var_env},
+        fn arg_ast, {:ok, {acc_arg_types, current_st}, current_env} ->
+          case tc_expr(module, current_env, current_st, arg_ast) do
+            {:ok, {actual_type, next_st}, next_env} ->
+              # Accumulate actual types and pass state/env forward
+              # session type should remain unchanged from typechecking the individual arguments
+              # but we thread it through anyway
+              {:cont, {:ok, {[actual_type | acc_arg_types], next_st}, next_env}}
 
-              {:error, error, err_env} ->
-                # Halt on first argument error
-                {:halt, {:error, error, err_env}}
-            end
+            {:error, error, err_env} ->
+              # Halt on first argument error
+              {:halt, {:error, error, err_env}}
           end
-        )
-        |> case do
-          {:ok, {actual_arg_types_rev, final_st}, final_env} ->
-            actual_arg_types = Enum.reverse(actual_arg_types_rev)
-
-            Enum.find(signatures, fn {param_types, _return_type} ->
-              # Check arity and type compatibility for this signature
-              length(actual_arg_types) == length(param_types) and
-                Enum.zip(actual_arg_types, param_types)
-                |> Enum.all?(fn {actual, expected} -> actual == expected end)
-            end)
-            |> case do
-              {_param_types, return_type} ->
-                {:ok, {return_type, final_st}, final_env}
-
-              nil ->
-                Logger.error(inspect(ast))
-
-                error =
-                  Error.FunctionCall.no_matching_function_clause(
-                    module,
-                    meta,
-                    func_id,
-                    actual_arg_types
-                  )
-
-                {:error, error, final_env}
-            end
-
-          {:error, error, final_env} ->
-            # An error occurred during argument typechecking
-            {:error, error, final_env}
         end
+      )
+      # if we make it here it means we were able to typecheck all asts
+      |> case do
+        {:ok, {actual_arg_types_rev, final_st}, final_env} ->
+          actual_arg_types = Enum.reverse(actual_arg_types_rev)
 
-      # should not happen if specs are added correctly, but we handle defensively
+          # match on the first matching signature
+          Enum.find(signatures, fn {param_types, _return_type} ->
+            # Check type compatibility for this signature
+            compatible? =
+              actual_arg_types
+              |> Enum.zip(param_types)
+              |> Enum.all?(fn {got, expected} -> got == expected end)
+
+            # Check arity
+            compatible? and length(actual_arg_types) == length(param_types)
+          end)
+          |> case do
+            {_param_types, return_type} ->
+              # match exists
+              {:ok, {return_type, final_st}, final_env}
+
+            nil ->
+              # match does not exist
+              Logger.error(inspect(ast))
+
+              error =
+                Error.FunctionCall.no_matching_function_clause(
+                  module,
+                  meta,
+                  func_id,
+                  actual_arg_types
+                )
+
+              {:error, error, final_env}
+          end
+
+        {:error, error, final_env} ->
+          # An error occurred during argument typechecking
+          {:error, error, final_env}
+      end
+    else
       {:ok, []} ->
-        # todo: more specific error
-        Logger.error("spec might be broken?")
         error = Error.FunctionCall.function_not_exist(module, meta, func_id)
         {:error, error, var_env}
 
@@ -1034,22 +1048,15 @@ defmodule Maty.Typechecker.TC do
         for {{spec_args_types, spec_return_type},
              {clause_meta, arg_pattern_asts, _guards, body_block}} <- defs do
           with :arity_ok <-
-                 check_clause_arity(
-                   module,
-                   clause_meta,
-                   func_id,
-                   arity,
-                   arg_pattern_asts,
-                   spec_args_types
-                 ),
+                 check_clause_arity(module, clause_meta, func_id, arity, spec_args_types),
                # pin - maybe helper could return more standard type
                {:args_ok, body_var_env} <-
-                 check_argument_patterns(clause_meta, arg_pattern_asts, spec_args_types),
+                 check_argument_patterns(module, clause_meta, arg_pattern_asts, spec_args_types),
                # pin - maybe helper could return more standard type
                {:body_ok, {actual_return_type, final_st}, _final_env} <-
                  check_function_body(module, body_var_env, body_block),
                # pin - maybe helper could return more standard type
-               :state_ok <- check_final_state(module, clause_meta, func_id, final_st),
+               :state_ok <- check_final_session_state(module, clause_meta, func_id, final_st),
                :type_ok <- check_return_type(clause_meta, actual_return_type, spec_return_type) do
             {:ok, actual_return_type}
           else
@@ -1099,7 +1106,8 @@ defmodule Maty.Typechecker.TC do
 
          # get shape of message
          # bind whatever from the message payload
-         {:ok, _message_bindings, var_env} <- tc_pattern(message_pattern_ast, message_type, %{}),
+         {:ok, _message_bindings, var_env} <-
+           tc_pattern(module, message_pattern_ast, message_type, %{}),
 
          # create all the necessary bindings (this thing Γ_args, x : ActorState(B))
          # need to also add psi here
@@ -1249,7 +1257,8 @@ defmodule Maty.Typechecker.TC do
          {state_var, _, _} <- state_var_ast,
 
          #  bind whatever from the args
-         {:ok, _message_bindings, var_env} <- tc_pattern(arg_pattern_ast, args_types, %{}),
+         {:ok, _message_bindings, var_env} <-
+           tc_pattern(module, arg_pattern_ast, args_types, %{}),
 
          #  create all the necessary bindings (this thing Γ_args, x : ActorState(B))
          var_env = Map.put(var_env, state_var, Type.maty_actor_state()),
@@ -1305,7 +1314,8 @@ defmodule Maty.Typechecker.TC do
          {state_var, _, _} <- state_var_ast,
 
          # bind variables from the function signature
-         {:ok, _message_bindings, var_env} <- tc_pattern(arg_pattern_ast, args_types, %{}),
+         {:ok, _message_bindings, var_env} <-
+           tc_pattern(module, arg_pattern_ast, args_types, %{}),
          #  create all the necessary bindings (this thing Γ_args, x : ActorState(B))
          var_env = Map.put(var_env, state_var, Type.maty_actor_state()),
 
@@ -1335,9 +1345,8 @@ defmodule Maty.Typechecker.TC do
   defp check_init_st(_st), do: :ok
 
   # move
-  # todo: fix this
-  defp check_clause_arity(module, meta, func_id, arity, arg_pattern_asts, spec_args_types) do
-    if length(arg_pattern_asts) == length(spec_args_types) do
+  defp check_clause_arity(module, meta, func_id, arity, spec_args_types) do
+    if arity == length(spec_args_types) do
       :arity_ok
     else
       error =
@@ -1351,7 +1360,7 @@ defmodule Maty.Typechecker.TC do
   end
 
   # move
-  defp check_argument_patterns(_meta, arg_pattern_asts, spec_args_types) do
+  defp check_argument_patterns(module, meta, arg_pattern_asts, spec_args_types) do
     initial_arg_env = %{}
 
     args_check_result =
@@ -1359,9 +1368,15 @@ defmodule Maty.Typechecker.TC do
       |> Enum.reduce_while(
         {:ok, %{}, initial_arg_env},
         fn {p_ast, expected_type}, {:ok, acc_bindings, current_env} ->
-          case tc_pattern(p_ast, expected_type, current_env) do
+          case tc_pattern(module, p_ast, expected_type, current_env) do
             {:ok, new_bindings, updated_env} ->
-              case Helpers.check_and_merge_bindings(acc_bindings, new_bindings, current_env) do
+              case Helpers.check_and_merge_bindings(
+                     module,
+                     meta,
+                     acc_bindings,
+                     new_bindings,
+                     current_env
+                   ) do
                 {:ok, merged_bindings, _env_ignored} ->
                   {:cont, {:ok, merged_bindings, updated_env}}
 
@@ -1385,6 +1400,7 @@ defmodule Maty.Typechecker.TC do
   end
 
   # move
+  # check if argument alters session state
   defp check_function_body(module, body_var_env, body_block) do
     body_asts = extract_body(body_block)
     initial_st = %ST.SEnd{}
@@ -1399,15 +1415,11 @@ defmodule Maty.Typechecker.TC do
   end
 
   # move
-  defp check_final_state(module, meta, func_id, final_st) do
-    expected_st = %ST.SEnd{}
+  defp check_final_session_state(_module, _meta, _func_id, %ST.SEnd{}), do: :state_ok
 
-    if final_st == expected_st do
-      :state_ok
-    else
-      error = Error.FunctionCall.function_altered_state(module, meta, func_id, final_st)
-      {:error, error}
-    end
+  defp check_final_session_state(module, meta, func_id, other_st) do
+    error = Error.FunctionCall.function_altered_session_state(module, meta, func_id, other_st)
+    {:error, error}
   end
 
   # move
@@ -1463,371 +1475,6 @@ defmodule Maty.Typechecker.TC do
     )
   end
 
-  # move
-  @doc """
-  Checks if a pattern AST is compatible with an expected type and calculates
-  the variable bindings introduced by the pattern. Corresponds to `⊢ p : A ⟹ Γ'`.
-
-  Returns `{:ok, new_bindings, updated_env}` or `{:error, message, original_env}`.
-  `new_bindings` contains only the variables bound in this pattern.
-  `updated_env` is the original_env merged with new_bindings.
-  """
-  @spec tc_pattern(pattern_ast :: ast(), expected_type :: Type.t(), var_env :: var_env()) ::
-          {:ok, map(), var_env()} | {:error, binary(), var_env()}
-
-  # Pat-Var: Pattern is a variable 'x'
-  def tc_pattern({var_name, _meta, context}, expected_type, var_env)
-      when is_atom(var_name) and (is_atom(context) or is_nil(context)) do
-    stack_trace(300)
-    new_bindings = %{var_name => expected_type}
-    updated_env = Map.merge(var_env, new_bindings)
-    {:ok, new_bindings, updated_env}
-  end
-
-  # Pat-Wild: Pattern is '_'
-  def tc_pattern(:_, _expected_type, var_env) do
-    stack_trace(301)
-    {:ok, %{}, var_env}
-  end
-
-  def tc_pattern(
-        {:when, _,
-         [
-           {:x, _, Kernel},
-           {{:., _, [:erlang, :orelse]}, _,
-            [
-              {{:., _, [:erlang, :"=:="]}, _, [{:x, _, Kernel}, false]},
-              {{:., _, [:erlang, :"=:="]}, _, [{:x, _, Kernel}, nil]}
-            ]}
-         ]},
-        _expected_type,
-        var_env
-      ) do
-    stack_trace(320)
-
-    {:ok, %{}, var_env}
-  end
-
-  def tc_pattern({:_, _meta, _context}, _expected_type, var_env) do
-    stack_trace(302)
-
-    {:ok, %{}, var_env}
-  end
-
-  # Pat-Value: Pattern is a literal value 'v'
-  def tc_pattern(literal_pattern, expected_type, var_env)
-      when is_number(literal_pattern) or
-             is_binary(literal_pattern) or
-             is_boolean(literal_pattern) or
-             is_atom(literal_pattern) do
-    stack_trace(303)
-
-    case Helpers.get_literal_type(literal_pattern) do
-      {:ok, literal_type} ->
-        if literal_type == expected_type or literal_type == :atom do
-          {:ok, %{}, var_env}
-        else
-          # todo: Extract meta if possible
-          meta = []
-
-          error =
-            Error.PatternMatching.pattern_type_mismatch(meta,
-              pattern: literal_pattern,
-              expected: expected_type,
-              got: literal_type
-            )
-
-          {:error, error, var_env}
-        end
-
-      :error ->
-        # Should not happen for basic literals
-        meta = []
-
-        error =
-          Error.internal_error(
-            meta,
-            "Could not get type for literal pattern #{inspect(literal_pattern)}"
-          )
-
-        {:error, error, var_env}
-    end
-  end
-
-  # Pat-EmptyList: Pattern is '[]'
-  def tc_pattern([], expected_type, var_env) do
-    stack_trace(304)
-
-    case expected_type do
-      {:list, _} ->
-        {:ok, %{}, var_env}
-
-      :any ->
-        {:ok, %{}, var_env}
-
-      _ ->
-        meta = []
-
-        # todo: fix the `got` value
-        error =
-          Error.PatternMatching.pattern_type_mismatch(meta,
-            pattern: [],
-            expected: expected_type,
-            got: "{:list, :any}"
-          )
-
-        {:error, error, var_env}
-    end
-  end
-
-  # Pat-EmptyTuple: Pattern is '{}'
-  def tc_pattern({:{}, _, []}, expected_type, var_env) do
-    stack_trace(305)
-
-    case expected_type do
-      {:tuple, []} ->
-        {:ok, %{}, var_env}
-
-      :any ->
-        {:ok, %{}, var_env}
-
-      _ ->
-        meta = []
-
-        error =
-          Error.PatternMatching.pattern_type_mismatch(meta,
-            pattern: {},
-            expected: expected_type,
-            got: "{:tuple, []}"
-          )
-
-        {:error, error, var_env}
-    end
-  end
-
-  # Pat-EmptyMap: Pattern is '%{}'
-  def tc_pattern({:%{}, _, []}, expected_type, var_env) do
-    stack_trace(306)
-
-    case expected_type do
-      {:map, _} ->
-        {:ok, %{}, var_env}
-
-      :any ->
-        {:ok, %{}, var_env}
-
-      _ ->
-        meta = []
-
-        error =
-          Error.PatternMatching.pattern_type_mismatch(meta,
-            pattern: %{},
-            expected: expected_type,
-            got: "{:map, %{}}"
-          )
-
-        {:error, error, var_env}
-    end
-  end
-
-  # --- Recursive Pattern Clauses ---
-
-  # Pat-Cons
-  def tc_pattern({:|, meta, [p1_ast, p2_ast]}, expected_type, var_env) do
-    stack_trace(307)
-
-    case expected_type do
-      {:list, element_type} ->
-        with {:p1, {:ok, bindings1, env1}} <- {:p1, tc_pattern(p1_ast, element_type, var_env)},
-             {:p2, {:ok, bindings2, _env2}} <- {:p2, tc_pattern(p2_ast, expected_type, env1)},
-             # pass env1 because env2 already contains bindings1
-             # we only need to check bindings2 against bindings1
-             {:merge, {:ok, merged_bindings, final_env}} <-
-               {:merge, Helpers.check_and_merge_bindings(bindings1, bindings2, env1)} do
-          {:ok, merged_bindings, final_env}
-        else
-          {:p1, {:error, msg, env}} -> {:error, msg, env}
-          {:p2, {:error, msg, env}} -> {:error, msg, env}
-          {:merge, {:error, msg, env}} -> {:error, msg, env}
-        end
-
-      other_type ->
-        error =
-          Error.PatternMatching.pattern_type_mismatch(meta,
-            pattern: "[h|t]",
-            expected: "List",
-            got: other_type
-          )
-
-        {:error, error, var_env}
-    end
-  end
-
-  # Pat-Tuple
-  def tc_pattern({p1_ast, p2_ast} = pattern_ast, expected_type, var_env) do
-    stack_trace(308)
-
-    case expected_type do
-      {:tuple, [type_a, type_b]} ->
-        with {:p1, {:ok, bindings1, env1}} <- {:p1, tc_pattern(p1_ast, type_a, var_env)},
-             {:p2, {:ok, bindings2, _env2}} <- {:p2, tc_pattern(p2_ast, type_b, env1)},
-             {:merge, {:ok, merged_bindings, final_env}} <-
-               {:merge, Helpers.check_and_merge_bindings(bindings1, bindings2, env1)} do
-          {:ok, merged_bindings, final_env}
-        else
-          {:p1, {:error, msg, env}} -> {:error, msg, env}
-          {:p2, {:error, msg, env}} -> {:error, msg, env}
-          {:merge, {:error, msg, env}} -> {:error, msg, env}
-        end
-
-      {:tuple, other_types} ->
-        meta = []
-
-        error =
-          Error.PatternMatching.pattern_arity_mismatch(meta, "Tuple",
-            expected: 2,
-            got: length(other_types)
-          )
-
-        {:error, error, var_env}
-
-      other_type ->
-        meta = []
-
-        error =
-          Error.PatternMatching.pattern_type_mismatch(meta,
-            pattern: pattern_ast,
-            expected: "Tuple",
-            got: other_type
-          )
-
-        {:error, error, var_env}
-    end
-  end
-
-  def tc_pattern({:{}, meta, elements_asts}, expected_type, var_env) do
-    stack_trace(309)
-
-    case expected_type do
-      {:tuple, expected_types} when length(elements_asts) == length(expected_types) ->
-        # process elements sequentially, checking disjointedness at each step
-        initial_acc = {:ok, %{}, var_env}
-
-        Enum.zip(elements_asts, expected_types)
-        |> Enum.reduce_while(
-          initial_acc,
-          fn {p_ast, p_expected_type}, {:ok, acc_bindings, current_env} ->
-            case tc_pattern(p_ast, p_expected_type, current_env) do
-              {:ok, new_bindings, updated_env} ->
-                case Helpers.check_and_merge_bindings(acc_bindings, new_bindings, current_env) do
-                  {:ok, merged_bindings, _env_ignored} ->
-                    # use updated_env from the recursive call for the next iteration
-                    {:cont, {:ok, merged_bindings, updated_env}}
-
-                  {:error, msg, _env} ->
-                    # halt on conflict
-                    {:halt, {:error, msg, current_env}}
-                end
-
-              {:error, msg, _env} ->
-                # halt if recursive call fails
-                {:halt, {:error, msg, current_env}}
-            end
-          end
-        )
-        |> case do
-          {:ok, final_bindings, final_env} -> {:ok, final_bindings, final_env}
-          {:error, msg, env} -> {:error, msg, env}
-        end
-
-      {:tuple, expected_types} ->
-        error =
-          Error.PatternMatching.pattern_arity_mismatch(meta, "Tuple",
-            expected: length(expected_types),
-            got: length(elements_asts)
-          )
-
-        {:error, error, var_env}
-
-      other_type ->
-        error =
-          Error.PatternMatching.pattern_type_mismatch(meta,
-            pattern: "{...}",
-            expected: "Tuple",
-            got: other_type
-          )
-
-        {:error, error, var_env}
-    end
-  end
-
-  # Pat-Map
-  # Assuming keys k_i are literal atoms.
-  def tc_pattern({:%{}, meta, pairs}, expected_type, var_env) do
-    stack_trace(310)
-
-    case expected_type do
-      {:map, expected_type_map} ->
-        initial_acc = {:ok, %{}, var_env}
-
-        Enum.reduce_while(
-          pairs,
-          initial_acc,
-          fn {key_ast, p_ast}, {:ok, acc_bindings, current_env} ->
-            literal_key = Helpers.ast_to_literal(key_ast)
-
-            if not is_atom(literal_key) do
-              {:halt,
-               {:error, Error.PatternMatching.pattern_map_key_not_atom(meta, key_ast),
-                current_env}}
-            else
-              # check if key exists in expected type map and get expected value type
-              case Map.fetch(expected_type_map, literal_key) do
-                {:ok, p_expected_type} ->
-                  case tc_pattern(p_ast, p_expected_type, current_env) do
-                    {:ok, new_bindings, updated_env} ->
-                      # check disjointedness and merge
-                      case Helpers.check_and_merge_bindings(
-                             acc_bindings,
-                             new_bindings,
-                             current_env
-                           ) do
-                        {:ok, merged_bindings, _env_ignored} ->
-                          {:cont, {:ok, merged_bindings, updated_env}}
-
-                        {:error, msg, _env} ->
-                          {:halt, {:error, msg, current_env}}
-                      end
-
-                    {:error, msg, _env} ->
-                      {:halt, {:error, msg, current_env}}
-                  end
-
-                :error ->
-                  # key from pattern not found in expected map type
-                  error = Error.PatternMatching.pattern_map_key_not_found(meta, literal_key)
-                  {:halt, {:error, error, current_env}}
-              end
-            end
-          end
-        )
-        |> case do
-          {:ok, final_bindings, final_env} -> {:ok, final_bindings, final_env}
-          {:error, msg, env} -> {:error, msg, env}
-        end
-
-      other_type ->
-        error =
-          Error.PatternMatching.pattern_type_mismatch(meta,
-            pattern: "%{...}",
-            expected: "Map",
-            got: other_type
-          )
-
-        {:error, error, var_env}
-    end
-  end
-
   # move ?
   # Extracts a list of expressions from an AST body.
   #
@@ -1843,7 +1490,4 @@ defmodule Maty.Typechecker.TC do
     do: extract_body(body_block)
 
   defp extract_body(expr) when not is_list(expr), do: [expr]
-
-  def stack_trace(_num), do: :ok
-  # def stack_trace(num), do: Logger.debug("[#{num}]", ansi_color: :light_green)
 end
