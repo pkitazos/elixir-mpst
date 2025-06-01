@@ -30,3 +30,81 @@ ShopStaff ===
         addItem((Name ++ Description ++ Price ++ Stock)).loop,
         removeItem(ItemID).loop
 }
+
+
+
+
+
+
+
+
+C === S + request_items() . S & items(string[]) . mu X . S + {
+        get_item_info(string) . S & item_info(string) . X,
+        checkout((string[], string)) . S & {
+            processing_payment() . S & {
+                ok() . X,
+                declined() . X
+            },
+            out_of_stock() . X
+        }
+}
+
+
+S === C & request_items() . C + items(string[]) . mu X . C & {
+        get_item_info(string) . C + item_info(string) . X,
+        checkout((string[], string)) . C + {
+            processing_payment() . P + buy((string, number)) . P & {
+                ok() . C + ok() . X,
+                declined() . C . declined() . X
+            },
+            out_of_stock() . X
+        }
+}
+
+
+P === mu X . S & buy((string, number)) . S + {
+        ok() . X,
+        declined() . X
+}
+
+
+--------------
+
+
+C_handler_0 === S + request_items() . C_handler_1
+
+C_handler_2 === S & items(string[]) . S + checkout((string[], string)) . C_handler_2
+
+C_handler_2 ===  S & {
+                processing_payment() . C_handler_3
+                out_of_stock() . end
+            }
+
+C_handler_3 === S & {
+                ok() . end,
+                declined() . end
+            }
+
+
+----
+
+S_handler_1 === C & request_items() . C + items(string[]) . S_handler_2
+
+S_handler_2 === C & checkout((string[], string)) . C + {
+                processing_payment() . P + buy((string, number)) . S_handler_3
+                out_of_stock() . end
+            }
+
+S_handler_3 ===  P & {
+                    ok() . C + ok() . end,
+                    declined() . C . declined() . end
+                }
+
+
+
+---
+
+P_handler_1 === S & buy((string, number)) . S + {
+                ok() . end,
+                declined() . end
+            }
